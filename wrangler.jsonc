@@ -1,0 +1,75 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "commons",
+  "main": "./worker/index.ts",
+  "compatibility_date": "2026-08-22",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "not_found_handling": "single-page-application",
+    "binding": "ASSETS",
+    // API and WebSocket routes always hit the Worker, everything else is served as a static asset
+    "run_worker_first": ["/api/*", "/ws/*"]
+  },
+  "observability": { "enabled": true },
+  // Hourly maintenance: expire invites and remove uploads that were never attached to a message.
+  "triggers": { "crons": ["17 * * * *"] },
+  "vars": {
+    // Public, non-secret configuration. Secrets live in .dev.vars / `wrangler secret put`.
+    "APP_URL": "http://localhost:5173",
+    "TURNSTILE_SITE_KEY": "1x00000000000000000000AA",
+    "R2_BUCKET_NAME": "commons-uploads",
+    "REALTIMEKIT_PRESET_FULL": "commons_full",
+    "REALTIMEKIT_PRESET_LISTEN": "commons_listen"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "commons",
+      // Replace with the id printed by `wrangler d1 create commons`
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "db/migrations"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "UPLOADS",
+      "bucket_name": "commons-uploads"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "WORKSPACE_HUB",
+        "class_name": "WorkspaceHub"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["WorkspaceHub"]
+    }
+  ],
+  "queues": {
+    "producers": [
+      {
+        "binding": "BACKGROUND_QUEUE",
+        "queue": "commons-background"
+      }
+    ],
+    "consumers": [
+      {
+        "queue": "commons-background",
+        "max_batch_size": 10,
+        "max_batch_timeout": 5,
+        "max_retries": 3
+      }
+    ]
+  },
+  "analytics_engine_datasets": [
+    {
+      "binding": "ANALYTICS",
+      "dataset": "commons_events"
+    }
+  ]
+}
