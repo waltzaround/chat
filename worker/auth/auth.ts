@@ -33,7 +33,7 @@ function buildAuth(env: Env, db: Db) {
   }
 
   const auth = betterAuth({
-    appName: "Commons",
+    appName: "Chat",
     baseURL: env.APP_URL,
     basePath: "/api/auth",
     secret: env.BETTER_AUTH_SECRET,
@@ -62,7 +62,7 @@ function buildAuth(env: Env, db: Db) {
     },
     advanced: {
       database: { generateId: () => newId() },
-      cookiePrefix: "commons",
+      cookiePrefix: "chat",
       defaultCookieAttributes: { sameSite: "lax", httpOnly: true, path: "/" },
     },
     databaseHooks: {

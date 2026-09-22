@@ -1,4 +1,4 @@
-# Commons
+# Chat
 
 Repository: https://github.com/waltzaround/beacon
 
@@ -74,9 +74,9 @@ Voice needs a RealtimeKit app (see below). Until the three RealtimeKit secrets a
 1. **Create resources**
 
    ```bash
-   npx wrangler d1 create commons                 # paste database_id into wrangler.jsonc
-   npx wrangler r2 bucket create commons-uploads
-   npx wrangler queues create commons-background
+   npx wrangler d1 create chat                 # paste database_id into wrangler.jsonc
+   npx wrangler r2 bucket create chat-uploads
+   npx wrangler queues create chat-background
    ```
 
    Durable Objects and the Analytics Engine dataset are created on first deploy.
@@ -87,7 +87,7 @@ Voice needs a RealtimeKit app (see below). Until the three RealtimeKit secrets a
    cat > cors.json <<'EOF'
    [{"AllowedOrigins":["https://YOUR-APP-DOMAIN"],"AllowedMethods":["PUT"],"AllowedHeaders":["Content-Type"],"MaxAgeSeconds":3600}]
    EOF
-   npx wrangler r2 bucket cors put commons-uploads --file cors.json
+   npx wrangler r2 bucket cors put chat-uploads --file cors.json
    ```
 
    Create an R2 API token (Object Read & Write on this bucket) for `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY`. If these secrets are absent the Worker falls back to proxying uploads itself, which is fine for small deployments.

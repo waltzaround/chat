@@ -16,11 +16,11 @@ export function VoiceChannelView({ channel, workspace }: { channel: Channel; wor
   const { viewport } = useLayout();
   const rt = useRealtime();
   const small = viewport !== "desktop";
-  const [chatOpen, setChatOpen] = useState(() => localStorage.getItem("commons.voiceChat") !== "false");
+  const [chatOpen, setChatOpen] = useState(() => localStorage.getItem("chat.voiceChat") !== "false");
   const [mobileTab, setMobileTab] = useState<"media" | "chat">("media");
 
   useEffect(() => {
-    localStorage.setItem("commons.voiceChat", String(chatOpen));
+    localStorage.setItem("chat.voiceChat", String(chatOpen));
   }, [chatOpen]);
 
   // Subscribe to the room chat even when the panel is closed so unread state stays accurate.

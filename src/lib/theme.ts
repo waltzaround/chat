@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
 export type Theme = "dark" | "light" | "system";
-const KEY = "commons.theme";
+const KEY = "chat.theme";
 
 export function getTheme(): Theme {
   const t = localStorage.getItem(KEY);

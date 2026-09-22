@@ -49,7 +49,7 @@ export function useVoice(): VoiceApi {
   return ctx;
 }
 
-const SESSION_KEY = "commons.voice.session";
+const SESSION_KEY = "chat.voice.session";
 const REJOIN_WINDOW_MS = 90_000;
 
 const initialState: VoiceState = { channelId: null, status: "idle", muted: false, deafened: false, video: false, screen: false, permissions: 0, joinedAt: null, rejoinOffer: null };

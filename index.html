@@ -4,12 +4,12 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="color-scheme" content="dark light" />
-    <title>Commons</title>
+    <title>Chat</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <script>
       // Apply the saved theme before first paint to avoid a flash.
       try {
-        var t = localStorage.getItem("commons.theme");
+        var t = localStorage.getItem("chat.theme");
         if (t === "light") document.documentElement.classList.remove("dark");
         else if (t === "system" && window.matchMedia("(prefers-color-scheme: light)").matches)
           document.documentElement.classList.remove("dark");

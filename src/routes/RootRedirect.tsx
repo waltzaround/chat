@@ -3,7 +3,7 @@ import { useWorkspaces } from "@/lib/queries";
 import { FullscreenSpinner } from "@/components/common/FullscreenSpinner";
 import { ErrorState } from "@/components/common/ErrorState";
 
-const LAST_KEY = "commons.lastWorkspace";
+const LAST_KEY = "chat.lastWorkspace";
 
 export function rememberWorkspace(id: string) {
   localStorage.setItem(LAST_KEY, id);

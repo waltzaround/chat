@@ -94,7 +94,7 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
           <img src="/favicon.svg" alt="" className="size-8 rounded-md" />
           <div>
             <h1 className="text-lg font-semibold leading-tight">{mode === "login" ? "Welcome back" : "Create your account"}</h1>
-            <p className="text-xs text-muted-foreground">Commons — community chat</p>
+            <p className="text-xs text-muted-foreground">Community chat on Cloudflare</p>
           </div>
         </div>
 

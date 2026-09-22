@@ -15,7 +15,7 @@ describe("authentication", () => {
   it("signs up, sets an http-only cookie and returns the profile", async () => {
     const s = await signUp("alice");
     expect(s.user.username).toBe("alice");
-    expect(s.cookie).toContain("commons");
+    expect(s.cookie).toContain("chat");
   });
 });
 

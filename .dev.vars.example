@@ -20,7 +20,7 @@ REALTIMEKIT_APP_ID=
 CLOUDFLARE_REALTIME_API_TOKEN=
 
 # R2 S3-compatible credentials used to presign direct-to-bucket upload URLs.
-# Create an R2 API token with Object Read & Write on the commons-uploads bucket.
+# Create an R2 API token with Object Read & Write on the chat-uploads bucket.
 # When unset locally, uploads fall back to a Worker-proxied PUT (dev only).
 R2_ACCESS_KEY_ID=
 R2_SECRET_ACCESS_KEY=

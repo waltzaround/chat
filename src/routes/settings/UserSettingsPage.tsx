@@ -278,11 +278,11 @@ function NotificationsTab() {
 // Voice & Video tab
 // ---------------------------------------------------------------------------
 
-const MIC_KEY = "commons.voice.micId";
-const SPEAKER_KEY = "commons.voice.speakerId";
-const CAMERA_KEY = "commons.voice.cameraId";
-const NOISE_KEY = "commons.voice.noiseSuppression";
-const ECHO_KEY = "commons.voice.echoCancellation";
+const MIC_KEY = "chat.voice.micId";
+const SPEAKER_KEY = "chat.voice.speakerId";
+const CAMERA_KEY = "chat.voice.cameraId";
+const NOISE_KEY = "chat.voice.noiseSuppression";
+const ECHO_KEY = "chat.voice.echoCancellation";
 
 function VoiceTab() {
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);

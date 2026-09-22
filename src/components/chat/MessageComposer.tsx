@@ -26,7 +26,7 @@ interface Upload {
   previewUrl: string | null;
 }
 
-const draftKey = (channelId: string) => `commons.draft.${channelId}`;
+const draftKey = (channelId: string) => `chat.draft.${channelId}`;
 
 export function MessageComposer({
   channel,

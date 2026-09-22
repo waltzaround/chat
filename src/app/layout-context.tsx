@@ -12,7 +12,7 @@ interface LayoutState {
 }
 
 const LayoutContext = createContext<LayoutState | null>(null);
-const MEMBERS_KEY = "commons.membersOpen";
+const MEMBERS_KEY = "chat.membersOpen";
 
 export function LayoutProvider({ children }: { children: ReactNode }) {
   const viewport = useViewport();

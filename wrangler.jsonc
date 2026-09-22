@@ -1,6 +1,6 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "commons",
+  "name": "chat",
   "main": "./worker/index.ts",
   "compatibility_date": "2026-08-22",
   "compatibility_flags": ["nodejs_compat"],
@@ -17,15 +17,15 @@
     // Public, non-secret configuration. Secrets live in .dev.vars / `wrangler secret put`.
     "APP_URL": "http://localhost:5173",
     "TURNSTILE_SITE_KEY": "1x00000000000000000000AA",
-    "R2_BUCKET_NAME": "commons-uploads",
-    "REALTIMEKIT_PRESET_FULL": "commons_full",
-    "REALTIMEKIT_PRESET_LISTEN": "commons_listen"
+    "R2_BUCKET_NAME": "chat-uploads",
+    "REALTIMEKIT_PRESET_FULL": "chat_full",
+    "REALTIMEKIT_PRESET_LISTEN": "chat_listen"
   },
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "commons",
-      // Replace with the id printed by `wrangler d1 create commons`
+      "database_name": "chat",
+      // Replace with the id printed by `wrangler d1 create chat`
       "database_id": "00000000-0000-0000-0000-000000000000",
       "migrations_dir": "db/migrations"
     }
@@ -33,7 +33,7 @@
   "r2_buckets": [
     {
       "binding": "UPLOADS",
-      "bucket_name": "commons-uploads"
+      "bucket_name": "chat-uploads"
     }
   ],
   "durable_objects": {
@@ -54,12 +54,12 @@
     "producers": [
       {
         "binding": "BACKGROUND_QUEUE",
-        "queue": "commons-background"
+        "queue": "chat-background"
       }
     ],
     "consumers": [
       {
-        "queue": "commons-background",
+        "queue": "chat-background",
         "max_batch_size": 10,
         "max_batch_timeout": 5,
         "max_retries": 3
@@ -69,7 +69,7 @@
   "analytics_engine_datasets": [
     {
       "binding": "ANALYTICS",
-      "dataset": "commons_events"
+      "dataset": "chat_events"
     }
   ]
 }

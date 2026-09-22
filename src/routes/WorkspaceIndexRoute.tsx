@@ -4,7 +4,7 @@ import { useWorkspace } from "@/lib/queries";
 import { EmptyState } from "@/components/common/EmptyState";
 import { FullscreenSpinner } from "@/components/common/FullscreenSpinner";
 
-const LAST_CHANNEL = (ws: string) => `commons.lastChannel.${ws}`;
+const LAST_CHANNEL = (ws: string) => `chat.lastChannel.${ws}`;
 export function rememberChannel(workspaceId: string, channelId: string) {
   localStorage.setItem(LAST_CHANNEL(workspaceId), channelId);
 }

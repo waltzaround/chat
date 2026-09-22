@@ -30,7 +30,7 @@ voiceRoutes.post("/:channelId/voice/join", async (c) => {
   if (!realtimekitConfigured(c.env)) throw ApiError.notConfigured("Voice (RealtimeKit)");
 
   const canSpeak = hasPermission(permissions, Permission.SPEAK);
-  const presetName = canSpeak ? c.env.REALTIMEKIT_PRESET_FULL ?? "commons_full" : c.env.REALTIMEKIT_PRESET_LISTEN ?? "commons_listen";
+  const presetName = canSpeak ? c.env.REALTIMEKIT_PRESET_FULL ?? "chat_full" : c.env.REALTIMEKIT_PRESET_LISTEN ?? "chat_listen";
 
   let mapping = await db.query.voiceChannelMeetings.findFirst({ where: eq(schema.voiceChannelMeetings.channelId, channel.id) });
   if (!mapping) {

@@ -13,7 +13,7 @@ export function NoWorkspacePage() {
       <main className="flex flex-1 flex-col items-center justify-center gap-6 p-6 text-center">
         <img src="/favicon.svg" alt="" className="size-14 rounded-xl" />
         <div className="space-y-1">
-          <h1 className="text-xl font-semibold">Welcome to Commons</h1>
+          <h1 className="text-xl font-semibold">Welcome to Chat</h1>
           <p className="max-w-sm text-sm text-muted-foreground">You are not part of any workspace yet. Create one for your community, or join one with an invite link.</p>
         </div>
         <div className="flex flex-wrap justify-center gap-2">

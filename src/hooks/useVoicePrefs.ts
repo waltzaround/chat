@@ -1,10 +1,10 @@
 export const VOICE_PREF_KEYS = {
-  micId: "commons.voice.micId",
-  speakerId: "commons.voice.speakerId",
-  cameraId: "commons.voice.cameraId",
-  noiseSuppression: "commons.voice.noiseSuppression",
-  echoCancellation: "commons.voice.echoCancellation",
-  setupDone: "commons.voice.setupDone",
+  micId: "chat.voice.micId",
+  speakerId: "chat.voice.speakerId",
+  cameraId: "chat.voice.cameraId",
+  noiseSuppression: "chat.voice.noiseSuppression",
+  echoCancellation: "chat.voice.echoCancellation",
+  setupDone: "chat.voice.setupDone",
 } as const;
 
 export interface VoicePrefs {

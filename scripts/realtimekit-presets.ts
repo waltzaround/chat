@@ -1,7 +1,7 @@
 /**
- * Creates the two RealtimeKit presets Commons relies on:
- *   - commons_full   → can produce audio, video and screen share
- *   - commons_listen → view/listen only (used when a member lacks SPEAK)
+ * Creates the two RealtimeKit presets Chat relies on:
+ *   - chat_full   → can produce audio, video and screen share
+ *   - chat_listen → view/listen only (used when a member lacks SPEAK)
  *
  * Usage (reads the same variables as .dev.vars):
  *   CLOUDFLARE_ACCOUNT_ID=... REALTIMEKIT_APP_ID=... CLOUDFLARE_REALTIME_API_TOKEN=... npx tsx scripts/realtimekit-presets.ts
@@ -53,12 +53,12 @@ const basePermissions = {
 
 const presets = [
   {
-    name: process.env.REALTIMEKIT_PRESET_FULL ?? "commons_full",
+    name: process.env.REALTIMEKIT_PRESET_FULL ?? "chat_full",
     ...common,
     permissions: { ...basePermissions, media: { video: { can_produce: "ALLOWED" }, audio: { can_produce: "ALLOWED" }, screenshare: { can_produce: "ALLOWED" } } },
   },
   {
-    name: process.env.REALTIMEKIT_PRESET_LISTEN ?? "commons_listen",
+    name: process.env.REALTIMEKIT_PRESET_LISTEN ?? "chat_listen",
     ...common,
     permissions: { ...basePermissions, pin_participant: false, media: { video: { can_produce: "NOT_ALLOWED" }, audio: { can_produce: "NOT_ALLOWED" }, screenshare: { can_produce: "NOT_ALLOWED" } } },
   },

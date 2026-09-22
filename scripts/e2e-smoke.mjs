@@ -11,7 +11,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 const BASE = process.argv[2] ?? "http://localhost:5173";
-const SHOTS = process.argv[3] ?? "/tmp/commons-shots";
+const SHOTS = process.argv[3] ?? "/tmp/chat-shots";
 mkdirSync(SHOTS, { recursive: true });
 
 const run = Math.random().toString(36).slice(2, 7);
@@ -58,7 +58,7 @@ for (const [name, page] of [["A", A], ["B", B]]) {
 try {
   // 1. Register + create workspace
   await register(A, `alice${run}`, "Alice Example");
-  await A.getByRole("heading", { name: "Welcome to Commons" }).waitFor({ timeout: 20_000 });
+  await A.getByRole("heading", { name: "Welcome to Chat" }).waitFor({ timeout: 20_000 });
   check("A registers and lands in the app", true);
   await shot(A, "welcome");
   await A.getByRole("button", { name: "Create a workspace" }).first().click();
