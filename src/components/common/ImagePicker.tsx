@@ -27,7 +27,8 @@ export function ImagePicker({
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [preview, setPreview] = useState<string | null>(null);
-  const url = preview ?? (value ? `/api/files/${value}` : currentUrl ?? null);
+  const [removed, setRemoved] = useState(false);
+  const url = preview ?? (value ? `/api/files/${value}` : removed ? null : currentUrl ?? null);
 
   const pick = async (file: File | undefined) => {
     if (!file) return;
@@ -39,6 +40,7 @@ export function ImagePicker({
     try {
       const result = await uploadFile({ file, purpose });
       onChange(result.key);
+      setRemoved(false);
       setPreview(URL.createObjectURL(file));
     } catch (err) {
       toast.error(errorMessage(err, "Upload failed"));
@@ -72,6 +74,7 @@ export function ImagePicker({
           onClick={() => {
             onChange(null);
             setPreview(null);
+            setRemoved(true);
           }}
           className="absolute -top-1 -right-1 flex size-6 items-center justify-center rounded-full border bg-background text-muted-foreground shadow-sm hover:text-foreground"
         >

@@ -191,7 +191,8 @@ workspaceRoutes.patch("/:workspaceId", async (c) => {
   const ctx = await requireMember(db, c.req.param("workspaceId"), c.get("user").id);
   requirePermission(ctx.basePermissions, Permission.MANAGE_WORKSPACE, "Manage workspace");
   const input = await parseBody(c, updateWorkspaceSchema);
-  if (input.iconKey && !input.iconKey.startsWith(`workspace-icons/`)) throw ApiError.forbidden("Invalid icon key");
+  if (input.iconKey && !input.iconKey.startsWith(`workspace-icons/${ctx.userId}/`)) throw ApiError.forbidden("Icon key does not belong to you");
+  if (input.iconKey && !(await c.env.UPLOADS.head(input.iconKey))) throw ApiError.validation(undefined, "Upload not found — did the transfer finish?");
   await db
     .update(schema.workspaces)
     .set({ name: input.name ?? ctx.workspace.name, iconKey: input.iconKey === undefined ? ctx.workspace.iconKey : input.iconKey, updatedAt: new Date() })

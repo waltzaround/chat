@@ -142,7 +142,8 @@ function OverviewTab({ ws, meId }: { ws: WorkspaceDetail; meId: string }) {
   const qc = useQueryClient();
   const updateWs = useUpdateWorkspace(ws.id);
 
-  const [iconKey, setIconKey] = useState<string | null>(null);
+  // undefined = untouched, null = removed, string = new upload key
+  const [iconKey, setIconKey] = useState<string | null | undefined>(undefined);
   const [name, setName] = useState(ws.name);
   const [dirty, setDirty] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -152,7 +153,8 @@ function OverviewTab({ ws, meId }: { ws: WorkspaceDetail; meId: string }) {
   const handleSave = async (e: FormEvent) => {
     e.preventDefault();
     try {
-      await updateWs.mutateAsync({ name: name.trim(), ...(iconKey !== null ? { iconKey } : {}) });
+      await updateWs.mutateAsync({ name: name.trim(), ...(iconKey !== undefined ? { iconKey } : {}) });
+      setIconKey(undefined);
       setDirty(false);
       toast.success("Workspace saved");
     } catch (err) {
@@ -181,12 +183,12 @@ function OverviewTab({ ws, meId }: { ws: WorkspaceDetail; meId: string }) {
         <h2 className="text-base font-semibold">Overview</h2>
         <div className="flex items-start gap-5">
           <div>
-            <Label className="mb-1.5 block text-xs text-muted-foreground">Icon</Label>
+            <Label className="mb-1.5 block text-xs text-muted-foreground">Logo</Label>
             <ImagePicker
               purpose="workspace-icon"
-              value={iconKey}
+              value={iconKey ?? null}
               onChange={(k) => { setIconKey(k); setDirty(true); }}
-              label="Change workspace icon"
+              label="Change workspace logo"
               fallbackText={ws.name}
               currentUrl={ws.iconUrl}
             />

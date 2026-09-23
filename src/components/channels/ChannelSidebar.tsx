@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router";
-import { ChevronDown, ChevronRight, FolderPlus, GripVertical, Hash, LogOut, Pencil, Plus, Settings, UserPlus } from "lucide-react";
+import { ChevronDown, ChevronRight, FolderPlus, GripVertical, Hash, ImageIcon, LogOut, Pencil, Plus, Settings, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import {
   DndContext,
@@ -32,6 +32,8 @@ import { ChannelItem } from "./ChannelItem";
 import { CreateChannelDialog } from "./CreateChannelDialog";
 import { CreateCategoryDialog } from "./CreateCategoryDialog";
 import { InviteDialog } from "@/components/workspace/InviteDialog";
+import { WorkspaceLogoDialog } from "@/components/workspace/WorkspaceLogoDialog";
+import { WorkspaceIcon } from "@/components/workspace/WorkspaceIcon";
 import { UserPanel } from "./UserPanel";
 import type { Category, Channel, WorkspaceDetail } from "@shared/types";
 import { errorMessage } from "@/lib/api";
@@ -77,8 +79,10 @@ export function ChannelSidebar({ onNavigate }: { onNavigate?: () => void }) {
   const [createChannel, setCreateChannel] = useState<{ open: boolean; categoryId: string | null; kind: "text" | "voice" }>({ open: false, categoryId: null, kind: "text" });
   const [createCategory, setCreateCategory] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [logoOpen, setLogoOpen] = useState(false);
 
   const ws = workspace.data;
+  const canBrand = can(ws, Permission.MANAGE_WORKSPACE);
   const canManage = can(ws, Permission.MANAGE_CHANNELS);
   const canOrganise = canManage || can(ws, Permission.MANAGE_LAYOUT);
   const canInvite = can(ws, Permission.CREATE_INVITES);
@@ -205,7 +209,14 @@ export function ChannelSidebar({ onNavigate }: { onNavigate?: () => void }) {
             className="flex h-12 w-full items-center justify-between border-b border-sidebar-border px-4 text-left font-semibold text-foreground transition-colors hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none focus-visible:ring-inset"
             aria-label={ws ? `${ws.name} — workspace menu` : "Workspace menu"}
           >
-            {ws ? <span className="truncate">{ws.name}</span> : <Skeleton className="h-4 w-28" />}
+            {ws ? (
+              <span className="flex min-w-0 items-center gap-2">
+                <WorkspaceIcon workspace={ws} size="sm" />
+                <span className="truncate">{ws.name}</span>
+              </span>
+            ) : (
+              <Skeleton className="h-4 w-28" />
+            )}
             <ChevronDown className="size-4 shrink-0 text-muted-foreground" aria-hidden />
           </button>
         </DropdownMenuTrigger>
@@ -213,6 +224,11 @@ export function ChannelSidebar({ onNavigate }: { onNavigate?: () => void }) {
           {canInvite ? (
             <DropdownMenuItem onSelect={() => setInviteOpen(true)}>
               <UserPlus /> Invite people
+            </DropdownMenuItem>
+          ) : null}
+          {canBrand ? (
+            <DropdownMenuItem onSelect={() => setLogoOpen(true)}>
+              <ImageIcon /> Workspace logo
             </DropdownMenuItem>
           ) : null}
           {canSettings ? (
@@ -327,6 +343,7 @@ export function ChannelSidebar({ onNavigate }: { onNavigate?: () => void }) {
           />
           <CreateCategoryDialog workspaceId={workspaceId} open={createCategory} onOpenChange={setCreateCategory} />
           {ws ? <InviteDialog workspace={ws} open={inviteOpen} onOpenChange={setInviteOpen} /> : null}
+          {ws && canBrand ? <WorkspaceLogoDialog workspace={ws} open={logoOpen} onOpenChange={setLogoOpen} /> : null}
         </>
       ) : null}
     </aside>

@@ -189,6 +189,18 @@ try {
   check("Unread indicator shows on B's sidebar", true);
   await shot(B, "unread-indicator");
 
+  // 9b. Workspace logo from the workspace menu
+  await A.getByRole("button", { name: /workspace menu/i }).click();
+  await A.getByRole("menuitem", { name: "Workspace logo" }).click();
+  await A.getByRole("heading", { name: "Workspace logo" }).waitFor();
+  await A.getByLabel("Choose workspace logo").setInputFiles(pngPath);
+  await A.getByText("Workspace logo updated").waitFor({ timeout: 15_000 });
+  await A.getByRole("button", { name: "Done" }).click();
+  await A.locator("nav[aria-label='Workspaces'] img").first().waitFor({ timeout: 10_000 });
+  await B.locator("nav[aria-label='Workspaces'] img").first().waitFor({ timeout: 10_000 });
+  check("Workspace logo uploads and shows in both rails", true);
+  await shot(A, "workspace-logo");
+
   // 10a. Sections + drag reorder by a plain member
   await B.getByRole("button", { name: "New section" }).click();
   await B.getByLabel("Section name").fill("Projects");
