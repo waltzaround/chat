@@ -2,6 +2,8 @@
 
 Repository: https://github.com/waltzaround/beacon
 
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/waltzaround/beacon)
+
 A Discord-style community chat application built entirely on Cloudflare: Workers, Durable Objects (WebSocket Hibernation), D1, R2, Queues, RealtimeKit, Turnstile and Workers Analytics Engine — with a Vite + React front end served from Workers Static Assets.
 
 Workspaces contain categories, text channels, voice channels (with their own chat), members, roles with a permission bitfield, channel permission overwrites, invites, bans and an audit log. Text chat is realtime over one WebSocket per workspace; voice, video and screen sharing run on Cloudflare RealtimeKit with a fully custom media UI.
@@ -52,7 +54,8 @@ Other commands:
 | `npm run db:migrate` / `db:migrate:remote` | Apply migrations locally / to the deployed D1 |
 | `npm run db:seed` | Generate `db/seed.sql` and load it into local D1 |
 | `npm run realtimekit:presets` | Create the two RealtimeKit presets the app expects |
-| `npm run deploy` | `vite build` then `wrangler deploy` |
+| `npm run setup` | Provision D1, R2, a queue, secrets, and an optional deploy with Wrangler |
+| `npm run deploy` | `vite build`, apply remote D1 migrations, then `wrangler deploy` |
 | `node scripts/e2e-smoke.mjs` | Browser smoke test against a running dev server (needs `npx playwright install chromium`) |
 
 ### Demo seed
@@ -71,54 +74,68 @@ Voice needs a RealtimeKit app (see below). Until the three RealtimeKit secrets a
 
 ## Deploying to Cloudflare
 
-1. **Create resources**
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/waltzaround/beacon)
 
-   ```bash
-   npx wrangler d1 create chat                 # paste database_id into wrangler.jsonc
-   npx wrangler r2 bucket create chat-uploads
-   npx wrangler queues create chat-background
-   ```
+The button deploys Beacon into the Cloudflare account of whoever clicks it. Cloudflare clones this repo into their GitHub or GitLab account (the repo must be public), creates the D1 database, R2 bucket, and queue there, and binds them to the Worker. Durable Objects and the Analytics Engine dataset are created on that deploy. Nothing is created in the template author's account.
 
-   Durable Objects and the Analytics Engine dataset are created on first deploy.
+`database_id` in `wrangler.jsonc` is empty on purpose. The button fills it in on the deployer's clone. Do not commit a real database id.
 
-2. **R2 CORS** (browsers upload straight to the bucket with presigned URLs):
+On the setup screen:
 
-   ```bash
-   cat > cors.json <<'EOF'
-   [{"AllowedOrigins":["https://YOUR-APP-DOMAIN"],"AllowedMethods":["PUT"],"AllowedHeaders":["Content-Type"],"MaxAgeSeconds":3600}]
-   EOF
-   npx wrangler r2 bucket cors put chat-uploads --file cors.json
-   ```
+- Set `BETTER_AUTH_SECRET` to the output of `openssl rand -base64 32`.
+- Set `APP_URL` once you know the hostname. The committed value is `http://localhost:5173`, which is wrong for a public deploy. After the first deploy, set it to `https://<worker>.<subdomain>.workers.dev` (or your custom domain) and redeploy. Invite links and auth both use it.
+- Leave the other secrets blank. Email/password chat, realtime, search, and uploads work without them. Uploads are proxied through the Worker until R2 credentials are set.
 
-   Create an R2 API token (Object Read & Write on this bucket) for `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY`. If these secrets are absent the Worker falls back to proxying uploads itself, which is fine for small deployments.
+The repo's `build` and `deploy` scripts are what Workers Builds runs: `vite build`, then `wrangler d1 migrations apply DB --remote`, then `wrangler deploy`. The migration command uses the `DB` binding name so it still works if the database is renamed on the setup screen.
 
-3. **RealtimeKit**: create a RealtimeKit app in the Cloudflare dashboard (Realtime → RealtimeKit), note its App ID, and create an API token with Realtime permissions. Then create the presets:
+### From the command line
 
-   ```bash
-   CLOUDFLARE_ACCOUNT_ID=... REALTIMEKIT_APP_ID=... CLOUDFLARE_REALTIME_API_TOKEN=... npm run realtimekit:presets
-   ```
+`npm run setup` provisions the same resources from a clone. It logs in with Wrangler, creates the D1 database, R2 bucket, and queue, writes the database id into `wrangler.jsonc`, sets `APP_URL`, uploads secrets, and can build and deploy.
 
-4. **Turnstile**: create a widget for your domain and put the site key in `wrangler.jsonc` → `vars.TURNSTILE_SITE_KEY`.
+```bash
+npm run setup
+```
 
-5. **Secrets** (`wrangler secret put NAME` for each):
+Non-interactive (a `BETTER_AUTH_SECRET` is generated when the environment does not provide one):
 
-   ```
-   BETTER_AUTH_SECRET
-   GOOGLE_CLIENT_ID  GOOGLE_CLIENT_SECRET       # optional
-   GITHUB_CLIENT_ID  GITHUB_CLIENT_SECRET       # optional
-   TURNSTILE_SECRET_KEY
-   CLOUDFLARE_ACCOUNT_ID  REALTIMEKIT_APP_ID  CLOUDFLARE_REALTIME_API_TOKEN
-   R2_ACCESS_KEY_ID  R2_SECRET_ACCESS_KEY
-   ```
+```bash
+npm run setup -- --yes --app-url https://chat.example.com --deploy
+```
 
-   OAuth callback URLs are `https://YOUR-APP-DOMAIN/api/auth/callback/github` and `/api/auth/callback/google`.
+Running it again keeps resources that already exist. The database id written into `wrangler.jsonc` has to stay uncommitted. `npm run setup -- --help` lists every flag. With `--yes`, voice, OAuth, Turnstile, and direct-to-R2 uploads are configured when the matching variables are in the environment or an `--env-file`.
 
-6. Set `vars.APP_URL` in `wrangler.jsonc` to your public origin, then:
+### Optional follow-ups
 
-   ```bash
-   npm run db:migrate:remote
-   npm run deploy
-   ```
+These are not required for chat.
+
+**Voice.** Create a RealtimeKit app in the Cloudflare dashboard (Realtime → RealtimeKit), then:
+
+```bash
+CLOUDFLARE_ACCOUNT_ID=... REALTIMEKIT_APP_ID=... CLOUDFLARE_REALTIME_API_TOKEN=... npm run realtimekit:presets
+```
+
+Set those three values as secrets (`wrangler secret put NAME`, or the Worker's secret settings). Until they are set, joining a voice room shows "Voice is not configured on this deployment".
+
+**Turnstile.** Create a widget for your domain. Put the site key in `vars.TURNSTILE_SITE_KEY` and the secret in `TURNSTILE_SECRET_KEY`. The committed site key and the `.dev.vars.example` secret are Cloudflare's always-pass test pair. With no secret, the check is skipped.
+
+**OAuth.** Optional Google and GitHub client ids and secrets. Callback URLs are `https://YOUR-APP-DOMAIN/api/auth/callback/google` and `/api/auth/callback/github`.
+
+**Direct-to-R2 uploads.** By default the Worker proxies uploads. To let browsers PUT straight to the bucket, create an R2 API token (Object Read & Write) for `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` and set CORS:
+
+```bash
+cat > cors.json <<'EOF'
+{"rules":[{"allowed":{"origins":["https://YOUR-APP-DOMAIN"],"methods":["PUT"],"headers":["Content-Type"]},"maxAgeSeconds":3600}]}
+EOF
+npx wrangler r2 bucket cors set chat-uploads --file cors.json --force
+```
+
+### Updating a deployment from your machine
+
+`npm run setup` writes this deployment's database id into `wrangler.jsonc`. Leave that change uncommitted. An empty `database_id` makes `wrangler deploy` create a new database in whichever account you are logged into.
+
+```bash
+npm run deploy
+```
 
 ## Architecture notes
 

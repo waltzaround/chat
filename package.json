@@ -14,7 +14,8 @@
     "db:migrate": "wrangler d1 migrations apply DB --local",
     "db:migrate:remote": "wrangler d1 migrations apply DB --remote",
     "db:seed": "tsx db/seed.ts && wrangler d1 execute DB --local --file=db/seed.sql",
-    "deploy": "npm run build && wrangler deploy",
+    "deploy": "npm run build && npm run db:migrate:remote && wrangler deploy",
+    "setup": "tsx scripts/onboard.ts",
     "cf-typegen": "wrangler types worker/env.d.ts",
     "realtimekit:presets": "tsx scripts/realtimekit-presets.ts"
   },
@@ -42,6 +43,49 @@
     "tailwind-merge": "^3.3.1",
     "uuidv7": "^1.0.2",
     "zod": "^4.6.5"
+  },
+  "cloudflare": {
+    "bindings": {
+      "APP_URL": {
+        "description": "Public origin of this deployment, with no trailing slash. Invite links and auth use it. After the first deploy, set it to your `https://<worker>.<subdomain>.workers.dev` URL (or custom domain) and redeploy. `http://localhost:5173` is only for local dev."
+      },
+      "BETTER_AUTH_SECRET": {
+        "description": "Required. Session signing secret. Generate one with `openssl rand -base64 32`."
+      },
+      "TURNSTILE_SITE_KEY": {
+        "description": "Optional. Public Turnstile site key. The default is Cloudflare's always-pass test key. Replace it together with `TURNSTILE_SECRET_KEY` when you create a real widget."
+      },
+      "TURNSTILE_SECRET_KEY": {
+        "description": "Optional. Turnstile secret. Leave blank to skip the check. The value in `.dev.vars.example` is Cloudflare's always-pass test secret."
+      },
+      "GOOGLE_CLIENT_ID": {
+        "description": "Optional. Google OAuth client id. Callback URL is `https://YOUR-APP-DOMAIN/api/auth/callback/google`."
+      },
+      "GOOGLE_CLIENT_SECRET": {
+        "description": "Optional. Google OAuth client secret. Leave blank to hide the Google button."
+      },
+      "GITHUB_CLIENT_ID": {
+        "description": "Optional. GitHub OAuth client id. Callback URL is `https://YOUR-APP-DOMAIN/api/auth/callback/github`."
+      },
+      "GITHUB_CLIENT_SECRET": {
+        "description": "Optional. GitHub OAuth client secret. Leave blank to hide the GitHub button."
+      },
+      "CLOUDFLARE_ACCOUNT_ID": {
+        "description": "Optional, for voice. Your Cloudflare account id. Voice stays disabled until this, `REALTIMEKIT_APP_ID`, and `CLOUDFLARE_REALTIME_API_TOKEN` are all set."
+      },
+      "REALTIMEKIT_APP_ID": {
+        "description": "Optional, for voice. RealtimeKit app id from the Cloudflare dashboard (Realtime → RealtimeKit)."
+      },
+      "CLOUDFLARE_REALTIME_API_TOKEN": {
+        "description": "Optional, for voice. API token with Realtime permissions. After the three RealtimeKit secrets are set, run `npm run realtimekit:presets` once."
+      },
+      "R2_ACCESS_KEY_ID": {
+        "description": "Optional. R2 access key so browsers upload straight to the bucket. When blank, the Worker proxies uploads."
+      },
+      "R2_SECRET_ACCESS_KEY": {
+        "description": "Optional. R2 secret for the access key above. When blank, the Worker proxies uploads."
+      }
+    }
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.57.3",

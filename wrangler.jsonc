@@ -25,8 +25,10 @@
     {
       "binding": "DB",
       "database_name": "chat",
-      // Replace with the id printed by `wrangler d1 create chat`
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      // Leave empty in git. Deploy to Cloudflare creates the database in the
+      // deployer's account and writes the id into their clone. A real id
+      // committed here would point every deploy at one shared database.
+      "database_id": "",
       "migrations_dir": "db/migrations"
     }
   ],
