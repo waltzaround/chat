@@ -90,13 +90,13 @@ export function CreateChannelDialog({
             </div>
             {categories.length ? (
               <div className="grid gap-1.5">
-                <Label htmlFor="ch-category">Category</Label>
+                <Label htmlFor="ch-category">Section</Label>
                 <Select value={category} onValueChange={setCategory}>
                   <SelectTrigger id="ch-category" className="w-full">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">No category</SelectItem>
+                    <SelectItem value="none">No section</SelectItem>
                     {categories.map((c) => (
                       <SelectItem key={c.id} value={c.id}>
                         {c.name}

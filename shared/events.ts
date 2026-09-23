@@ -85,7 +85,7 @@ export type ServerEvent =
   | { type: "channel.activity"; channelId: string; lastSequence: number; authorUserId: string }
   | { type: "read.updated"; channelId: string; sequence: number }
   | { type: "voice.updated"; channelId: string; participants: VoiceParticipantState[] }
-  | { type: "workspace.updated"; reason: "channels" | "roles" | "members" | "workspace" }
+  | { type: "workspace.updated"; reason: "channels" | "roles" | "members" | "workspace" | "emojis" }
   | { type: "member.removed"; userId: string; reason: "kicked" | "banned" | "left" }
   | { type: "ack"; clientMessageId: string; messageId: string; sequence: number }
   | { type: "error"; code: string; message: string; clientMessageId?: string }

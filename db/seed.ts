@@ -33,7 +33,7 @@ const roles = {
   engineering: { id: id("role", 5), name: "Engineering", colour: "#3fb27f", position: 1, permissions: 0, isDefault: 0 },
 };
 // everyone: VIEW_CHANNEL|SEND_MESSAGES|ADD_REACTIONS|ATTACH_FILES|CONNECT|SPEAK|VIDEO|SCREEN_SHARE|CREATE_INVITES
-roles.everyone.permissions = (1 << 8) | (1 << 9) | (1 << 10) | (1 << 11) | (1 << 12) | (1 << 13) | (1 << 14) | (1 << 15) | (1 << 7);
+roles.everyone.permissions = (1 << 8) | (1 << 9) | (1 << 10) | (1 << 11) | (1 << 12) | (1 << 13) | (1 << 14) | (1 << 15) | (1 << 7) | (1 << 17);
 
 const memberRoles: [string, string][] = [
   [users[0]!.id, roles.admin.id],

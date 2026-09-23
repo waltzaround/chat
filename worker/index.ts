@@ -11,6 +11,7 @@ import { channelRoutes } from "./api/channels";
 import { inviteRoutes } from "./api/invites";
 import { uploadRoutes, fileRoutes } from "./api/uploads";
 import { voiceRoutes } from "./api/voice";
+import { emojiRoutes } from "./api/emojis";
 import { loadMemberContext } from "./permissions/resolve";
 import { hubFor } from "./lib/hub";
 import { handleQueue } from "./queues/consumer";
@@ -77,6 +78,7 @@ app.get("/api/auth-challenge", async (c) => {
 
 app.route("/api", meRoutes);
 app.route("/api/workspaces", workspaceRoutes);
+app.route("/api/workspaces", emojiRoutes);
 app.route("/api/channels", channelRoutes);
 app.route("/api/invites", inviteRoutes);
 app.route("/api/uploads", uploadRoutes);

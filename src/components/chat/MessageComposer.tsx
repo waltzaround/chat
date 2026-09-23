@@ -7,10 +7,13 @@ import { uploadFile } from "@/lib/uploads";
 import { errorMessage } from "@/lib/api";
 import { formatBytes } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { useEmojis } from "@/lib/queries";
+import type { EmojiEntry } from "@/lib/emoji";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Progress } from "@/components/ui/progress";
 import { EmojiPicker } from "./EmojiPicker";
+import { EmojiAutocomplete, findShortcodeAtCaret, useAutocompleteResults, type ShortcodeMatch } from "./EmojiAutocomplete";
 import { MAX_ATTACHMENTS_PER_MESSAGE, MAX_UPLOAD_BYTES, MESSAGE_MAX_LENGTH } from "@shared/schemas";
 import type { Attachment, Channel, Message, ReplyContext } from "@shared/types";
 
@@ -44,13 +47,18 @@ export function MessageComposer({
   disabled: boolean;
 }) {
   const rt = useRealtime();
+  const customEmojis = useEmojis(channel.workspaceId).data ?? [];
   const [value, setValue] = useState(() => (editing ? editing.content : localStorage.getItem(draftKey(channel.id)) ?? ""));
   const [uploads, setUploads] = useState<Upload[]>([]);
   const [dragging, setDragging] = useState(false);
   const [emojiOpen, setEmojiOpen] = useState(false);
+  const [match, setMatch] = useState<ShortcodeMatch | null>(null);
+  const [selected, setSelected] = useState(0);
+  const dismissedFor = useRef<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const canAttach = hasPermission(channel.permissions, Permission.ATTACH_FILES) && !editing;
+  const suggestions = useAutocompleteResults(match, customEmojis);
 
   // Enter/leave edit mode.
   useEffect(() => {
@@ -66,6 +74,7 @@ export function MessageComposer({
     } else {
       setValue(localStorage.getItem(draftKey(channel.id)) ?? "");
     }
+    setMatch(null);
   }, [editing, channel.id]);
 
   // Persist drafts (not while editing).
@@ -89,6 +98,34 @@ export function MessageComposer({
     el.style.height = "0px";
     el.style.height = `${Math.min(el.scrollHeight, 320)}px`;
   }, [value]);
+
+  /** Recompute the `:shortcode` under the caret; called after any edit or caret move. */
+  const refreshMatch = useCallback((text: string, caret: number) => {
+    const m = findShortcodeAtCaret(text, caret);
+    if (m && dismissedFor.current === `${m.start}:${m.query}`) return setMatch(null);
+    if (!m) dismissedFor.current = null;
+    setMatch((prev) => (prev?.start === m?.start && prev?.query === m?.query ? prev : m));
+    if (!m || m.query !== match?.query) setSelected(0);
+  }, [match?.query]);
+
+  const insertEmoji = useCallback(
+    (entry: EmojiEntry, range?: { start: number; end: number }) => {
+      const el = textareaRef.current;
+      const start = range?.start ?? el?.selectionStart ?? value.length;
+      const end = range?.end ?? el?.selectionEnd ?? value.length;
+      const token = entry.custom ? `:${entry.name}:` : entry.char!;
+      const insertion = `${token} `;
+      const next = value.slice(0, start) + insertion + value.slice(end);
+      setValue(next);
+      setMatch(null);
+      setEmojiOpen(false);
+      requestAnimationFrame(() => {
+        el?.focus();
+        el?.setSelectionRange(start + insertion.length, start + insertion.length);
+      });
+    },
+    [value],
+  );
 
   const addFiles = useCallback(
     (files: FileList | File[]) => {
@@ -155,6 +192,7 @@ export function MessageComposer({
     rt.sendMessage({ channelId: channel.id, content, attachments, replyTo: reply });
     rt.stopTyping(channel.id);
     setValue("");
+    setMatch(null);
     localStorage.removeItem(draftKey(channel.id));
     for (const u of uploads) if (u.previewUrl) URL.revokeObjectURL(u.previewUrl);
     setUploads([]);
@@ -162,6 +200,30 @@ export function MessageComposer({
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    // Autocomplete navigation takes precedence while suggestions are showing.
+    if (match && suggestions.length > 0) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setSelected((i) => (i + 1) % suggestions.length);
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setSelected((i) => (i - 1 + suggestions.length) % suggestions.length);
+        return;
+      }
+      if (e.key === "Enter" || e.key === "Tab") {
+        e.preventDefault();
+        insertEmoji(suggestions[selected] ?? suggestions[0]!, { start: match.start, end: match.end });
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        dismissedFor.current = `${match.start}:${match.query}`;
+        setMatch(null);
+        return;
+      }
+    }
     if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
       send();
@@ -173,8 +235,9 @@ export function MessageComposer({
     }
   };
 
-  const onChange = (v: string) => {
+  const onChange = (v: string, caret: number) => {
     setValue(v);
+    refreshMatch(v, caret);
     if (!editing && v.trim()) rt.startTyping(channel.id);
     if (!v.trim()) rt.stopTyping(channel.id);
   };
@@ -190,19 +253,6 @@ export function MessageComposer({
     e.preventDefault();
     setDragging(false);
     if (e.dataTransfer.files.length) addFiles(e.dataTransfer.files);
-  };
-
-  const insertEmoji = (emoji: string) => {
-    const el = textareaRef.current;
-    const start = el?.selectionStart ?? value.length;
-    const end = el?.selectionEnd ?? value.length;
-    const next = value.slice(0, start) + emoji + value.slice(end);
-    setValue(next);
-    setEmojiOpen(false);
-    requestAnimationFrame(() => {
-      el?.focus();
-      el?.setSelectionRange(start + emoji.length, start + emoji.length);
-    });
   };
 
   const placeholder = disabled
@@ -223,6 +273,10 @@ export function MessageComposer({
       onDragLeave={() => setDragging(false)}
       onDrop={onDrop}
     >
+      {match && suggestions.length > 0 ? (
+        <EmojiAutocomplete match={match} customEmojis={customEmojis} selected={selected} onSelectedChange={setSelected} onPick={(entry) => insertEmoji(entry, { start: match.start, end: match.end })} />
+      ) : null}
+
       {editing ? (
         <div className="flex items-center justify-between border-b px-3 py-1.5 text-xs">
           <span className="text-muted-foreground">
@@ -283,15 +337,26 @@ export function MessageComposer({
         <textarea
           ref={textareaRef}
           value={value}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={(e) => onChange(e.target.value, e.target.selectionStart ?? e.target.value.length)}
           onKeyDown={onKeyDown}
+          onKeyUp={(e) => {
+            if (e.key.startsWith("Arrow") || e.key === "Home" || e.key === "End") refreshMatch(e.currentTarget.value, e.currentTarget.selectionStart ?? 0);
+          }}
+          onClick={(e) => refreshMatch(e.currentTarget.value, e.currentTarget.selectionStart ?? 0)}
           onPaste={onPaste}
-          onBlur={() => rt.stopTyping(channel.id)}
+          onBlur={() => {
+            rt.stopTyping(channel.id);
+            // Delay so a mousedown on a suggestion can insert before the list disappears.
+            setTimeout(() => setMatch(null), 120);
+          }}
           placeholder={placeholder}
           disabled={disabled}
           rows={1}
           maxLength={MESSAGE_MAX_LENGTH + 200}
           aria-label={placeholder}
+          aria-autocomplete="list"
+          aria-controls={match && suggestions.length ? "emoji-autocomplete" : undefined}
+          aria-activedescendant={match && suggestions.length ? `emoji-option-${selected}` : undefined}
           className="max-h-80 min-h-[36px] flex-1 resize-none bg-transparent px-1 py-1.5 text-[0.95rem] leading-snug outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed"
         />
         {remaining < 200 ? (
@@ -306,7 +371,21 @@ export function MessageComposer({
             </button>
           </PopoverTrigger>
           <PopoverContent align="end" side="top" className="w-auto p-0">
-            <EmojiPicker onPick={insertEmoji} />
+            <EmojiPicker
+              customEmojis={customEmojis}
+              onPick={(token) => {
+                const el = textareaRef.current;
+                const start = el?.selectionStart ?? value.length;
+                const end = el?.selectionEnd ?? value.length;
+                const next = `${value.slice(0, start)}${token} ${value.slice(end)}`;
+                setValue(next);
+                setEmojiOpen(false);
+                requestAnimationFrame(() => {
+                  el?.focus();
+                  el?.setSelectionRange(start + token.length + 1, start + token.length + 1);
+                });
+              }}
+            />
           </PopoverContent>
         </Popover>
         {uploads.some((u) => !u.attachment && !u.error) ? <Loader2 className="mb-2 size-4 animate-spin text-muted-foreground" aria-label="Uploading" /> : null}

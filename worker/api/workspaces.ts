@@ -18,6 +18,7 @@ import {
   hasPermission,
   loadMemberContext,
   requireMember,
+  requireAnyPermission,
   requirePermission,
   resolveAllChannelPermissions,
   visibleChannelIds,
@@ -167,6 +168,7 @@ workspaceRoutes.post("/", async (c) => {
     db.insert(schema.categories).values([
       { id: textCategoryId, workspaceId, name: "Text channels", position: 0 },
       { id: voiceCategoryId, workspaceId, name: "Voice channels", position: 1 },
+      // Sections are what the UI calls categories.
     ]),
     db.insert(schema.channels).values([
       { id: generalId, workspaceId, categoryId: textCategoryId, name: "general", topic: "Say hello", kind: "text", position: 0, createdBy: user.id, createdAt: now },
@@ -189,7 +191,8 @@ workspaceRoutes.patch("/:workspaceId", async (c) => {
   const ctx = await requireMember(db, c.req.param("workspaceId"), c.get("user").id);
   requirePermission(ctx.basePermissions, Permission.MANAGE_WORKSPACE, "Manage workspace");
   const input = await parseBody(c, updateWorkspaceSchema);
-  if (input.iconKey && !input.iconKey.startsWith(`workspace-icons/`)) throw ApiError.forbidden("Invalid icon key");
+  if (input.iconKey && !input.iconKey.startsWith(`workspace-icons/${ctx.userId}/`)) throw ApiError.forbidden("Icon key does not belong to you");
+  if (input.iconKey && !(await c.env.UPLOADS.head(input.iconKey))) throw ApiError.validation(undefined, "Upload not found — did the transfer finish?");
   await db
     .update(schema.workspaces)
     .set({ name: input.name ?? ctx.workspace.name, iconKey: input.iconKey === undefined ? ctx.workspace.iconKey : input.iconKey, updatedAt: new Date() })
@@ -229,7 +232,9 @@ workspaceRoutes.post("/:workspaceId/leave", async (c) => {
 workspaceRoutes.post("/:workspaceId/categories", async (c) => {
   const db = c.get("db");
   const ctx = await requireMember(db, c.req.param("workspaceId"), c.get("user").id);
-  requirePermission(ctx.basePermissions, Permission.MANAGE_CHANNELS, "Manage channels");
+  requireAnyPermission(ctx.basePermissions, [Permission.MANAGE_CHANNELS, Permission.MANAGE_LAYOUT], "Organise channels");
+  const [existing] = await db.select({ count: sql<number>`count(*)` }).from(schema.categories).where(eq(schema.categories.workspaceId, ctx.workspaceId));
+  if (Number(existing?.count ?? 0) >= 50) throw ApiError.conflict("Section limit reached");
   const input = await parseBody(c, createCategorySchema);
   const [max] = await db.select({ m: sql<number>`coalesce(max(position), -1)` }).from(schema.categories).where(eq(schema.categories.workspaceId, ctx.workspaceId));
   const id = newId();
@@ -242,7 +247,7 @@ workspaceRoutes.post("/:workspaceId/categories", async (c) => {
 workspaceRoutes.patch("/:workspaceId/categories/:categoryId", async (c) => {
   const db = c.get("db");
   const ctx = await requireMember(db, c.req.param("workspaceId"), c.get("user").id);
-  requirePermission(ctx.basePermissions, Permission.MANAGE_CHANNELS, "Manage channels");
+  requireAnyPermission(ctx.basePermissions, [Permission.MANAGE_CHANNELS, Permission.MANAGE_LAYOUT], "Organise channels");
   const input = await parseBody(c, updateCategorySchema);
   const existing = await db.query.categories.findFirst({ where: and(eq(schema.categories.id, c.req.param("categoryId")), eq(schema.categories.workspaceId, ctx.workspaceId)) });
   if (!existing) throw ApiError.notFound("Category");
@@ -299,8 +304,15 @@ workspaceRoutes.post("/:workspaceId/channels", async (c) => {
 workspaceRoutes.put("/:workspaceId/reorder", async (c) => {
   const db = c.get("db");
   const ctx = await requireMember(db, c.req.param("workspaceId"), c.get("user").id);
-  requirePermission(ctx.basePermissions, Permission.MANAGE_CHANNELS, "Manage channels");
+  requireAnyPermission(ctx.basePermissions, [Permission.MANAGE_CHANNELS, Permission.MANAGE_LAYOUT], "Organise channels");
+  checkRateLimit(`reorder:${ctx.userId}`, 60, 60_000);
   const input = await parseBody(c, reorderSchema);
+  // Channels may only be moved into sections that belong to this workspace.
+  const targetCategoryIds = [...new Set((input.channels ?? []).map((ch) => ch.categoryId).filter((id): id is string => !!id))];
+  if (targetCategoryIds.length) {
+    const found = await db.select({ id: schema.categories.id }).from(schema.categories).where(and(eq(schema.categories.workspaceId, ctx.workspaceId), inArray(schema.categories.id, targetCategoryIds)));
+    if (found.length !== targetCategoryIds.length) throw ApiError.notFound("Section");
+  }
   const statements = [];
   for (const cat of input.categories ?? []) {
     statements.push(db.update(schema.categories).set({ position: cat.position }).where(and(eq(schema.categories.id, cat.id), eq(schema.categories.workspaceId, ctx.workspaceId))));

@@ -168,3 +168,15 @@
 .message-body del {
   @apply opacity-70;
 }
+/* Custom emoji rendered inline with text */
+.message-body img.emoji {
+  @apply inline-block size-[1.375em] object-contain align-[-0.3em];
+}
+/* Messages that are only emoji render larger */
+.message-body .jumbo-emoji {
+  font-size: 2rem;
+  line-height: 1.2;
+}
+.message-body .jumbo-emoji img.emoji {
+  @apply size-10 align-middle;
+}

@@ -92,6 +92,13 @@ export function requirePermission(bits: PermissionBits, permission: PermissionBi
   }
 }
 
+/** Passes when the member holds any of the given permissions (or ADMINISTRATOR). */
+export function requireAnyPermission(bits: PermissionBits, permissions: PermissionBits[], what?: string): void {
+  if (!permissions.some((p) => hasPermission(bits, p))) {
+    throw ApiError.forbidden(what ? `You need the ${what} permission` : undefined);
+  }
+}
+
 export function toOverwriteLike(rows: (typeof schema.channelPermissionOverwrites.$inferSelect)[]): OverwriteLike[] {
   return rows.map((o) => ({
     targetType: o.targetType as "role" | "user",

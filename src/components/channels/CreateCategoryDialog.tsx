@@ -26,11 +26,11 @@ export function CreateCategoryDialog({ workspaceId, open, onOpenChange }: { work
       <DialogContent className="sm:max-w-sm">
         <form onSubmit={submit}>
           <DialogHeader>
-            <DialogTitle>Create category</DialogTitle>
-            <DialogDescription>Categories group channels in the sidebar.</DialogDescription>
+            <DialogTitle>Create section</DialogTitle>
+            <DialogDescription>Sections group channels in the sidebar. Anyone with the Organise channels permission can rename them and drag channels between them.</DialogDescription>
           </DialogHeader>
           <div className="my-5 grid gap-1.5">
-            <Label htmlFor="cat-name">Category name</Label>
+            <Label htmlFor="cat-name">Section name</Label>
             <Input id="cat-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Projects" maxLength={48} required autoFocus />
           </div>
           <DialogFooter>

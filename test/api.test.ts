@@ -301,3 +301,94 @@ describe("voice", () => {
     expect((await apiRaw(b.cookie, `/api/channels/${lounge.id}/voice/join`, { method: "POST" })).status).toBe(403);
   });
 });
+
+describe("custom emojis", () => {
+  it("lets managers upload and name emojis, members list them, and enforces limits", async () => {
+    const a = await signUp();
+    const b = await signUp();
+    const ws = await createWorkspace(a);
+    const inv = await invite(a, ws.id, {});
+    await joinViaInvite(b, inv.code);
+    // 1x1 PNG
+    const png = Uint8Array.from(atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="), (c) => c.charCodeAt(0));
+
+    // Plain members lack MANAGE_EMOJIS.
+    const denied = await apiRaw(b.cookie, "/api/uploads/authorize", { method: "POST", json: { channelId: "none", workspaceId: ws.id, filename: "wave.png", mimeType: "image/png", byteSize: png.length, purpose: "emoji" } });
+    expect(denied.status).toBe(403);
+
+    const auth = await api<{ attachmentId: string; uploadUrl: string }>(a.cookie, "/api/uploads/authorize", { method: "POST", json: { channelId: "none", workspaceId: ws.id, filename: "wave.png", mimeType: "image/png", byteSize: png.length, purpose: "emoji" } });
+    expect(auth.attachmentId.startsWith(`emojis/${ws.id}/`)).toBe(true);
+    expect((await apiRaw(a.cookie, auth.uploadUrl, { method: "PUT", headers: { "Content-Type": "image/png" }, body: png })).status).toBe(200);
+    const done = await api<{ key: string }>(a.cookie, "/api/uploads/complete", { method: "POST", json: { attachmentId: auth.attachmentId } });
+
+    // Invalid names are rejected; valid ones created once.
+    expect((await apiRaw(a.cookie, `/api/workspaces/${ws.id}/emojis`, { method: "POST", json: { name: "Bad Name!", key: done.key } })).status).toBe(400);
+    const created = await api<{ id: string; name: string; url: string }>(a.cookie, `/api/workspaces/${ws.id}/emojis`, { method: "POST", json: { name: "party_wave", key: done.key } });
+    expect(created.url).toBe(`/api/files/${done.key}`);
+    expect((await apiRaw(a.cookie, `/api/workspaces/${ws.id}/emojis`, { method: "POST", json: { name: "party_wave", key: done.key } })).status).toBe(409);
+    // A key from another workspace prefix is refused.
+    expect((await apiRaw(a.cookie, `/api/workspaces/${ws.id}/emojis`, { method: "POST", json: { name: "other", key: "emojis/not-this-workspace/x" } })).status).toBe(403);
+
+    // Members can list and load the image; outsiders cannot.
+    const list = await api<{ name: string }[]>(b.cookie, `/api/workspaces/${ws.id}/emojis`);
+    expect(list.map((e) => e.name)).toEqual(["party_wave"]);
+    expect((await apiRaw(b.cookie, created.url)).status).toBe(200);
+    const outsider = await signUp();
+    expect((await apiRaw(outsider.cookie, created.url)).status).toBe(404);
+    expect((await apiRaw(outsider.cookie, `/api/workspaces/${ws.id}/emojis`)).status).toBe(404);
+
+    // Reactions accept the shortcode form.
+    const ch = textChannel(ws);
+    const msg = await sendMessage(b, ch.id, "hello :party_wave:");
+    const reactions = await api<{ emoji: string; count: number }[]>(b.cookie, `/api/channels/${ch.id}/messages/${msg.id}/reactions`, { method: "PUT", json: { emoji: ":party_wave:" } });
+    expect(reactions).toEqual([{ emoji: ":party_wave:", count: 1, me: true, userIds: [b.user.id] }]);
+
+    // Delete requires the permission and removes the emoji.
+    expect((await apiRaw(b.cookie, `/api/workspaces/${ws.id}/emojis/${created.id}`, { method: "DELETE" })).status).toBe(403);
+    expect((await apiRaw(a.cookie, `/api/workspaces/${ws.id}/emojis/${created.id}`, { method: "DELETE" })).status).toBe(204);
+    expect(await api<unknown[]>(a.cookie, `/api/workspaces/${ws.id}/emojis`)).toEqual([]);
+  });
+});
+
+describe("sections and layout", () => {
+  it("lets any member create and rename sections and reorder, but not delete", async () => {
+    const a = await signUp();
+    const b = await signUp();
+    const ws = await createWorkspace(a);
+    const inv = await invite(a, ws.id, {});
+    await joinViaInvite(b, inv.code);
+
+    // Plain member (default role) can create a section…
+    const section = await api<{ id: string; position: number }>(b.cookie, `/api/workspaces/${ws.id}/categories`, { method: "POST", json: { name: "Projects" } });
+    expect(section.position).toBe(2);
+    // …rename it…
+    expect((await apiRaw(b.cookie, `/api/workspaces/${ws.id}/categories/${section.id}`, { method: "PATCH", json: { name: "Work" } })).status).toBe(200);
+    // …and reorder sections and channels.
+    const general = textChannel(ws);
+    const lounge = ws.channels.find((c) => c.kind === "voice")!;
+    const res = await apiRaw(b.cookie, `/api/workspaces/${ws.id}/reorder`, {
+      method: "PUT",
+      json: {
+        categories: [{ id: section.id, position: 0 }, ...ws.categories.map((c, i) => ({ id: c.id, position: i + 1 }))],
+        channels: [{ id: lounge.id, position: 0, categoryId: section.id }, { id: general.id, position: 1, categoryId: null }],
+      },
+    });
+    expect(res.status).toBe(200);
+    const after = await api<WorkspaceDetail>(b.cookie, `/api/workspaces/${ws.id}`);
+    expect(after.categories.find((c) => c.id === section.id)?.name).toBe("Work");
+    expect(after.categories.find((c) => c.id === section.id)?.position).toBe(0);
+    expect(after.channels.find((c) => c.id === lounge.id)?.categoryId).toBe(section.id);
+    expect(after.channels.find((c) => c.id === general.id)?.categoryId).toBeNull();
+
+    // But deleting sections stays with Manage channels.
+    expect((await apiRaw(b.cookie, `/api/workspaces/${ws.id}/categories/${section.id}`, { method: "DELETE" })).status).toBe(403);
+    // Moving a channel into a section from another workspace is refused.
+    expect((await apiRaw(b.cookie, `/api/workspaces/${ws.id}/reorder`, { method: "PUT", json: { channels: [{ id: general.id, position: 0, categoryId: "not-a-real-section" }] } })).status).toBe(404);
+
+    // Removing MANAGE_LAYOUT from @everyone locks it down again.
+    const everyone = ws.roles.find((r) => r.isDefault)!;
+    await api(a.cookie, `/api/workspaces/${ws.id}/roles/${everyone.id}`, { method: "PATCH", json: { permissions: everyone.permissions & ~Permission.MANAGE_LAYOUT } });
+    expect((await apiRaw(b.cookie, `/api/workspaces/${ws.id}/categories`, { method: "POST", json: { name: "Nope" } })).status).toBe(403);
+    expect((await apiRaw(b.cookie, `/api/workspaces/${ws.id}/reorder`, { method: "PUT", json: { categories: [] } })).status).toBe(403);
+  });
+});

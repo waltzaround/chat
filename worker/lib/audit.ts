@@ -22,7 +22,9 @@ export type AuditAction =
   | "member.unbanned"
   | "message.deleted_by_moderator"
   | "invite.created"
-  | "invite.revoked";
+  | "invite.revoked"
+  | "emoji.created"
+  | "emoji.deleted";
 
 export async function audit(
   db: Db,
