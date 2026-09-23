@@ -287,6 +287,20 @@ export const voiceChannelMeetings = sqliteTable("voice_channel_meetings", {
   updatedAt: timestamp("updated_at").notNull(),
 });
 
+export const customEmojis = sqliteTable(
+  "custom_emojis",
+  {
+    id: text("id").primaryKey(),
+    workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+    /** Shortcode without colons, unique per workspace: [a-z0-9_]{2,32} */
+    name: text("name").notNull(),
+    r2Key: text("r2_key").notNull(),
+    createdBy: text("created_by").references(() => users.id),
+    createdAt: timestamp("created_at").notNull(),
+  },
+  (t) => [uniqueIndex("custom_emojis_workspace_name_idx").on(t.workspaceId, t.name)],
+);
+
 export const auditLog = sqliteTable(
   "audit_log",
   {
@@ -328,6 +342,7 @@ export const schema = {
   invites,
   bans,
   voiceChannelMeetings,
+  customEmojis,
   auditLog,
   rateLimits,
 };

@@ -7,7 +7,7 @@ import { ApiError } from "../lib/errors";
 import { parseBody } from "../lib/validate";
 import { checkRateLimit } from "../security/ratelimit";
 import { track } from "../analytics/track";
-import { Permission, loadChannelAccess, hasPermission } from "../permissions/resolve";
+import { Permission, loadChannelAccess, loadMemberContext, hasPermission } from "../permissions/resolve";
 import { canPresign, isInlineType, presignPut, safeServeType, sanitizeFilename, sniffMimeType, UPLOAD_URL_TTL_SECONDS, validateFilename } from "../uploads/r2";
 import { toAttachment } from "../lib/messages";
 import { newId } from "@shared/id";
@@ -18,6 +18,7 @@ export const uploadRoutes = new Hono<AppEnv>();
 uploadRoutes.use("*", requireUser);
 
 const AVATAR_MAX_BYTES = 4 * 1024 * 1024;
+const EMOJI_MAX_BYTES = 256 * 1024;
 
 uploadRoutes.post("/authorize", async (c) => {
   const db = c.get("db");
@@ -49,6 +50,15 @@ uploadRoutes.post("/authorize", async (c) => {
       status: "pending",
       createdAt: new Date(),
     });
+  } else if (input.purpose === "emoji") {
+    if (!input.workspaceId) throw ApiError.validation(undefined, "workspaceId is required for emoji uploads");
+    const ctx = await loadMemberContext(db, input.workspaceId, user.id);
+    if (!ctx) throw ApiError.notFound("Workspace");
+    if (!hasPermission(ctx.basePermissions, Permission.MANAGE_EMOJIS)) throw ApiError.forbidden("You need the Manage emojis permission");
+    if (!input.mimeType.startsWith("image/")) throw ApiError.validation(undefined, "Emojis must be images");
+    if (input.byteSize > EMOJI_MAX_BYTES) throw new ApiError(413, "payload_too_large", "Emojis are limited to 256 KB");
+    key = `emojis/${ctx.workspaceId}/${newId()}`;
+    attachmentId = key;
   } else {
     if (!input.mimeType.startsWith("image/")) throw ApiError.validation(undefined, "Avatars and icons must be images");
     if (input.byteSize > AVATAR_MAX_BYTES) throw new ApiError(413, "payload_too_large", "Images are limited to 4 MB");
@@ -141,6 +151,12 @@ uploadRoutes.post("/complete", async (c) => {
 
 async function resolveKeyForUpload(db: AppEnv["Variables"]["db"], attachmentId: string, userId: string): Promise<string> {
   if (attachmentId.startsWith(`avatars/${userId}/`) || attachmentId.startsWith(`workspace-icons/${userId}/`)) return attachmentId;
+  if (attachmentId.startsWith("emojis/")) {
+    const [, workspaceId] = attachmentId.split("/");
+    const ctx = workspaceId ? await loadMemberContext(db, workspaceId, userId) : null;
+    if (!ctx || !hasPermission(ctx.basePermissions, Permission.MANAGE_EMOJIS)) throw ApiError.notFound("Upload");
+    return attachmentId;
+  }
   const row = await db.query.messageAttachments.findFirst({ where: eq(schema.messageAttachments.id, attachmentId) });
   if (!row || row.uploaderUserId !== userId) throw ApiError.notFound("Upload");
   if (row.messageId) throw ApiError.conflict("This upload is already attached to a message");
@@ -170,6 +186,10 @@ fileRoutes.get("/*", async (c) => {
     const row = await db.query.messageAttachments.findFirst({ where: eq(schema.messageAttachments.r2Key, key) });
     if (!row || row.status !== "ready") throw ApiError.notFound("File");
     verifiedType = row.mimeType;
+  } else if (key.startsWith("emojis/")) {
+    const [, workspaceId] = key.split("/");
+    const ctx = workspaceId ? await loadMemberContext(db, workspaceId, user.id) : null;
+    if (!ctx) throw ApiError.notFound("File");
   } else if (!key.startsWith("avatars/") && !key.startsWith("workspace-icons/")) {
     throw ApiError.notFound("File");
   }

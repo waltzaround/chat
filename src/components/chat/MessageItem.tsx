@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { useRealtime } from "@/realtime/RealtimeProvider";
 import type { PendingMessage } from "@/realtime/RealtimeProvider";
 import { Permission, hasPermission } from "@/lib/permissions";
+import { useEmojiMap, useEmojis } from "@/lib/queries";
 import { formatFull, formatMessageTimestamp, formatTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { UserAvatar } from "@/components/common/UserAvatar";
@@ -37,6 +38,8 @@ export const MessageItem = memo(function MessageItem({
   isEditing: boolean;
 }) {
   const rt = useRealtime();
+  const emojis = useEmojiMap(workspace.id);
+  const customEmojis = useEmojis(workspace.id).data ?? [];
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const canReact = hasPermission(channel.permissions, Permission.ADD_REACTIONS);
@@ -107,7 +110,7 @@ export const MessageItem = memo(function MessageItem({
           ) : null}
           {message.content ? (
             <div className={cn("message-body", message.editedAt && "edited")}>
-              <Markdown content={message.content} />
+              <Markdown content={message.content} emojis={emojis} />
               {message.editedAt ? (
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -125,7 +128,7 @@ export const MessageItem = memo(function MessageItem({
               ))}
             </div>
           ) : null}
-          {message.reactions.length ? <ReactionBar reactions={message.reactions} onToggle={react} canReact={canReact} onAdd={canReact ? () => setEmojiOpen(true) : undefined} /> : null}
+          {message.reactions.length ? <ReactionBar reactions={message.reactions} onToggle={react} canReact={canReact} onAdd={canReact ? () => setEmojiOpen(true) : undefined} emojis={emojis} /> : null}
         </div>
       </div>
 
@@ -146,7 +149,7 @@ export const MessageItem = memo(function MessageItem({
               </ToolbarButton>
             </PopoverTrigger>
             <PopoverContent align="end" className="w-auto p-0">
-              <EmojiPicker onPick={react} />
+              <EmojiPicker onPick={react} customEmojis={customEmojis} />
             </PopoverContent>
           </Popover>
         ) : null}
@@ -233,6 +236,7 @@ function ToolbarButton({ label, onClick, children, ...rest }: { label: string; o
 
 export function PendingMessageItem({ pending, compact, me }: { pending: PendingMessage; compact: boolean; me: CurrentUser }) {
   const rt = useRealtime();
+  const emojis = useEmojiMap(rt.workspaceId);
   const failed = pending.status === "failed";
   return (
     <article className={cn("group relative px-4 py-0.5", !compact && "mt-3")} aria-label={failed ? "Message failed to send" : "Sending message"} aria-busy={!failed}>
@@ -254,7 +258,7 @@ export function PendingMessageItem({ pending, compact, me }: { pending: PendingM
           ) : null}
           {pending.content ? (
             <div className="message-body">
-              <Markdown content={pending.content} />
+              <Markdown content={pending.content} emojis={emojis} />
             </div>
           ) : null}
           {pending.attachments.length ? (

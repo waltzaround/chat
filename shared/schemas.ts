@@ -25,7 +25,20 @@ export const channelNameSchema = z
 
 export const messageContentSchema = z.string().max(MESSAGE_MAX_LENGTH);
 
-export const emojiSchema = z.string().min(1).max(32);
+/** A unicode emoji or a custom shortcode in the form :name: */
+export const emojiSchema = z.string().min(1).max(64);
+
+export const emojiNameSchema = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .regex(/^[a-z0-9_]{2,32}$/, "Use 2-32 lowercase letters, numbers or underscores");
+
+export const createEmojiSchema = z.object({
+  name: emojiNameSchema,
+  /** R2 key returned by the upload flow (purpose "emoji"). */
+  key: z.string().min(1).max(200),
+});
 
 export const colourSchema = z.string().regex(/^#[0-9a-fA-F]{6}$/).nullable();
 
@@ -152,11 +165,14 @@ export const uploadAuthorizeSchema = z.object({
   filename: z.string().trim().min(1).max(200),
   mimeType: z.string().min(1).max(120),
   byteSize: z.number().int().min(1).max(MAX_UPLOAD_BYTES),
-  purpose: z.enum(["attachment", "avatar", "workspace-icon"]).default("attachment"),
+  purpose: z.enum(["attachment", "avatar", "workspace-icon", "emoji"]).default("attachment"),
+  /** Required for purpose "emoji". */
+  workspaceId: idSchema.optional(),
 });
 
 export const uploadCompleteSchema = z.object({
-  attachmentId: idSchema,
+  /** Attachment row id, or the R2 key for avatar / icon / emoji uploads. */
+  attachmentId: z.string().min(1).max(200),
   width: z.number().int().min(1).max(20000).optional(),
   height: z.number().int().min(1).max(20000).optional(),
   duration: z.number().min(0).max(24 * 3600 * 1000).optional(),

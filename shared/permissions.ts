@@ -21,6 +21,7 @@ export const Permission = {
   SPEAK: 1 << 13,
   VIDEO: 1 << 14,
   SCREEN_SHARE: 1 << 15,
+  MANAGE_EMOJIS: 1 << 16,
 } as const;
 
 export type PermissionName = keyof typeof Permission;
@@ -75,6 +76,7 @@ export const PERMISSION_LABELS: Record<PermissionName, { label: string; descript
   SPEAK: { label: "Speak", description: "Transmit microphone audio in voice channels.", group: "voice" },
   VIDEO: { label: "Video", description: "Turn on the camera in voice channels.", group: "voice" },
   SCREEN_SHARE: { label: "Screen share", description: "Share a screen or window in voice channels.", group: "voice" },
+  MANAGE_EMOJIS: { label: "Manage emojis", description: "Upload and remove custom emojis for the workspace.", group: "general" },
 };
 
 export function hasPermission(bits: PermissionBits, permission: PermissionBits): boolean {

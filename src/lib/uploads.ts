@@ -12,14 +12,17 @@ interface UploadBase {
   signal?: AbortSignal;
 }
 
-export type UploadInput = (UploadBase & { purpose: "attachment"; channelId: string }) | (UploadBase & { purpose: "avatar" | "workspace-icon" });
+export type UploadInput =
+  | (UploadBase & { purpose: "attachment"; channelId: string })
+  | (UploadBase & { purpose: "avatar" | "workspace-icon" })
+  | (UploadBase & { purpose: "emoji"; workspaceId: string });
 
 /**
  * Two-step upload: authorise with the Worker, PUT straight to R2 (or through
  * the Worker in local dev), then confirm so the Worker records metadata.
  */
 export async function uploadFile(input: UploadInput & { purpose: "attachment" }): Promise<Attachment>;
-export async function uploadFile(input: UploadInput & { purpose: "avatar" | "workspace-icon" }): Promise<{ key: string; url: string }>;
+export async function uploadFile(input: UploadInput & { purpose: "avatar" | "workspace-icon" | "emoji" }): Promise<{ key: string; url: string }>;
 export async function uploadFile(input: UploadInput): Promise<Attachment | { key: string; url: string }> {
   const { file } = input;
   const mimeType = file.type || "application/octet-stream";
@@ -29,6 +32,7 @@ export async function uploadFile(input: UploadInput): Promise<Attachment | { key
     mimeType,
     byteSize: file.size,
     purpose: input.purpose,
+    ...(input.purpose === "emoji" ? { workspaceId: input.workspaceId } : {}),
   });
 
   await putWithProgress(auth, file, input.onProgress, input.signal);

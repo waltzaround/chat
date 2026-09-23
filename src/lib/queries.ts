@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { api, apiDelete, apiGet, apiPatch, apiPost, apiPut } from "./api";
 import type {
@@ -6,6 +7,7 @@ import type {
   Ban,
   Channel,
   CurrentUser,
+  CustomEmoji,
   Invite,
   InvitePreview,
   Member,
@@ -31,6 +33,7 @@ export const keys = {
   bans: (id: string) => ["bans", id] as const,
   audit: (id: string) => ["audit", id] as const,
   overwrites: (channelId: string) => ["overwrites", channelId] as const,
+  emojis: (id: string) => ["emojis", id] as const,
   search: (id: string, q: string, channelId?: string, authorId?: string) => ["search", id, q, channelId ?? "", authorId ?? ""] as const,
 };
 
@@ -328,6 +331,34 @@ export function useOverwriteMutations(channelId: string, workspaceId: string) {
     onSuccess: invalidate,
   });
   return { set, remove };
+}
+
+export function useEmojis(workspaceId: string | undefined) {
+  return useQuery({ queryKey: keys.emojis(workspaceId ?? ""), queryFn: () => apiGet<CustomEmoji[]>(`/api/workspaces/${workspaceId}/emojis`), enabled: !!workspaceId, staleTime: 5 * 60_000 });
+}
+
+const EMPTY_EMOJI_MAP = new Map<string, CustomEmoji>();
+
+/** Custom emojis keyed by shortcode name, memoised on the query result. */
+export function useEmojiMap(workspaceId: string | undefined): Map<string, CustomEmoji> {
+  const { data } = useEmojis(workspaceId);
+  return useMemo(() => (data ? new Map(data.map((e) => [e.name, e])) : EMPTY_EMOJI_MAP), [data]);
+}
+
+export function useCreateEmoji(workspaceId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { name: string; key: string }) => apiPost<CustomEmoji>(`/api/workspaces/${workspaceId}/emojis`, input),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: keys.emojis(workspaceId) }),
+  });
+}
+
+export function useDeleteEmoji(workspaceId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (emojiId: string) => apiDelete(`/api/workspaces/${workspaceId}/emojis/${emojiId}`),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: keys.emojis(workspaceId) }),
+  });
 }
 
 export function useSearch(workspaceId: string, q: string, filters: { channelId?: string; authorId?: string }) {

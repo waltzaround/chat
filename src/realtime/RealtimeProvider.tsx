@@ -162,6 +162,7 @@ export function RealtimeProvider({ workspaceId, userId, children }: { workspaceI
           void qc.invalidateQueries({ queryKey: keys.workspace(workspaceId) });
           if (event.reason === "members" || event.reason === "roles") void qc.invalidateQueries({ queryKey: keys.members(workspaceId) });
           if (event.reason === "workspace") void qc.invalidateQueries({ queryKey: keys.workspaces });
+          if (event.reason === "emojis") void qc.invalidateQueries({ queryKey: keys.emojis(workspaceId) });
           break;
         case "member.removed":
           if (event.userId === userId) {

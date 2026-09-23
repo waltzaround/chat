@@ -301,3 +301,51 @@ describe("voice", () => {
     expect((await apiRaw(b.cookie, `/api/channels/${lounge.id}/voice/join`, { method: "POST" })).status).toBe(403);
   });
 });
+
+describe("custom emojis", () => {
+  it("lets managers upload and name emojis, members list them, and enforces limits", async () => {
+    const a = await signUp();
+    const b = await signUp();
+    const ws = await createWorkspace(a);
+    const inv = await invite(a, ws.id, {});
+    await joinViaInvite(b, inv.code);
+    // 1x1 PNG
+    const png = Uint8Array.from(atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="), (c) => c.charCodeAt(0));
+
+    // Plain members lack MANAGE_EMOJIS.
+    const denied = await apiRaw(b.cookie, "/api/uploads/authorize", { method: "POST", json: { channelId: "none", workspaceId: ws.id, filename: "wave.png", mimeType: "image/png", byteSize: png.length, purpose: "emoji" } });
+    expect(denied.status).toBe(403);
+
+    const auth = await api<{ attachmentId: string; uploadUrl: string }>(a.cookie, "/api/uploads/authorize", { method: "POST", json: { channelId: "none", workspaceId: ws.id, filename: "wave.png", mimeType: "image/png", byteSize: png.length, purpose: "emoji" } });
+    expect(auth.attachmentId.startsWith(`emojis/${ws.id}/`)).toBe(true);
+    expect((await apiRaw(a.cookie, auth.uploadUrl, { method: "PUT", headers: { "Content-Type": "image/png" }, body: png })).status).toBe(200);
+    const done = await api<{ key: string }>(a.cookie, "/api/uploads/complete", { method: "POST", json: { attachmentId: auth.attachmentId } });
+
+    // Invalid names are rejected; valid ones created once.
+    expect((await apiRaw(a.cookie, `/api/workspaces/${ws.id}/emojis`, { method: "POST", json: { name: "Bad Name!", key: done.key } })).status).toBe(400);
+    const created = await api<{ id: string; name: string; url: string }>(a.cookie, `/api/workspaces/${ws.id}/emojis`, { method: "POST", json: { name: "party_wave", key: done.key } });
+    expect(created.url).toBe(`/api/files/${done.key}`);
+    expect((await apiRaw(a.cookie, `/api/workspaces/${ws.id}/emojis`, { method: "POST", json: { name: "party_wave", key: done.key } })).status).toBe(409);
+    // A key from another workspace prefix is refused.
+    expect((await apiRaw(a.cookie, `/api/workspaces/${ws.id}/emojis`, { method: "POST", json: { name: "other", key: "emojis/not-this-workspace/x" } })).status).toBe(403);
+
+    // Members can list and load the image; outsiders cannot.
+    const list = await api<{ name: string }[]>(b.cookie, `/api/workspaces/${ws.id}/emojis`);
+    expect(list.map((e) => e.name)).toEqual(["party_wave"]);
+    expect((await apiRaw(b.cookie, created.url)).status).toBe(200);
+    const outsider = await signUp();
+    expect((await apiRaw(outsider.cookie, created.url)).status).toBe(404);
+    expect((await apiRaw(outsider.cookie, `/api/workspaces/${ws.id}/emojis`)).status).toBe(404);
+
+    // Reactions accept the shortcode form.
+    const ch = textChannel(ws);
+    const msg = await sendMessage(b, ch.id, "hello :party_wave:");
+    const reactions = await api<{ emoji: string; count: number }[]>(b.cookie, `/api/channels/${ch.id}/messages/${msg.id}/reactions`, { method: "PUT", json: { emoji: ":party_wave:" } });
+    expect(reactions).toEqual([{ emoji: ":party_wave:", count: 1, me: true, userIds: [b.user.id] }]);
+
+    // Delete requires the permission and removes the emoji.
+    expect((await apiRaw(b.cookie, `/api/workspaces/${ws.id}/emojis/${created.id}`, { method: "DELETE" })).status).toBe(403);
+    expect((await apiRaw(a.cookie, `/api/workspaces/${ws.id}/emojis/${created.id}`, { method: "DELETE" })).status).toBe(204);
+    expect(await api<unknown[]>(a.cookie, `/api/workspaces/${ws.id}/emojis`)).toEqual([]);
+  });
+});

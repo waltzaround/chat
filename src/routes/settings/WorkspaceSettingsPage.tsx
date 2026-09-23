@@ -2,7 +2,7 @@ import { useState, type FormEvent } from "react";
 import { useNavigate, useParams } from "react-router";
 import {
   Settings, Users, Shield, Hash, Link2, FileText, Trash2, Loader2,
-  ChevronRight, Edit2, Plus, Folder,
+  ChevronRight, Edit2, Plus, Folder, Smile,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
@@ -12,6 +12,7 @@ import { ChannelOverridesEditor } from "./ChannelOverridesEditor";
 import { MembersTable } from "./MembersTable";
 import { InvitesPanel } from "./InvitesPanel";
 import { AuditLogPanel } from "./AuditLogPanel";
+import { EmojisPanel } from "./EmojisPanel";
 import { ImagePicker } from "@/components/common/ImagePicker";
 import { UserAvatar } from "@/components/common/UserAvatar";
 import { Button } from "@/components/ui/button";
@@ -75,6 +76,7 @@ const ALL_TABS: TabDef[] = [
   { id: "roles", label: "Roles", icon: <Shield className="size-3.5" />, permissionBits: Permission.MANAGE_ROLES },
   { id: "channels", label: "Channels", icon: <Hash className="size-3.5" />, permissionBits: Permission.MANAGE_CHANNELS },
   { id: "invites", label: "Invites", icon: <Link2 className="size-3.5" />, permissionBits: Permission.CREATE_INVITES },
+  { id: "emojis", label: "Emojis", icon: <Smile className="size-3.5" />, permissionBits: Permission.MANAGE_EMOJIS },
   { id: "audit", label: "Audit Log", icon: <FileText className="size-3.5" />, permissionBits: Permission.MANAGE_WORKSPACE },
 ];
 
@@ -123,6 +125,7 @@ export function WorkspaceSettingsPage() {
           {activeTab === "roles" && <RolesTab ws={ws} />}
           {activeTab === "channels" && <ChannelsTab ws={ws} />}
           {activeTab === "invites" && <InvitesTab ws={ws} />}
+          {activeTab === "emojis" && <EmojisPanel ws={ws} />}
           {activeTab === "audit" && <AuditTab ws={ws} />}
         </>
       )}

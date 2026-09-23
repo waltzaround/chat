@@ -84,6 +84,15 @@ export interface Member extends UserSummary {
   isOwner: boolean;
 }
 
+export interface CustomEmoji {
+  id: string;
+  workspaceId: string;
+  name: string;
+  url: string;
+  createdBy: string | null;
+  createdAt: string;
+}
+
 export interface PermissionOverwrite {
   channelId: string;
   targetType: "role" | "user";

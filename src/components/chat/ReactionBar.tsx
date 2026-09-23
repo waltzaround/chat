@@ -1,8 +1,21 @@
 import { SmilePlus } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { ReactionSummary } from "@shared/types";
+import type { CustomEmoji, ReactionSummary } from "@shared/types";
+import { ReactionGlyph } from "./EmojiGlyph";
 
-export function ReactionBar({ reactions, onToggle, canReact, onAdd }: { reactions: ReactionSummary[]; onToggle: (emoji: string) => void; canReact: boolean; onAdd?: () => void }) {
+export function ReactionBar({
+  reactions,
+  onToggle,
+  canReact,
+  onAdd,
+  emojis,
+}: {
+  reactions: ReactionSummary[];
+  onToggle: (emoji: string) => void;
+  canReact: boolean;
+  onAdd?: () => void;
+  emojis: Map<string, CustomEmoji>;
+}) {
   return (
     <div className="mt-1 flex flex-wrap items-center gap-1" role="group" aria-label="Reactions">
       {reactions.map((r) => (
@@ -18,7 +31,7 @@ export function ReactionBar({ reactions, onToggle, canReact, onAdd }: { reaction
             r.me ? "border-primary/50 bg-primary/15 text-foreground" : "border-border bg-muted/40 text-muted-foreground hover:border-foreground/30 hover:bg-muted",
           )}
         >
-          <span aria-hidden>{r.emoji}</span>
+          <ReactionGlyph value={r.emoji} emojis={emojis} className="size-4 text-sm" />
           <span className="tabular-nums">{r.count}</span>
         </button>
       ))}

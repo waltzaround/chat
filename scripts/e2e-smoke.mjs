@@ -124,7 +124,7 @@ try {
 
   await bobMsg.hover();
   await bobMsg.getByRole("button", { name: "Add reaction" }).click();
-  await A.getByRole("button", { name: "thumbs up" }).click();
+  await A.getByRole("button", { name: "thumbsup" }).click();
   await B.locator("article", { hasText: "Hi Alice," }).getByRole("button", { name: /👍 1/ }).waitFor({ timeout: 8_000 });
   check("Reaction propagates to B", true);
 
@@ -188,6 +188,32 @@ try {
   await B.locator("button:not([aria-current='page'])", { hasText: "announcements" }).locator("[aria-label='Unread messages']").waitFor({ timeout: 10_000 });
   check("Unread indicator shows on B's sidebar", true);
   await shot(B, "unread-indicator");
+
+  // 10b. Custom emoji: upload in settings, autocomplete with :name:, render for B
+  await A.goto(workspaceUrl.replace(/\/c\/.*$/, "/settings/emojis"));
+  await A.getByRole("heading", { name: "Custom emojis" }).waitFor({ timeout: 10_000 });
+  await A.locator("input[type=file]").setInputFiles(pngPath);
+  await A.getByLabel("Name").fill("smoke_face");
+  await A.getByRole("button", { name: "Add emoji" }).click();
+  await A.locator("li", { hasText: ":smoke_face:" }).waitFor({ timeout: 15_000 });
+  check("Custom emoji uploaded from settings", true);
+  await shot(A, "settings-emojis");
+  await A.goto(workspaceUrl);
+  const composerA2 = A.getByRole("textbox", { name: /Message #general/ });
+  await composerA2.waitFor();
+  await composerA2.pressSequentially("look :smoke_f", { delay: 20 });
+  await A.getByRole("listbox", { name: "Emoji suggestions" }).getByText(":smoke_face:").waitFor({ timeout: 8_000 });
+  check("Autocomplete dropdown shows the custom emoji", true);
+  await shot(A, "emoji-autocomplete");
+  await composerA2.press("Enter");
+  check("Enter inserts the shortcode", (await composerA2.inputValue()).includes(":smoke_face: "));
+  await composerA2.pressSequentially("and :tada", { delay: 20 });
+  await A.getByRole("listbox", { name: "Emoji suggestions" }).getByText(":tada:").waitFor({ timeout: 8_000 });
+  await composerA2.press("Tab");
+  await composerA2.press("Enter");
+  await B.locator("article", { hasText: "look" }).locator("img.emoji[alt=':smoke_face:']").waitFor({ timeout: 10_000 });
+  check("Custom emoji renders inline for B; :tada: became 🎉", (await B.locator("article", { hasText: "look" }).getByText("🎉").count()) > 0);
+  await shot(B, "custom-emoji-message");
 
   // 11. Voice entry: setup sheet then join attempt (no RealtimeKit credentials locally)
   await A.getByRole("button", { name: /^Lounge$/ }).click();
