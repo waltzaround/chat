@@ -178,6 +178,35 @@ export function useCreateChannel(workspaceId: string) {
   });
 }
 
+/** Persists a new sidebar order with an optimistic cache update and rollback on failure. */
+export function useReorderLayout(workspaceId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { categories: { id: string; position: number }[]; channels: { id: string; position: number; categoryId: string | null }[] }) => apiPut(`/api/workspaces/${workspaceId}/reorder`, input),
+    onMutate: async (input) => {
+      await qc.cancelQueries({ queryKey: keys.workspace(workspaceId) });
+      const previous = qc.getQueryData<WorkspaceDetail>(keys.workspace(workspaceId));
+      if (previous) {
+        const catPos = new Map(input.categories.map((c) => [c.id, c.position]));
+        const chPos = new Map(input.channels.map((c) => [c.id, c]));
+        qc.setQueryData<WorkspaceDetail>(keys.workspace(workspaceId), {
+          ...previous,
+          categories: previous.categories.map((c) => ({ ...c, position: catPos.get(c.id) ?? c.position })),
+          channels: previous.channels.map((c) => {
+            const p = chPos.get(c.id);
+            return p ? { ...c, position: p.position, categoryId: p.categoryId } : c;
+          }),
+        });
+      }
+      return { previous };
+    },
+    onError: (_err, _input, ctx) => {
+      if (ctx?.previous) qc.setQueryData(keys.workspace(workspaceId), ctx.previous);
+    },
+    onSettled: () => void qc.invalidateQueries({ queryKey: keys.workspace(workspaceId) }),
+  });
+}
+
 export function useCreateCategory(workspaceId: string) {
   const qc = useQueryClient();
   return useMutation({

@@ -53,13 +53,13 @@ export function EditChannelDialog({ workspaceId, channel, open, onOpenChange }: 
               <Input id="edit-topic" value={topic} onChange={(e) => setTopic(e.target.value)} maxLength={256} placeholder="What is this channel about?" />
             </div>
             <div className="grid gap-1.5">
-              <Label htmlFor="edit-category">Category</Label>
+              <Label htmlFor="edit-category">Section</Label>
               <Select value={category} onValueChange={setCategory}>
                 <SelectTrigger id="edit-category" className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">No category</SelectItem>
+                  <SelectItem value="none">No section</SelectItem>
                   {(ws.data?.categories ?? []).map((c) => (
                     <SelectItem key={c.id} value={c.id}>
                       {c.name}

@@ -189,13 +189,35 @@ try {
   check("Unread indicator shows on B's sidebar", true);
   await shot(B, "unread-indicator");
 
+  // 10a. Sections + drag reorder by a plain member
+  await B.getByRole("button", { name: "New section" }).click();
+  await B.getByLabel("Section name").fill("Projects");
+  await B.getByRole("button", { name: "Create", exact: true }).click();
+  await B.locator("section[aria-label='Projects']").waitFor({ timeout: 10_000 });
+  await A.locator("section[aria-label='Projects']").waitFor({ timeout: 10_000 });
+  check("Plain member creates a section; it appears for A in realtime", true);
+  const dragSource = B.locator("[data-sortable-channel]", { has: B.getByRole("button", { name: /^announcements/ }) });
+  const dropTarget = B.locator("section[aria-label='Projects']");
+  const src = await dragSource.boundingBox();
+  const dst = await dropTarget.boundingBox();
+  await B.mouse.move(src.x + src.width / 2, src.y + src.height / 2);
+  await B.mouse.down();
+  await B.mouse.move(src.x + src.width / 2, src.y + src.height / 2 + 12, { steps: 4 });
+  await B.mouse.move(dst.x + dst.width / 2, dst.y + dst.height - 6, { steps: 12 });
+  await B.waitForTimeout(150);
+  await B.mouse.up();
+  await B.locator("section[aria-label='Projects']").getByRole("button", { name: /^announcements/ }).waitFor({ timeout: 10_000 });
+  await A.locator("section[aria-label='Projects']").getByRole("button", { name: /^announcements/ }).waitFor({ timeout: 10_000 });
+  check("Drag moves a channel into the new section and syncs to A", true);
+  await shot(B, "drag-reorder");
+
   // 10b. Custom emoji: upload in settings, autocomplete with :name:, render for B
   await A.goto(workspaceUrl.replace(/\/c\/.*$/, "/settings/emojis"));
   await A.getByRole("heading", { name: "Custom emojis" }).waitFor({ timeout: 10_000 });
   await A.locator("input[type=file]").setInputFiles(pngPath);
-  await A.getByLabel("Name").fill("smoke_face");
+  await A.getByLabel("Name", { exact: true }).fill("smoke_face");
   await A.getByRole("button", { name: "Add emoji" }).click();
-  await A.locator("li", { hasText: ":smoke_face:" }).waitFor({ timeout: 15_000 });
+  await A.locator("section[aria-label='Existing emojis'] li", { hasText: ":smoke_face:" }).waitFor({ timeout: 15_000 });
   check("Custom emoji uploaded from settings", true);
   await shot(A, "settings-emojis");
   await A.goto(workspaceUrl);

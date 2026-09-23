@@ -349,3 +349,46 @@ describe("custom emojis", () => {
     expect(await api<unknown[]>(a.cookie, `/api/workspaces/${ws.id}/emojis`)).toEqual([]);
   });
 });
+
+describe("sections and layout", () => {
+  it("lets any member create and rename sections and reorder, but not delete", async () => {
+    const a = await signUp();
+    const b = await signUp();
+    const ws = await createWorkspace(a);
+    const inv = await invite(a, ws.id, {});
+    await joinViaInvite(b, inv.code);
+
+    // Plain member (default role) can create a section…
+    const section = await api<{ id: string; position: number }>(b.cookie, `/api/workspaces/${ws.id}/categories`, { method: "POST", json: { name: "Projects" } });
+    expect(section.position).toBe(2);
+    // …rename it…
+    expect((await apiRaw(b.cookie, `/api/workspaces/${ws.id}/categories/${section.id}`, { method: "PATCH", json: { name: "Work" } })).status).toBe(200);
+    // …and reorder sections and channels.
+    const general = textChannel(ws);
+    const lounge = ws.channels.find((c) => c.kind === "voice")!;
+    const res = await apiRaw(b.cookie, `/api/workspaces/${ws.id}/reorder`, {
+      method: "PUT",
+      json: {
+        categories: [{ id: section.id, position: 0 }, ...ws.categories.map((c, i) => ({ id: c.id, position: i + 1 }))],
+        channels: [{ id: lounge.id, position: 0, categoryId: section.id }, { id: general.id, position: 1, categoryId: null }],
+      },
+    });
+    expect(res.status).toBe(200);
+    const after = await api<WorkspaceDetail>(b.cookie, `/api/workspaces/${ws.id}`);
+    expect(after.categories.find((c) => c.id === section.id)?.name).toBe("Work");
+    expect(after.categories.find((c) => c.id === section.id)?.position).toBe(0);
+    expect(after.channels.find((c) => c.id === lounge.id)?.categoryId).toBe(section.id);
+    expect(after.channels.find((c) => c.id === general.id)?.categoryId).toBeNull();
+
+    // But deleting sections stays with Manage channels.
+    expect((await apiRaw(b.cookie, `/api/workspaces/${ws.id}/categories/${section.id}`, { method: "DELETE" })).status).toBe(403);
+    // Moving a channel into a section from another workspace is refused.
+    expect((await apiRaw(b.cookie, `/api/workspaces/${ws.id}/reorder`, { method: "PUT", json: { channels: [{ id: general.id, position: 0, categoryId: "not-a-real-section" }] } })).status).toBe(404);
+
+    // Removing MANAGE_LAYOUT from @everyone locks it down again.
+    const everyone = ws.roles.find((r) => r.isDefault)!;
+    await api(a.cookie, `/api/workspaces/${ws.id}/roles/${everyone.id}`, { method: "PATCH", json: { permissions: everyone.permissions & ~Permission.MANAGE_LAYOUT } });
+    expect((await apiRaw(b.cookie, `/api/workspaces/${ws.id}/categories`, { method: "POST", json: { name: "Nope" } })).status).toBe(403);
+    expect((await apiRaw(b.cookie, `/api/workspaces/${ws.id}/reorder`, { method: "PUT", json: { categories: [] } })).status).toBe(403);
+  });
+});

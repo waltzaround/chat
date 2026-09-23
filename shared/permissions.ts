@@ -22,6 +22,8 @@ export const Permission = {
   VIDEO: 1 << 14,
   SCREEN_SHARE: 1 << 15,
   MANAGE_EMOJIS: 1 << 16,
+  /** Create and rename sections, reorder sections and channels. On for @everyone by default. */
+  MANAGE_LAYOUT: 1 << 17,
 } as const;
 
 export type PermissionName = keyof typeof Permission;
@@ -44,7 +46,8 @@ export const DEFAULT_ROLE_PERMISSIONS: PermissionBits =
   Permission.CONNECT |
   Permission.SPEAK |
   Permission.VIDEO |
-  Permission.SCREEN_SHARE;
+  Permission.SCREEN_SHARE |
+  Permission.MANAGE_LAYOUT;
 
 /** Permissions that only make sense on channels (used to filter the overwrite editor). */
 export const CHANNEL_PERMISSIONS: PermissionBits =
@@ -77,6 +80,7 @@ export const PERMISSION_LABELS: Record<PermissionName, { label: string; descript
   VIDEO: { label: "Video", description: "Turn on the camera in voice channels.", group: "voice" },
   SCREEN_SHARE: { label: "Screen share", description: "Share a screen or window in voice channels.", group: "voice" },
   MANAGE_EMOJIS: { label: "Manage emojis", description: "Upload and remove custom emojis for the workspace.", group: "general" },
+  MANAGE_LAYOUT: { label: "Organise channels", description: "Create and rename sections, and drag channels and sections into a new order.", group: "general" },
 };
 
 export function hasPermission(bits: PermissionBits, permission: PermissionBits): boolean {
