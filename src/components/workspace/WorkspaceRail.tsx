@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { MentionBadge } from "@/components/common/MentionBadge";
-import { NavLink, useParams } from "react-router";
-import { Compass, Plus } from "lucide-react";
+import { NavLink, useLocation, useParams } from "react-router";
+import { Compass, MessageCircle, Plus } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { useMe, useWorkspace, useWorkspaces } from "@/lib/queries";
+import { useDms, useMe, useWorkspace, useWorkspaces } from "@/lib/queries";
 import { cn } from "@/lib/utils";
 import { WorkspaceIcon } from "./WorkspaceIcon";
 import { CreateWorkspaceDialog } from "./CreateWorkspaceDialog";
@@ -19,10 +19,32 @@ export function WorkspaceRail() {
   const openWorkspace = useWorkspace(workspaceId).data;
   const mentionsFor = (ws: { id: string; mentionCount: number }) =>
     ws.id === openWorkspace?.id ? openWorkspace.channels.reduce((sum, c) => sum + c.mentionCount, 0) : ws.mentionCount;
+  const dms = useDms().data ?? [];
+  const { pathname } = useLocation();
+  const inDms = openWorkspace?.kind === "dm" || pathname.startsWith("/dms");
+  const unreadDms = dms.filter((d) => d.workspaceId !== workspaceId).reduce((sum, d) => sum + d.unreadCount, 0);
   const [joinOpen, setJoinOpen] = useState(false);
 
   return (
     <nav aria-label="Workspaces" className="flex w-16 shrink-0 flex-col items-center gap-2 border-r border-sidebar-border bg-rail py-2">
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <NavLink
+            to="/dms"
+            aria-label="Direct messages"
+            aria-current={inDms ? "page" : undefined}
+            className={cn(
+              "relative flex size-12 items-center justify-center rounded-2xl bg-sidebar text-sidebar-foreground transition-all hover:rounded-xl hover:bg-primary hover:text-primary-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+              inDms && "rounded-xl bg-primary text-primary-foreground",
+            )}
+          >
+            <MessageCircle className="size-5" aria-hidden />
+            <MentionBadge count={unreadDms} noun="message" className="absolute -right-1 -bottom-1 ring-2 ring-rail" />
+          </NavLink>
+        </TooltipTrigger>
+        <TooltipContent side="right">Direct messages</TooltipContent>
+      </Tooltip>
+      <span className="h-px w-8 bg-sidebar-border" aria-hidden />
       <ul className="flex flex-1 flex-col items-center gap-2 overflow-y-auto px-2">
         {workspaces.isPending
           ? Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="size-12 rounded-2xl" />)

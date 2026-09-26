@@ -47,5 +47,6 @@ export function toWorkspaceSummary(w: WorkspaceRow, memberCount: number, mention
     ownerUserId: w.ownerUserId,
     memberCount,
     mentionCount,
+    kind: w.kind === "dm" ? "dm" : "community",
   };
 }

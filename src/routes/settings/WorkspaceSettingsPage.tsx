@@ -131,7 +131,7 @@ export function WorkspaceSettingsPage() {
           {activeTab === "reports" && (
             <div className="grid gap-4">
               <h2 className="text-base font-semibold">Reports</h2>
-              <ReportsPanel workspaceId={ws.id} />
+              <ReportsPanel source={{ workspaceId: ws.id }} />
             </div>
           )}
           {activeTab === "audit" && <AuditTab ws={ws} />}

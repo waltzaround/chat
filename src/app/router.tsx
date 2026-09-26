@@ -10,6 +10,7 @@ import { WorkspaceLayout } from "@/app/WorkspaceLayout";
 import { ChannelRoute } from "@/routes/ChannelRoute";
 import { WorkspaceIndexRoute } from "@/routes/WorkspaceIndexRoute";
 import { NoWorkspacePage } from "@/routes/NoWorkspacePage";
+import { DirectMessagesPage } from "@/routes/DirectMessagesPage";
 import { FullscreenSpinner } from "@/components/common/FullscreenSpinner";
 
 const UserSettingsPage = lazy(() => import("@/routes/settings/UserSettingsPage").then((m) => ({ default: m.UserSettingsPage })));
@@ -34,6 +35,7 @@ export const router = createBrowserRouter([
     children: [
       { path: "/", element: <RootRedirect /> },
       { path: "/welcome", element: <NoWorkspacePage /> },
+      { path: "/dms", element: <DirectMessagesPage /> },
       {
         path: "/settings/:tab?",
         element: (

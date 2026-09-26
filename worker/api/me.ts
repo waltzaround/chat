@@ -116,7 +116,7 @@ meRoutes.get("/me/workspaces", async (c) => {
     })
     .from(schema.workspaceMembers)
     .innerJoin(schema.workspaces, eq(schema.workspaces.id, schema.workspaceMembers.workspaceId))
-    .where(and(eq(schema.workspaceMembers.userId, user.id), eq(schema.workspaceMembers.status, "active")))
+    .where(and(eq(schema.workspaceMembers.userId, user.id), eq(schema.workspaceMembers.status, "active"), eq(schema.workspaces.kind, "community")))
     .orderBy(schema.workspaceMembers.joinedAt);
   const mentions = await unreadMentionCounts(c.get("db"), user.id, "workspace");
   const body: WorkspaceSummary[] = rows.map((r) => toWorkspaceSummary(r.workspace, Number(r.memberCount), mentions.get(r.workspace.id) ?? 0));

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { ArrowDown, Hash, Loader2 } from "lucide-react";
+import { ArrowDown, Hash, Loader2, MessageCircle } from "lucide-react";
 import { useMe, useMessageHistory } from "@/lib/queries";
 import { useRealtime } from "@/realtime/RealtimeProvider";
 import { usePendingMessages, useSyncVersion } from "@/realtime/hooks";
@@ -169,7 +169,11 @@ export function MessageList({
     <div className="relative min-h-0 flex-1">
       <div ref={scrollRef} onScroll={onScroll} className="h-full overflow-y-auto overscroll-contain" role="log" aria-live="polite" aria-label={`Messages in ${channel.name}`}>
         {rows.length === 0 ? (
-          <EmptyState icon={Hash} title={`Welcome to #${channel.name}`} description={channel.topic ?? "This is the start of the channel. Say hello!"} />
+          workspace.kind === "dm" ? (
+            <EmptyState icon={MessageCircle} title={workspace.dmPeer?.displayName ?? "Deleted user"} description="This is the start of your conversation. Only the two of you can see it." />
+          ) : (
+            <EmptyState icon={Hash} title={`Welcome to #${channel.name}`} description={channel.topic ?? "This is the start of the channel. Say hello!"} />
+          )
         ) : (
           <div style={{ height: virtualizer.getTotalSize(), position: "relative" }} className="w-full">
             {!history.hasNextPage && messages.length > 0 ? null : null}

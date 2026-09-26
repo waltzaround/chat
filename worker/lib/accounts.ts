@@ -16,7 +16,10 @@ import { fileUrl, iso, isoRequired } from "./serialize";
  */
 export async function deleteAccount(env: Env, db: Db, userId: string, opts: { deleteMessages: boolean }): Promise<void> {
   if ((await serverOwnerId(env.DB)) === userId) throw ApiError.conflict("The server owner's account can't be deleted.");
-  const owned = await db.select({ name: schema.workspaces.name }).from(schema.workspaces).where(eq(schema.workspaces.ownerUserId, userId));
+  const owned = await db
+    .select({ name: schema.workspaces.name })
+    .from(schema.workspaces)
+    .where(and(eq(schema.workspaces.ownerUserId, userId), eq(schema.workspaces.kind, "community")));
   if (owned.length) {
     throw ApiError.conflict(`Transfer or delete the workspaces this account owns first: ${owned.map((w) => w.name).join(", ")}.`);
   }

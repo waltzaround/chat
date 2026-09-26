@@ -14,6 +14,7 @@ import { voiceRoutes } from "./api/voice";
 import { emojiRoutes } from "./api/emojis";
 import { serverRoutes } from "./api/server";
 import { reportQueueRoutes, reportRoutes } from "./api/reports";
+import { dmGuard, dmRoutes } from "./api/dms";
 import { loadMemberContext } from "./permissions/resolve";
 import { hubFor } from "./lib/hub";
 import { handleQueue } from "./queues/consumer";
@@ -86,7 +87,12 @@ app.get("/api/auth-challenge", async (c) => {
 // REST
 // ---------------------------------------------------------------------------
 
+// Direct message conversations are workspaces too; keep them to reading and chatting.
+app.use("/api/workspaces/:workspaceId", dmGuard);
+app.use("/api/workspaces/:workspaceId/*", dmGuard);
+
 app.route("/api", meRoutes);
+app.route("/api/dms", dmRoutes);
 app.route("/api/workspaces", workspaceRoutes);
 app.route("/api/workspaces", emojiRoutes);
 app.route("/api/channels", channelRoutes);

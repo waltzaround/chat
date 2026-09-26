@@ -6,6 +6,7 @@ import { SettingsLayout } from "./SettingsLayout";
 import { RegistrationPolicyPicker, WorkspaceCreationPicker } from "@/components/onboarding/RegistrationPolicyPicker";
 import { EmailStatus, ServerAccounts } from "./ServerAccounts";
 import { AccountSection } from "./AccountSection";
+import { ReportsPanel } from "./ReportsPanel";
 import { ImagePicker } from "@/components/common/ImagePicker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -287,6 +288,11 @@ function ServerTab() {
         <p className="text-sm font-medium">Accounts</p>
         <EmailStatus />
         <ServerAccounts />
+      </div>
+      <div className="grid gap-2">
+        <p className="text-sm font-medium">Reported direct messages</p>
+        <p className="text-xs text-muted-foreground">Direct messages have no moderators, so reports about them come to you.</p>
+        <ReportsPanel source="server" />
       </div>
     </div>
   );

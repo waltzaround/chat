@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useRef, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { ClientEvent, ServerEvent, VoiceParticipantState } from "@shared/events";
-import type { Attachment, PreferredStatus, PresenceStatus, ReplyContext } from "@shared/types";
+import type { Attachment, PreferredStatus, PresenceStatus, ReplyContext, WorkspaceDetail } from "@shared/types";
 import { createStore, type Store } from "@/lib/store";
 import { keys, messageCache, workspaceCache } from "@/lib/queries";
 import { WorkspaceSocket, type SocketStatus } from "./socket";
@@ -237,6 +237,8 @@ export function RealtimeProvider({ workspaceId, userId, children }: { workspaceI
       // Mentions were read: once the server has the new read marker, refresh the rail's
       // counts so a refetch that raced the read can't leave a stale badge.
       if (mentionsCleared.current.delete(channelId)) setTimeout(() => void qc.invalidateQueries({ queryKey: keys.workspaces }), 800);
+      // Reading a direct message clears its unread count in the DM list.
+      if (qc.getQueryData<WorkspaceDetail>(keys.workspace(workspaceId))?.kind === "dm") setTimeout(() => void qc.invalidateQueries({ queryKey: keys.dms }), 800);
     };
     return {
       store,

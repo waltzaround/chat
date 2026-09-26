@@ -1,12 +1,13 @@
 import { useState, type ReactNode } from "react";
-import { Crown, ShieldBan, UserMinus } from "lucide-react";
+import { Crown, MessageCircle, ShieldBan, UserMinus } from "lucide-react";
+import { useNavigate } from "react-router";
 import { toast } from "sonner";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { UserAvatar } from "@/components/common/UserAvatar";
 import { STATUS_LABEL } from "@/components/common/StatusDot";
-import { useMe, useMemberMutations, useWorkspace } from "@/lib/queries";
+import { useMe, useMemberMutations, useOpenDm, useWorkspace } from "@/lib/queries";
 import { usePresence } from "@/realtime/hooks";
 import { Permission, can, canModerateMember, memberDisplayName } from "@/lib/permissions";
 import { errorMessage } from "@/lib/api";
@@ -24,6 +25,13 @@ export function MemberPopover({ member, workspaceId, children }: { member: Membe
   const canMod = !!ws.data && !!me.data && !isMe && canModerateMember(ws.data, me.data.id, ws.data.myRoleIds, member);
   const canKick = canMod && can(ws.data, Permission.KICK_MEMBERS);
   const canBan = canMod && can(ws.data, Permission.BAN_MEMBERS);
+  const openDm = useOpenDm();
+  const navigate = useNavigate();
+  const message = () =>
+    openDm.mutate(member.userId, {
+      onSuccess: (dm) => navigate(`/w/${dm.workspaceId}/c/${dm.channelId}`),
+      onError: (err) => toast.error(errorMessage(err)),
+    });
 
   const run = async () => {
     try {
@@ -74,6 +82,11 @@ export function MemberPopover({ member, workspaceId, children }: { member: Membe
               <p className="text-xs text-warning">Timed out until {new Date(member.timeoutUntil).toLocaleString()}</p>
             ) : null}
             <p className="text-[11px] text-muted-foreground">Member since {new Date(member.joinedAt).toLocaleDateString()}</p>
+            {!isMe && ws.data?.kind !== "dm" ? (
+              <Button size="sm" onClick={message} disabled={openDm.isPending}>
+                <MessageCircle className="size-3.5" aria-hidden /> Message
+              </Button>
+            ) : null}
             {canKick || canBan ? (
               <div className="flex gap-2 border-t pt-3">
                 {canKick ? (

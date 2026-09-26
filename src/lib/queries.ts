@@ -17,6 +17,8 @@ import type {
   Role,
   SearchResponse,
   PasswordResetLink,
+  DirectMessage,
+  UserSummary,
   ReportedMessage,
   ServerSettings,
   ServerUser,
@@ -30,6 +32,8 @@ export const keys = {
   authConfig: ["auth-config"] as const,
   serverSettings: ["server-settings"] as const,
   serverUsers: (q: string) => ["server-users", q] as const,
+  dms: ["dms"] as const,
+  dmPeople: (q: string) => ["dm-people", q] as const,
   workspaces: ["workspaces"] as const,
   workspace: (id: string) => ["workspace", id] as const,
   members: (id: string) => ["members", id] as const,
@@ -110,6 +114,23 @@ export function useSetSuspended() {
 
 export function useCreatePasswordResetLink() {
   return useMutation({ mutationFn: (userId: string) => apiPost<PasswordResetLink>(`/api/server/users/${userId}/password-reset`, {}) });
+}
+
+export function useDms() {
+  return useQuery({ queryKey: keys.dms, queryFn: () => apiGet<DirectMessage[]>("/api/dms"), staleTime: 30_000 });
+}
+
+export function useDmPeople(q: string, enabled = true) {
+  return useQuery({ queryKey: keys.dmPeople(q), queryFn: () => apiGet<UserSummary[]>(`/api/dms/people?q=${encodeURIComponent(q)}`), enabled, placeholderData: (prev) => prev });
+}
+
+/** Open (or start) the conversation with someone and go to it. */
+export function useOpenDm() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (userId: string) => apiPost<{ workspaceId: string; channelId: string }>("/api/dms", { userId }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: keys.dms }),
+  });
 }
 
 export function useWorkspaces() {
@@ -432,8 +453,13 @@ export function useAuditLog(workspaceId: string, enabled = true) {
   return useQuery({ queryKey: keys.audit(workspaceId), queryFn: () => apiGet<AuditEntry[]>(`/api/workspaces/${workspaceId}/audit-log`), enabled });
 }
 
-export function useReports(workspaceId: string, enabled = true) {
-  return useQuery({ queryKey: keys.reports(workspaceId), queryFn: () => apiGet<ReportedMessage[]>(`/api/workspaces/${workspaceId}/reports`), enabled });
+/** Where a report queue lives: a workspace's moderators, or the server owner (for DMs). */
+export type ReportSource = { workspaceId: string } | "server";
+const reportsBase = (source: ReportSource) => (source === "server" ? "/api/server/reports" : `/api/workspaces/${source.workspaceId}/reports`);
+const reportsKey = (source: ReportSource) => keys.reports(source === "server" ? "server" : source.workspaceId);
+
+export function useReports(source: ReportSource, enabled = true) {
+  return useQuery({ queryKey: reportsKey(source), queryFn: () => apiGet<ReportedMessage[]>(reportsBase(source)), enabled });
 }
 
 export function useReportMessage(channelId: string) {
@@ -442,12 +468,11 @@ export function useReportMessage(channelId: string) {
   });
 }
 
-export function useResolveReport(workspaceId: string) {
+export function useResolveReport(source: ReportSource) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ messageId, action }: { messageId: string; action: "remove" | "dismiss" }) =>
-      apiPost<void>(`/api/workspaces/${workspaceId}/reports/${messageId}/resolve`, { action }),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: keys.reports(workspaceId) }),
+    mutationFn: ({ messageId, action }: { messageId: string; action: "remove" | "dismiss" }) => apiPost<void>(`${reportsBase(source)}/${messageId}/resolve`, { action }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: reportsKey(source) }),
   });
 }
 

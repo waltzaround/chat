@@ -186,6 +186,7 @@ Both are Zod-validated discriminated unions in `shared/events.ts`.
 
 ## Not yet done
 
-- Drag-and-drop reordering of channels (the `PUT /reorder` endpoint and position fields exist; the UI uses up/down controls).
+- Web Push and mobile push notifications (browser notifications work while the app is open in a tab).
+- Group direct messages (DMs are one-to-one), and blocking people.
 - Passkeys (Better Auth plugin can be added without schema changes to the app tables).
-- Notification preferences (placeholder screen), link unfurling and moderation pipelines (queue job types are typed but not implemented).
+- Link unfurling and automated moderation (queue job types are typed but not implemented).

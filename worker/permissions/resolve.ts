@@ -60,7 +60,8 @@ export function buildContext(
   memberRoleIds: string[],
 ): MemberContext {
   const everyoneRole = roles.find((r) => r.isDefault) ?? null;
-  const isOwner = workspace.ownerUserId === member.userId;
+  // Nobody owns a direct message conversation: both people get the same, plain permissions.
+  const isOwner = workspace.kind !== "dm" && workspace.ownerUserId === member.userId;
   const held = roles.filter((r) => memberRoleIds.includes(r.id));
   const basePermissions = computeBasePermissions({ isOwner, everyoneRole, memberRoles: held });
   const highestRolePosition = isOwner ? Number.POSITIVE_INFINITY : Math.max(0, ...held.map((r) => r.position));

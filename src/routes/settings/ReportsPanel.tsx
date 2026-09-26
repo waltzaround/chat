@@ -3,7 +3,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { UserAvatar } from "@/components/common/UserAvatar";
-import { useReports, useResolveReport } from "@/lib/queries";
+import { useReports, useResolveReport, type ReportSource } from "@/lib/queries";
 import { errorMessage } from "@/lib/api";
 import { formatFull } from "@/lib/format";
 import { REPORT_REASONS } from "@/components/chat/ReportMessageDialog";
@@ -11,9 +11,9 @@ import type { ReportedMessage } from "@shared/types";
 
 const reasonLabel = (value: string) => REPORT_REASONS.find((r) => r.value === value)?.label ?? value;
 
-/** Moderation queue: reported messages in channels this member can moderate. */
-export function ReportsPanel({ workspaceId }: { workspaceId: string }) {
-  const reports = useReports(workspaceId);
+/** Moderation queue: reported messages in channels this member can moderate, or (for the server owner) in DMs. */
+export function ReportsPanel({ source }: { source: ReportSource }) {
+  const reports = useReports(source);
 
   if (reports.isPending) {
     return <Loader2 className="size-5 animate-spin text-muted-foreground" aria-label="Loading reports" />;
@@ -31,14 +31,14 @@ export function ReportsPanel({ workspaceId }: { workspaceId: string }) {
   return (
     <ul className="grid gap-3">
       {reports.data.map((item) => (
-        <ReportCard key={item.messageId} workspaceId={workspaceId} item={item} />
+        <ReportCard key={item.messageId} source={source} item={item} />
       ))}
     </ul>
   );
 }
 
-function ReportCard({ workspaceId, item }: { workspaceId: string; item: ReportedMessage }) {
-  const resolve = useResolveReport(workspaceId);
+function ReportCard({ source, item }: { source: ReportSource; item: ReportedMessage }) {
+  const resolve = useResolveReport(source);
   const act = (action: "remove" | "dismiss") =>
     resolve.mutate(
       { messageId: item.messageId, action },
@@ -58,7 +58,7 @@ function ReportCard({ workspaceId, item }: { workspaceId: string; item: Reported
           </Badge>
         ))}
         <span>
-          {item.reports.length} {item.reports.length === 1 ? "report" : "reports"} · #{item.channelName} · first {formatFull(item.firstReportedAt)}
+          {item.reports.length} {item.reports.length === 1 ? "report" : "reports"} · {source === "server" ? "direct message" : `#${item.channelName}`} · first {formatFull(item.firstReportedAt)}
         </span>
       </div>
       <div className="flex gap-2.5 rounded-md bg-muted/40 p-2.5">
@@ -90,7 +90,11 @@ function ReportCard({ workspaceId, item }: { workspaceId: string; item: Reported
           <X className="size-3.5" aria-hidden /> {item.messageDeleted ? "Close" : "Keep message"}
         </Button>
       </div>
-      <p className="text-[11px] text-muted-foreground">To remove {item.author?.displayName ?? "the author"} from the workspace, use the Members tab.</p>
+      <p className="text-[11px] text-muted-foreground">
+        {source === "server"
+          ? `To stop ${item.author?.displayName ?? "the author"} altogether, suspend their account in the list above.`
+          : `To remove ${item.author?.displayName ?? "the author"} from the workspace, use the Members tab.`}
+      </p>
     </li>
   );
 }

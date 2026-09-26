@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { useNavigate } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import type { NotificationPayload, UserEvent } from "@shared/events";
-import { workspaceCache } from "@/lib/queries";
+import { keys, workspaceCache } from "@/lib/queries";
 import { browserNotificationsSupported, readNotificationPrefs } from "@/lib/notifications";
 import { WorkspaceSocket } from "./socket";
 
@@ -26,8 +26,9 @@ export function UserNotifications() {
       onEvent: (event) => {
         if (event.type !== "notification") return;
         const n = event.notification;
+        if (n.kind === "dm") void qc.invalidateQueries({ queryKey: keys.dms });
         if (isReading(n)) return;
-        workspaceCache.addMention(qc, n.workspaceId, n.channelId, n.sequence);
+        if (n.kind === "mention") workspaceCache.addMention(qc, n.workspaceId, n.channelId, n.sequence);
         show(n, (path) => navigate(path));
       },
     });

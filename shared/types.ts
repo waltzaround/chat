@@ -37,6 +37,18 @@ export interface WorkspaceSummary {
   memberCount: number;
   /** Unread messages that mention you, across the channels you can see. */
   mentionCount: number;
+  /** "dm" for a direct message conversation. */
+  kind: "community" | "dm";
+}
+
+/** A direct message conversation, as listed in the DM sidebar. */
+export interface DirectMessage {
+  workspaceId: string;
+  channelId: string;
+  /** The other person. Shown as "Deleted user" once their account is gone. */
+  peer: UserSummary;
+  lastMessageAt: string | null;
+  unreadCount: number;
 }
 
 export interface Category {
@@ -82,6 +94,8 @@ export interface WorkspaceDetail extends WorkspaceSummary {
   myPermissions: PermissionBits;
   myNickname: string | null;
   createdAt: string;
+  /** In a direct message conversation, the other person. */
+  dmPeer: UserSummary | null;
 }
 
 export interface Member extends UserSummary {

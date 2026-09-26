@@ -29,10 +29,18 @@ export function TextChannelView({ channel, workspace, embedded }: { channel: Cha
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      {!embedded ? <ChannelHeader channel={channel} /> : null}
+      {!embedded ? <ChannelHeader channel={channel} dmPeer={workspace.kind === "dm" ? workspace.dmPeer : undefined} /> : null}
       <MessageList key={channel.id} channel={channel} workspace={workspace} onReply={onReply} onEdit={onEdit} editingId={editing?.id ?? null} />
       <div className="shrink-0 px-4 pb-4">
-        <MessageComposer channel={channel} reply={reply} onClearReply={() => setReply(null)} editing={editing} onDoneEditing={() => setEditing(null)} disabled={!canSend} />
+        <MessageComposer
+          channel={channel}
+          reply={reply}
+          onClearReply={() => setReply(null)}
+          editing={editing}
+          onDoneEditing={() => setEditing(null)}
+          disabled={!canSend}
+          placeholderName={workspace.kind === "dm" ? `@${workspace.dmPeer?.displayName ?? "Deleted user"}` : undefined}
+        />
         <TypingIndicator channelId={channel.id} workspaceId={workspace.id} />
       </div>
     </div>

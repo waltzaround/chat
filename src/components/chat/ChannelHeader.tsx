@@ -3,9 +3,10 @@ import { Hash, Menu, Search, Users, Volume2 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useLayout } from "@/app/layout-context";
 import { cn } from "@/lib/utils";
-import type { Channel } from "@shared/types";
+import type { Channel, UserSummary } from "@shared/types";
+import { UserAvatar } from "@/components/common/UserAvatar";
 
-export function ChannelHeader({ channel, actions }: { channel: Channel; actions?: ReactNode }) {
+export function ChannelHeader({ channel, actions, dmPeer }: { channel: Channel; actions?: ReactNode; dmPeer?: UserSummary | null }) {
   const { viewport, membersOpen, toggleMembers, setNavOpen, setSearchOpen } = useLayout();
   const Icon = channel.kind === "voice" ? Volume2 : Hash;
   return (
@@ -15,8 +16,9 @@ export function ChannelHeader({ channel, actions }: { channel: Channel; actions?
           <Menu className="size-5" aria-hidden />
         </HeaderButton>
       ) : null}
-      <Icon className="size-5 shrink-0 text-muted-foreground" aria-hidden />
-      <h1 className="truncate text-[0.95rem] font-semibold">{channel.name}</h1>
+      {dmPeer ? <UserAvatar user={dmPeer} size="sm" /> : <Icon className="size-5 shrink-0 text-muted-foreground" aria-hidden />}
+      <h1 className="truncate text-[0.95rem] font-semibold">{dmPeer ? dmPeer.displayName : channel.name}</h1>
+      {dmPeer ? <span className="truncate text-sm text-muted-foreground">@{dmPeer.username}</span> : null}
       {channel.topic ? (
         <>
           <span className="mx-1 h-5 w-px shrink-0 bg-border" aria-hidden />
@@ -32,9 +34,11 @@ export function ChannelHeader({ channel, actions }: { channel: Channel; actions?
         <HeaderButton label="Search messages" onClick={() => setSearchOpen(true)} shortcut="Ctrl K">
           <Search className="size-[18px]" aria-hidden />
         </HeaderButton>
-        <HeaderButton label={membersOpen ? "Hide member list" : "Show member list"} onClick={toggleMembers} pressed={membersOpen}>
-          <Users className="size-[18px]" aria-hidden />
-        </HeaderButton>
+        {dmPeer === undefined ? (
+          <HeaderButton label={membersOpen ? "Hide member list" : "Show member list"} onClick={toggleMembers} pressed={membersOpen}>
+            <Users className="size-[18px]" aria-hidden />
+          </HeaderButton>
+        ) : null}
       </div>
     </header>
   );

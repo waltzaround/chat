@@ -92,6 +92,8 @@ export const workspaces = sqliteTable(
     slug: text("slug").notNull(),
     iconKey: text("icon_key"),
     ownerUserId: text("owner_user_id").notNull().references(() => users.id),
+    /** community, or dm: a direct message conversation (see dmPairs). */
+    kind: text("kind").notNull().default("community"),
     createdAt: timestamp("created_at").notNull(),
     updatedAt: timestamp("updated_at").notNull(),
   },
@@ -306,6 +308,19 @@ export const customEmojis = sqliteTable(
   (t) => [uniqueIndex("custom_emojis_workspace_name_idx").on(t.workspaceId, t.name)],
 );
 
+/** One direct message conversation per pair of people (userA < userB). */
+export const dmPairs = sqliteTable(
+  "dm_pairs",
+  {
+    userA: text("user_a").notNull(),
+    userB: text("user_b").notNull(),
+    workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+    channelId: text("channel_id").notNull(),
+    createdAt: timestamp("created_at").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.userA, t.userB] }), index("dm_pairs_user_b_idx").on(t.userB)],
+);
+
 /** Who a message notifies. Unread mention badges count rows past the reader's read marker. */
 export const messageMentions = sqliteTable(
   "message_mentions",
@@ -387,6 +402,7 @@ export const schema = {
   customEmojis,
   messageReports,
   messageMentions,
+  dmPairs,
   auditLog,
   rateLimits,
 };

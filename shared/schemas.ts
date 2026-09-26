@@ -136,6 +136,10 @@ export const deleteServerUserSchema = z.object({
   deleteMessages: z.boolean().default(false),
 });
 
+export const openDmSchema = z.object({
+  userId: z.string().min(1),
+});
+
 export const transferOwnershipSchema = z.object({
   userId: z.string().min(1),
 });

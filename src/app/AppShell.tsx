@@ -8,11 +8,17 @@ import { ConnectionBanner } from "@/components/common/ConnectionBanner";
 import { VoiceTray } from "@/components/voice/VoiceTray";
 import { SearchDialog } from "@/components/chat/SearchDialog";
 import { useLayout } from "./layout-context";
+import { useWorkspace } from "@/lib/queries";
+import { DirectMessagesSidebar } from "@/components/dms/DirectMessagesSidebar";
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { viewport, membersOpen, toggleMembers, navOpen, setNavOpen } = useLayout();
   const { workspaceId } = useParams();
   const isMobile = viewport === "mobile";
+  // A direct message conversation shows your conversations instead of channels, and no member list.
+  const isDm = useWorkspace(workspaceId).data?.kind === "dm";
+  const sidebar = (onNavigate?: () => void) =>
+    isDm ? <DirectMessagesSidebar activeWorkspaceId={workspaceId} onNavigate={onNavigate} /> : <ChannelSidebar onNavigate={onNavigate} />;
 
   return (
     <div className="flex h-dvh w-full flex-col overflow-hidden bg-background text-foreground">
@@ -23,13 +29,13 @@ export function AppShell({ children }: { children: ReactNode }) {
             <SheetContent side="left" className="flex w-[304px] flex-row gap-0 p-0 [&>button]:hidden" aria-describedby={undefined}>
               <SheetTitle className="sr-only">Navigation</SheetTitle>
               <WorkspaceRail />
-              <ChannelSidebar onNavigate={() => setNavOpen(false)} />
+              {sidebar(() => setNavOpen(false))}
             </SheetContent>
           </Sheet>
         ) : (
           <>
             <WorkspaceRail />
-            <ChannelSidebar />
+            {sidebar()}
           </>
         )}
 
@@ -37,7 +43,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           {children}
         </main>
 
-        {membersOpen && workspaceId ? (
+        {membersOpen && workspaceId && !isDm ? (
           viewport === "desktop" ? (
             <MemberList workspaceId={workspaceId} />
           ) : (

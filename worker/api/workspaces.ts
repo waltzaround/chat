@@ -91,6 +91,13 @@ async function buildWorkspaceDetail(db: AppEnv["Variables"]["db"], ctx: MemberCo
       mentionCount: mentions.get(channel.id) ?? 0,
     }));
   const visibleMentions = channels.reduce((sum, ch) => sum + ch.mentionCount, 0);
+  let dmPeer = null;
+  if (ctx.workspace.kind === "dm") {
+    const pair = await db.query.dmPairs.findFirst({ where: eq(schema.dmPairs.workspaceId, ctx.workspaceId) });
+    const peerId = pair ? (pair.userA === ctx.userId ? pair.userB : pair.userA) : null;
+    const peer = peerId ? await db.query.users.findFirst({ where: eq(schema.users.id, peerId) }) : null;
+    dmPeer = peer ? toUserSummary(peer) : null;
+  }
   return {
     ...toWorkspaceSummary(ctx.workspace, count, visibleMentions),
     categories: categories.map((cat) => ({ id: cat.id, workspaceId: cat.workspaceId, name: cat.name, position: cat.position })),
@@ -100,6 +107,7 @@ async function buildWorkspaceDetail(db: AppEnv["Variables"]["db"], ctx: MemberCo
     myPermissions: ctx.basePermissions,
     myNickname: ctx.member.nickname,
     createdAt: isoRequired(ctx.workspace.createdAt),
+    dmPeer,
   };
 }
 
@@ -149,7 +157,7 @@ workspaceRoutes.post("/", async (c) => {
   const input = await parseBody(c, createWorkspaceSchema);
   if (!(await canCreateWorkspace(c.env.DB, user.id))) throw ApiError.forbidden("Only the server owner can create workspaces on this server");
 
-  const owned = await db.select({ count: sql<number>`count(*)` }).from(schema.workspaces).where(eq(schema.workspaces.ownerUserId, user.id));
+  const owned = await db.select({ count: sql<number>`count(*)` }).from(schema.workspaces).where(and(eq(schema.workspaces.ownerUserId, user.id), eq(schema.workspaces.kind, "community")));
   if (Number(owned[0]?.count ?? 0) >= 25) throw ApiError.conflict("You have reached the maximum number of workspaces");
 
   const now = new Date();

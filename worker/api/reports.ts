@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, type SQL } from "drizzle-orm";
 import type { AppEnv } from "../auth/middleware";
 import { requireUser } from "../auth/middleware";
 import { schema } from "../db";
@@ -63,12 +63,17 @@ async function moderatedChannels(db: AppEnv["Variables"]["db"], workspaceId: str
 }
 
 reportQueueRoutes.get("/:workspaceId/reports", async (c) => {
-  const db = c.get("db");
-  const { channels } = await moderatedChannels(db, c.req.param("workspaceId"), c.get("user").id);
+  const { channels } = await moderatedChannels(c.get("db"), c.req.param("workspaceId"), c.get("user").id);
+  const names = new Map(channels.map((ch) => [ch.id, ch.name]));
+  return c.json(await listReports(c.get("db"), inArray(schema.messageReports.channelId, channels.map((ch) => ch.id)), (id) => names.get(id) ?? "unknown"));
+});
+
+/** Open reports matching `where`, grouped by message. */
+export async function listReports(db: AppEnv["Variables"]["db"], where: SQL, channelName: (channelId: string) => string): Promise<ReportedMessage[]> {
   const rows = await db
     .select()
     .from(schema.messageReports)
-    .where(and(eq(schema.messageReports.status, "open"), inArray(schema.messageReports.channelId, channels.map((ch) => ch.id))))
+    .where(and(eq(schema.messageReports.status, "open"), where))
     .orderBy(asc(schema.messageReports.createdAt))
     .limit(500);
 
@@ -80,7 +85,6 @@ reportQueueRoutes.get("/:workspaceId/reports", async (c) => {
   ]);
   const userById = new Map(users.map((u) => [u.id, toUserSummary(u)]));
   const deleted = new Set(messages.filter((m) => m.deletedAt).map((m) => m.id));
-  const channelName = new Map(channels.map((ch) => [ch.id, ch.name]));
 
   const byMessage = new Map<string, ReportedMessage>();
   for (const r of rows) {
@@ -89,7 +93,7 @@ reportQueueRoutes.get("/:workspaceId/reports", async (c) => {
       entry = {
         messageId: r.messageId,
         channelId: r.channelId,
-        channelName: channelName.get(r.channelId) ?? "unknown",
+        channelName: channelName(r.channelId),
         author: userById.get(r.authorUserId) ?? null,
         content: r.contentSnapshot,
         messageDeleted: deleted.has(r.messageId),
@@ -100,37 +104,46 @@ reportQueueRoutes.get("/:workspaceId/reports", async (c) => {
     }
     entry.reports.push({ reporter: userById.get(r.reporterUserId) ?? null, reason: r.reason as ReportReason, note: r.note, createdAt: isoRequired(r.createdAt) });
   }
-  return c.json([...byMessage.values()]);
-});
+  return [...byMessage.values()];
+}
 
 reportQueueRoutes.post("/:workspaceId/reports/:messageId/resolve", async (c) => {
   const db = c.get("db");
   const { ctx, channels } = await moderatedChannels(db, c.req.param("workspaceId"), c.get("user").id);
   const { action } = await parseBody(c, resolveReportSchema);
-  const messageId = c.req.param("messageId");
-  const open = await db.query.messageReports.findFirst({ where: and(eq(schema.messageReports.messageId, messageId), eq(schema.messageReports.status, "open")) });
-  if (!open || !channels.some((ch) => ch.id === open.channelId)) throw ApiError.notFound("Report");
+  const allowed = new Set(channels.map((ch) => ch.id));
+  await resolveReports(c.env, db, { messageId: c.req.param("messageId"), action, actorUserId: ctx.userId, canResolve: async (report) => allowed.has(report.channelId) });
+  return c.body(null, 204);
+});
 
-  if (action === "remove") {
-    const message = await db.query.messages.findFirst({ where: eq(schema.messages.id, messageId) });
+/** Close every open report on a message, optionally deleting the message. */
+export async function resolveReports(
+  env: AppEnv["Bindings"],
+  db: AppEnv["Variables"]["db"],
+  opts: { messageId: string; action: "remove" | "dismiss"; actorUserId: string; canResolve: (report: { channelId: string; workspaceId: string }) => Promise<boolean> },
+): Promise<void> {
+  const open = await db.query.messageReports.findFirst({ where: and(eq(schema.messageReports.messageId, opts.messageId), eq(schema.messageReports.status, "open")) });
+  if (!open || !(await opts.canResolve(open))) throw ApiError.notFound("Report");
+
+  if (opts.action === "remove") {
+    const message = await db.query.messages.findFirst({ where: eq(schema.messages.id, opts.messageId) });
     if (message && !message.deletedAt) {
       const keys = await softDeleteMessage(db, message.id);
-      if (keys.length) await c.env.BACKGROUND_QUEUE.send({ type: "message.deleted", attachmentKeys: keys });
-      await notifyWorkspace(c.env, ctx.workspaceId, { type: "message.deleted", channelId: message.channelId, messageId: message.id, sequence: message.channelSequence }, message.channelId);
+      if (keys.length) await env.BACKGROUND_QUEUE.send({ type: "message.deleted", attachmentKeys: keys });
+      await notifyWorkspace(env, open.workspaceId, { type: "message.deleted", channelId: message.channelId, messageId: message.id, sequence: message.channelSequence }, message.channelId);
     }
   }
   await db
     .update(schema.messageReports)
-    .set({ status: action === "remove" ? "removed" : "dismissed", resolvedBy: ctx.userId, resolvedAt: new Date() })
-    .where(and(eq(schema.messageReports.messageId, messageId), eq(schema.messageReports.status, "open")));
+    .set({ status: opts.action === "remove" ? "removed" : "dismissed", resolvedBy: opts.actorUserId, resolvedAt: new Date() })
+    .where(and(eq(schema.messageReports.messageId, opts.messageId), eq(schema.messageReports.status, "open")));
   await audit(db, {
-    workspaceId: ctx.workspaceId,
-    actorUserId: ctx.userId,
-    action: action === "remove" ? "report.removed" : "report.dismissed",
+    workspaceId: open.workspaceId,
+    actorUserId: opts.actorUserId,
+    action: opts.action === "remove" ? "report.removed" : "report.dismissed",
     targetType: "message",
-    targetId: messageId,
+    targetId: opts.messageId,
     details: { authorUserId: open.authorUserId, channelId: open.channelId },
   });
-  await notifyWorkspace(c.env, ctx.workspaceId, { type: "workspace.updated", reason: "reports" });
-  return c.body(null, 204);
-});
+  await notifyWorkspace(env, open.workspaceId, { type: "workspace.updated", reason: "reports" });
+}

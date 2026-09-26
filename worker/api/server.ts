@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { and, desc, eq, isNull, like, or } from "drizzle-orm";
+import { and, desc, eq, isNull, like, or, sql } from "drizzle-orm";
 import type { AppEnv } from "../auth/middleware";
 import { requireUser } from "../auth/middleware";
 import { ApiError } from "../lib/errors";
@@ -14,6 +14,8 @@ import { userHub } from "../lib/notify";
 import { WS_CLOSE } from "@shared/events";
 import { deleteServerUserSchema, updateServerSettingsSchema } from "@shared/schemas";
 import { deleteAccount } from "../lib/accounts";
+import { listReports, resolveReports } from "./reports";
+import { resolveReportSchema } from "@shared/schemas";
 import type { PasswordResetLink, ServerSettings, ServerUser } from "@shared/types";
 
 /** Owner-issued links last longer than emailed ones: they travel by chat or text message. */
@@ -118,6 +120,22 @@ serverRoutes.delete("/users/:userId", async (c) => {
   if (!target || target.deletedAt) throw ApiError.notFound("User");
   const input = await parseBody(c, deleteServerUserSchema);
   await deleteAccount(c.env, c.get("db"), userId, { deleteMessages: input.deleteMessages });
+  return c.body(null, 204);
+});
+
+/** Direct messages have no moderators, so reports about them come to the server owner. */
+const inDirectMessages = sql`${schema.messageReports.workspaceId} IN (SELECT id FROM workspaces WHERE kind = 'dm')`;
+
+serverRoutes.get("/reports", async (c) => c.json(await listReports(c.get("db"), inDirectMessages, () => "direct message")));
+
+serverRoutes.post("/reports/:messageId/resolve", async (c) => {
+  const { action } = await parseBody(c, resolveReportSchema);
+  await resolveReports(c.env, c.get("db"), {
+    messageId: c.req.param("messageId"),
+    action,
+    actorUserId: c.get("user").id,
+    canResolve: async (report) => (await c.env.DB.prepare("SELECT kind FROM workspaces WHERE id = ?").bind(report.workspaceId).first<{ kind: string }>())?.kind === "dm",
+  });
   return c.body(null, 204);
 });
 

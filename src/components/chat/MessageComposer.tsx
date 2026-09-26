@@ -39,6 +39,7 @@ export function MessageComposer({
   editing,
   onDoneEditing,
   disabled,
+  placeholderName,
 }: {
   channel: Channel;
   reply: ComposerReply | null;
@@ -46,6 +47,8 @@ export function MessageComposer({
   editing: Message | null;
   onDoneEditing: () => void;
   disabled: boolean;
+  /** Who you're writing to, when it isn't a channel (a direct message). */
+  placeholderName?: string;
 }) {
   const rt = useRealtime();
   const customEmojis = useEmojis(channel.workspaceId).data ?? [];
@@ -305,7 +308,7 @@ export function MessageComposer({
     ? "You do not have permission to send messages here"
     : editing
       ? "Edit your message"
-      : `Message ${channel.kind === "text" ? "#" : ""}${channel.name}`;
+      : `Message ${placeholderName ?? `${channel.kind === "text" ? "#" : ""}${channel.name}`}`;
   const remaining = MESSAGE_MAX_LENGTH - value.length;
 
   return (

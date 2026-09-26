@@ -422,11 +422,17 @@ export class WorkspaceHub extends DurableObject<Env> {
     this.clearTyping(input.channelId, input.userId);
     this.broadcastToChannel(input.channelId, { type: "message.created", message, clientMessageId: input.clientMessageId });
     this.broadcastActivity(input.channelId, sequence, input.userId);
-    const mentioned = await recordMentions(this.db, row, access.permissions, () => this.onlineUserIds());
+    // A direct message notifies the other person; in a community, whoever is mentioned.
+    const isDm = access.ctx.workspace.kind === "dm";
+    const mentioned = isDm
+      ? (await this.db.select({ userId: schema.workspaceMembers.userId }).from(schema.workspaceMembers).where(eq(schema.workspaceMembers.workspaceId, access.channel.workspaceId)))
+          .map((m) => m.userId)
+          .filter((id) => id !== input.userId)
+      : await recordMentions(this.db, row, access.permissions, () => this.onlineUserIds());
     if (mentioned.length) {
       this.ctx.waitUntil(
         notifyUsers(this.env, mentioned, {
-          kind: "mention",
+          kind: isDm ? "dm" : "mention",
           workspaceId: access.channel.workspaceId,
           workspaceName: access.ctx.workspace.name,
           channelId: input.channelId,
