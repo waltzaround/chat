@@ -22,6 +22,8 @@ export const users = sqliteTable(
     bio: text("bio"),
     /** Preferred presence: online | idle | dnd | invisible */
     status: text("status").notNull().default("online"),
+    /** Set by the server owner. A suspended account cannot sign in. */
+    suspendedAt: timestamp("suspended_at"),
     createdAt: timestamp("created_at").notNull(),
     updatedAt: timestamp("updated_at").notNull(),
   },

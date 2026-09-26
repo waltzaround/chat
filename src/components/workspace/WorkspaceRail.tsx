@@ -2,7 +2,7 @@ import { useState } from "react";
 import { NavLink, useParams } from "react-router";
 import { Compass, Plus } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { useWorkspaces } from "@/lib/queries";
+import { useMe, useWorkspaces } from "@/lib/queries";
 import { cn } from "@/lib/utils";
 import { WorkspaceIcon } from "./WorkspaceIcon";
 import { CreateWorkspaceDialog } from "./CreateWorkspaceDialog";
@@ -13,6 +13,7 @@ export function WorkspaceRail() {
   const workspaces = useWorkspaces();
   const { workspaceId } = useParams();
   const [createOpen, setCreateOpen] = useState(false);
+  const canCreate = useMe().data?.canCreateWorkspace ?? false;
   const [joinOpen, setJoinOpen] = useState(false);
 
   return (
@@ -51,21 +52,23 @@ export function WorkspaceRail() {
               );
             })}
         <li className="my-1 h-px w-8 bg-sidebar-border" aria-hidden />
-        <li>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                onClick={() => setCreateOpen(true)}
-                aria-label="Create a workspace"
-                className="flex size-12 items-center justify-center rounded-2xl bg-sidebar text-success transition-all hover:rounded-xl hover:bg-success hover:text-white focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-              >
-                <Plus className="size-5" aria-hidden />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="right">Create a workspace</TooltipContent>
-          </Tooltip>
-        </li>
+        {canCreate ? (
+          <li>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={() => setCreateOpen(true)}
+                  aria-label="Create a workspace"
+                  className="flex size-12 items-center justify-center rounded-2xl bg-sidebar text-success transition-all hover:rounded-xl hover:bg-success hover:text-white focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                >
+                  <Plus className="size-5" aria-hidden />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="right">Create a workspace</TooltipContent>
+            </Tooltip>
+          </li>
+        ) : null}
         <li>
           <Tooltip>
             <TooltipTrigger asChild>

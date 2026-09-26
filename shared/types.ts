@@ -22,6 +22,8 @@ export interface CurrentUser extends UserSummary {
   createdAt: string;
   /** The account that set this server up. Only it can change server settings. */
   isServerOwner: boolean;
+  /** False when the owner limits workspace creation to themselves. */
+  canCreateWorkspace: boolean;
 }
 
 export interface WorkspaceSummary {
@@ -242,8 +244,12 @@ export interface AuthConfig {
 /** "invite": only people with a working invite link can create an account. */
 export type RegistrationPolicy = "open" | "invite";
 
+/** "owner": only the server owner can create workspaces. */
+export type WorkspaceCreationPolicy = "everyone" | "owner";
+
 export interface ServerSettings {
   registration: RegistrationPolicy;
+  workspaceCreation: WorkspaceCreationPolicy;
   /** Email is set up, so members can reset their own password. */
   emailEnabled: boolean;
 }
@@ -253,6 +259,7 @@ export interface ServerUser extends UserSummary {
   email: string;
   createdAt: string;
   isServerOwner: boolean;
+  suspended: boolean;
 }
 
 /** A one-time link that lets the holder set a new password for one account. */

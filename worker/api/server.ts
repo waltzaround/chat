@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { desc, eq, like, or } from "drizzle-orm";
+import { and, desc, eq, like, or } from "drizzle-orm";
 import type { AppEnv } from "../auth/middleware";
 import { requireUser } from "../auth/middleware";
 import { ApiError } from "../lib/errors";
@@ -8,7 +8,8 @@ import { toUserSummary } from "../lib/serialize";
 import { resetPasswordUrl } from "../auth/auth";
 import { emailEnabled } from "../email";
 import { parseBody } from "../lib/validate";
-import { registrationPolicy, serverOwnerId, setRegistrationPolicy } from "../instance";
+import { registrationPolicy, serverOwnerId, setRegistrationPolicy, setWorkspaceCreationPolicy, workspaceCreationPolicy } from "../instance";
+import { hubFor } from "../lib/hub";
 import { updateServerSettingsSchema } from "@shared/schemas";
 import type { PasswordResetLink, ServerSettings, ServerUser } from "@shared/types";
 
@@ -24,16 +25,18 @@ serverRoutes.use("*", async (c, next) => {
   await next();
 });
 
-serverRoutes.get("/", async (c) => {
-  const body: ServerSettings = { registration: await registrationPolicy(c.env.DB), emailEnabled: emailEnabled(c.env) };
-  return c.json(body);
-});
+async function settings(env: AppEnv["Bindings"]): Promise<ServerSettings> {
+  const [registration, workspaceCreation] = await Promise.all([registrationPolicy(env.DB), workspaceCreationPolicy(env.DB)]);
+  return { registration, workspaceCreation, emailEnabled: emailEnabled(env) };
+}
+
+serverRoutes.get("/", async (c) => c.json(await settings(c.env)));
 
 serverRoutes.patch("/", async (c) => {
   const input = await parseBody(c, updateServerSettingsSchema);
-  await setRegistrationPolicy(c.env.DB, input.registration);
-  const body: ServerSettings = { registration: input.registration, emailEnabled: emailEnabled(c.env) };
-  return c.json(body);
+  if (input.registration) await setRegistrationPolicy(c.env.DB, input.registration);
+  if (input.workspaceCreation) await setWorkspaceCreationPolicy(c.env.DB, input.workspaceCreation);
+  return c.json(await settings(c.env));
 });
 
 /** Every account on the server, newest first, filtered by name, username, or email. */
@@ -53,6 +56,7 @@ serverRoutes.get("/users", async (c) => {
     email: u.email,
     createdAt: u.createdAt.toISOString(),
     isServerOwner: u.id === ownerId,
+    suspended: !!u.suspendedAt,
   }));
   return c.json(body);
 });
@@ -72,6 +76,32 @@ serverRoutes.post("/users/:userId/password-reset", async (c) => {
   await ctx.internalAdapter.createVerificationValue({ identifier: `reset-password:${token}`, value: user.id, expiresAt });
   const body: PasswordResetLink = { url: resetPasswordUrl(c.get("origin"), token), expiresAt: expiresAt.toISOString() };
   return c.json(body, 201);
+});
+
+/**
+ * Suspend: the account cannot sign in, its sessions end, and its open connections close.
+ * Its messages and memberships stay, so unsuspending restores everything.
+ */
+serverRoutes.post("/users/:userId/suspension", async (c) => {
+  const db = c.get("db");
+  const userId = c.req.param("userId");
+  if (userId === c.get("user").id) throw ApiError.validation(undefined, "You cannot suspend your own account");
+  const [updated] = await db.update(schema.users).set({ suspendedAt: new Date() }).where(eq(schema.users.id, userId)).returning({ id: schema.users.id });
+  if (!updated) throw ApiError.notFound("User");
+  await db.delete(schema.sessions).where(eq(schema.sessions.userId, userId));
+  const memberships = await db
+    .select({ workspaceId: schema.workspaceMembers.workspaceId })
+    .from(schema.workspaceMembers)
+    .where(and(eq(schema.workspaceMembers.userId, userId), eq(schema.workspaceMembers.status, "active")));
+  await Promise.all(memberships.map((m) => hubFor(c.env, m.workspaceId).disconnectUser(userId, "suspended").catch((err) => console.error("disconnect failed", err))));
+  return c.body(null, 204);
+});
+
+serverRoutes.delete("/users/:userId/suspension", async (c) => {
+  const db = c.get("db");
+  const [updated] = await db.update(schema.users).set({ suspendedAt: null }).where(eq(schema.users.id, c.req.param("userId"))).returning({ id: schema.users.id });
+  if (!updated) throw ApiError.notFound("User");
+  return c.body(null, 204);
 });
 
 function randomToken(): string {

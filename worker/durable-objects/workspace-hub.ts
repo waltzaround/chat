@@ -443,6 +443,12 @@ export class WorkspaceHub extends DurableObject<Env> {
   // RPC used by REST handlers
   // -------------------------------------------------------------------------
 
+  /** The server owner suspended this account: close its sockets so the client signs out. */
+  async disconnectUser(userId: string, reason: string): Promise<void> {
+    for (const ws of this.socketsFor(userId)) ws.close(WS_CLOSE.UNAUTHENTICATED, reason);
+    this.markPresenceDirty(userId);
+  }
+
   /** Broadcast an event to everyone (channelId null) or to a channel's subscribers. */
   async broadcast(event: ServerEvent, channelId: string | null): Promise<void> {
     if (event.type === "workspace.updated") this.accessCache.clear();

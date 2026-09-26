@@ -49,6 +49,7 @@ export async function resolveSession(
   const session = await auth.api.getSession({ headers });
   if (!session?.user) return null;
   const user = await db.query.users.findFirst({ where: eq(schema.users.id, session.user.id) });
-  if (!user) return null;
+  // Checked against the row, not the cached session cookie, so a suspension applies at once.
+  if (!user || user.suspendedAt) return null;
   return { user, sessionId: session.session.id };
 }

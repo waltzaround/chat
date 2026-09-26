@@ -84,6 +84,17 @@ function buildAuth(env: Env, db: Db, origin: string, secret: string) {
       defaultCookieAttributes: { sameSite: "lax", httpOnly: true, path: "/" },
     },
     databaseHooks: {
+      session: {
+        create: {
+          // Covers every way in: email, Google, GitHub.
+          before: async (session) => {
+            const row = await env.DB.prepare("SELECT suspended_at FROM users WHERE id = ?").bind(session.userId).first<{ suspended_at: number | null }>();
+            if (row?.suspended_at) {
+              throw new APIError("FORBIDDEN", { message: "This account is suspended. Contact the server owner.", code: "account_suspended" });
+            }
+          },
+        },
+      },
       user: {
         create: {
           before: async (user, context) => {

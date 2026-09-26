@@ -36,8 +36,8 @@ export function authSecret(env: Env): Promise<string> {
 // Server owner and sign-up policy
 // ---------------------------------------------------------------------------
 
-export type { RegistrationPolicy } from "@shared/types";
-import type { RegistrationPolicy } from "@shared/types";
+export type { RegistrationPolicy, WorkspaceCreationPolicy } from "@shared/types";
+import type { RegistrationPolicy, WorkspaceCreationPolicy } from "@shared/types";
 
 /** The account that set this server up. Null until someone signs up. */
 export function serverOwnerId(db: D1Database): Promise<string | null> {
@@ -61,7 +61,21 @@ export async function registrationPolicy(db: D1Database): Promise<RegistrationPo
 }
 
 export async function setRegistrationPolicy(db: D1Database, policy: RegistrationPolicy): Promise<void> {
-  await db.prepare("INSERT INTO instance_settings (key, value) VALUES ('registration', ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value").bind(policy).run();
+  await setSetting(db, "registration", policy);
+}
+
+/** Unset means "everyone", as before the setting existed. */
+export async function workspaceCreationPolicy(db: D1Database): Promise<WorkspaceCreationPolicy> {
+  return (await getSetting(db, "workspace_creation")) === "owner" ? "owner" : "everyone";
+}
+
+export async function setWorkspaceCreationPolicy(db: D1Database, policy: WorkspaceCreationPolicy): Promise<void> {
+  await setSetting(db, "workspace_creation", policy);
+}
+
+export async function canCreateWorkspace(db: D1Database, userId: string): Promise<boolean> {
+  if ((await workspaceCreationPolicy(db)) === "everyone") return true;
+  return (await serverOwnerId(db)) === userId;
 }
 
 /** Cookies the sign-up page sets so the check also covers Google/GitHub sign-up. */
@@ -121,6 +135,10 @@ function safeEqual(a: string, b: string): boolean {
   let diff = left.length ^ right.length;
   for (let i = 0; i < right.length; i++) diff |= (left[i] ?? 0) ^ right[i]!;
   return diff === 0;
+}
+
+async function setSetting(db: D1Database, key: string, value: string): Promise<void> {
+  await db.prepare("INSERT INTO instance_settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value").bind(key, value).run();
 }
 
 async function getSetting(db: D1Database, key: string): Promise<string | null> {

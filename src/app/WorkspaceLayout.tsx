@@ -65,6 +65,7 @@ function FatalWatcher() {
       toast.error(fatal.reason === "banned" ? "You were banned from this workspace" : "You were removed from this workspace");
       navigate("/", { replace: true });
     } else if (fatal.code === 4001) {
+      if (fatal.reason === "suspended") toast.error("Your account was suspended by the server owner");
       navigate("/login", { replace: true });
     }
   }, [fatal, navigate]);

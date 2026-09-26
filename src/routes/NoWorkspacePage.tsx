@@ -17,7 +17,9 @@ import type { WorkspaceDetail } from "@shared/types";
 export function NoWorkspacePage() {
   const [joinOpen, setJoinOpen] = useState(false);
   const [created, setCreated] = useState<WorkspaceDetail | null>(null);
-  const owner = useMe().data?.isServerOwner ?? false;
+  const me = useMe().data;
+  const owner = me?.isServerOwner ?? false;
+  const canCreate = me?.canCreateWorkspace ?? true;
 
   return (
     <div className="flex h-dvh flex-col bg-background">
@@ -26,6 +28,16 @@ export function NoWorkspacePage() {
         <div className="w-full max-w-sm rounded-lg border bg-card p-6 shadow-sm">
           {created ? (
             <InvitePeople workspace={created} owner={owner} />
+          ) : !canCreate ? (
+            <div className="grid gap-4">
+              <div className="space-y-1">
+                <h1 className="text-xl font-semibold">Join a workspace</h1>
+                <p className="text-sm text-muted-foreground">On this server, only the owner creates workspaces. Open an invite link from a member to join one.</p>
+              </div>
+              <Button onClick={() => setJoinOpen(true)}>
+                <Compass className="size-4" aria-hidden /> Join with an invite
+              </Button>
+            </div>
           ) : (
             <CreateWorkspaceForm
               stay
@@ -39,7 +51,7 @@ export function NoWorkspacePage() {
             />
           )}
         </div>
-        {created ? null : (
+        {created || !canCreate ? null : (
           <Button variant="ghost" size="sm" onClick={() => setJoinOpen(true)}>
             <Compass className="size-4" aria-hidden /> Have an invite link? Join a workspace
           </Button>

@@ -25,10 +25,11 @@ export function toUserSummary(u: Pick<UserRow, "id" | "username" | "displayName"
   return { id: u.id, username: u.username, displayName: u.displayName, avatarUrl: avatarUrl(u) };
 }
 
-export function toCurrentUser(u: UserRow, ownerId: string | null): CurrentUser {
+export function toCurrentUser(u: UserRow, server: { ownerId: string | null; canCreateWorkspace: boolean }): CurrentUser {
   return {
     ...toUserSummary(u),
-    isServerOwner: ownerId === u.id,
+    isServerOwner: server.ownerId === u.id,
+    canCreateWorkspace: server.canCreateWorkspace,
     email: u.email,
     bio: u.bio,
     status: (u.status as PreferredStatus) ?? "online",

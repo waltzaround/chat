@@ -3,7 +3,7 @@ import { useParams } from "react-router";
 import { LogOut, Monitor, Moon, Sun, User, Bell, Mic, Server } from "lucide-react";
 import { toast } from "sonner";
 import { SettingsLayout } from "./SettingsLayout";
-import { RegistrationPolicyPicker } from "@/components/onboarding/RegistrationPolicyPicker";
+import { RegistrationPolicyPicker, WorkspaceCreationPicker } from "@/components/onboarding/RegistrationPolicyPicker";
 import { EmailStatus, ServerAccounts } from "./ServerAccounts";
 import { ImagePicker } from "@/components/common/ImagePicker";
 import { Button } from "@/components/ui/button";
@@ -276,7 +276,11 @@ function ServerTab() {
         <p className="text-xs text-muted-foreground">Invite links from any workspace let people sign up, whichever you choose.</p>
       </div>
       <div className="grid gap-2">
-        <p className="text-sm font-medium">Accounts and password resets</p>
+        <p className="text-sm font-medium">Who can create workspaces</p>
+        <WorkspaceCreationPicker />
+      </div>
+      <div className="grid gap-2">
+        <p className="text-sm font-medium">Accounts</p>
         <EmailStatus />
         <ServerAccounts />
       </div>

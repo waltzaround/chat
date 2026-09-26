@@ -6,7 +6,7 @@ import { schema } from "../db";
 import { ApiError } from "../lib/errors";
 import { parseBody } from "../lib/validate";
 import { toCurrentUser, toWorkspaceSummary } from "../lib/serialize";
-import { registrationPolicy, serverOwnerId } from "../instance";
+import { canCreateWorkspace, registrationPolicy, serverOwnerId } from "../instance";
 import { emailEnabled } from "../email";
 import { updateMeSchema } from "@shared/schemas";
 import type { AuthConfig, WorkspaceSummary } from "@shared/types";
@@ -33,7 +33,13 @@ meRoutes.get("/auth-config", async (c) => {
 meRoutes.use("/me", requireUser);
 meRoutes.use("/me/*", requireUser);
 
-meRoutes.get("/me", async (c) => c.json(toCurrentUser(c.get("user"), await serverOwnerId(c.env.DB))));
+/** Server-wide facts about the signed-in account. */
+async function serverContext(db: D1Database, userId: string) {
+  const [ownerId, canCreate] = await Promise.all([serverOwnerId(db), canCreateWorkspace(db, userId)]);
+  return { ownerId, canCreateWorkspace: canCreate };
+}
+
+meRoutes.get("/me", async (c) => c.json(toCurrentUser(c.get("user"), await serverContext(c.env.DB, c.get("user").id))));
 
 meRoutes.patch("/me", async (c) => {
   const db = c.get("db");
@@ -60,7 +66,7 @@ meRoutes.patch("/me", async (c) => {
     })
     .where(eq(schema.users.id, user.id))
     .returning();
-  return c.json(toCurrentUser(updated!, await serverOwnerId(c.env.DB)));
+  return c.json(toCurrentUser(updated!, await serverContext(c.env.DB, updated!.id)));
 });
 
 meRoutes.get("/me/workspaces", async (c) => {

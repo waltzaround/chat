@@ -61,6 +61,7 @@ export function useUpdateServerSettings() {
     onSuccess: (settings) => {
       qc.setQueryData(keys.serverSettings, settings);
       void qc.invalidateQueries({ queryKey: keys.authConfig });
+      void qc.invalidateQueries({ queryKey: keys.me });
     },
   });
 }
@@ -70,6 +71,15 @@ export function useServerUsers(q: string) {
     queryKey: keys.serverUsers(q),
     queryFn: () => apiGet<ServerUser[]>(`/api/server/users?q=${encodeURIComponent(q)}`),
     placeholderData: (previous) => previous,
+  });
+}
+
+export function useSetSuspended() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ userId, suspended }: { userId: string; suspended: boolean }) =>
+      suspended ? apiPost<void>(`/api/server/users/${userId}/suspension`, {}) : apiDelete(`/api/server/users/${userId}/suspension`),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["server-users"] }),
   });
 }
 

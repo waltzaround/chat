@@ -4,7 +4,7 @@ import type { AuthConfig, CurrentUser, PasswordResetLink, ServerSettings, Server
 import { appOrigin, assertMayRegister, authSecret, RegistrationError } from "../worker/instance";
 import { createAuth } from "../worker/auth/auth";
 import { createDb } from "../worker/db";
-import { api, apiRaw, createWorkspace, invite, signUp, signUpRaw } from "./helpers";
+import { api, apiRaw, createWorkspace, invite, joinViaInvite, openSocket, signUp, signUpRaw } from "./helpers";
 
 // Tests in this file run in order against one database: a fresh server, then its owner.
 describe("zero-config deployment", () => {
@@ -110,6 +110,55 @@ describe("password recovery", () => {
     expect(sent[0]!.to).toBe("forgetful@example.com");
     expect(sent[0]!.text).toMatch(/https:\/\/chat\.example\.com\/reset-password\?token=/);
     expect((await api<AuthConfig>(null, "/api/auth-config")).passwordResetEmail).toBe(false);
+  });
+});
+
+describe("owner moderation", () => {
+  it("suspends an account at once and restores it on unsuspend", async () => {
+    const owner = await signIn("owner");
+    const member = await signUp("troublemaker");
+
+    expect((await apiRaw(owner.cookie, `/api/server/users/${owner.user.id}/suspension`, { method: "POST" })).status).toBe(400);
+    expect((await apiRaw(member.cookie, `/api/server/users/${owner.user.id}/suspension`, { method: "POST" })).status).toBe(403);
+    expect((await apiRaw(owner.cookie, `/api/server/users/${member.user.id}/suspension`, { method: "POST" })).status).toBe(204);
+
+    // Even with the cached session cookie, the account is signed out right away.
+    expect((await apiRaw(member.cookie, "/api/me")).status).toBe(401);
+    const refused = await apiRaw(null, "/api/auth/sign-in/email", { method: "POST", json: { email: "troublemaker@example.com", password: "password123" } });
+    expect(refused.status).toBe(403);
+    expect(await refused.text()).toMatch(/suspended/);
+    const listed = await api<ServerUser[]>(owner.cookie, "/api/server/users?q=troublemaker");
+    expect(listed[0]?.suspended).toBe(true);
+
+    expect((await apiRaw(owner.cookie, `/api/server/users/${member.user.id}/suspension`, { method: "DELETE" })).status).toBe(204);
+    expect((await signIn("troublemaker")).user.id).toBe(member.user.id);
+  });
+
+  it("closes a suspended account's open connections", async () => {
+    const owner = await signIn("owner");
+    const member = await signUp();
+    const ws = await createWorkspace(owner, "Live");
+    await joinViaInvite(member, (await invite(owner, ws.id)).code);
+    const socket = await openSocket(member, ws.id);
+    await socket.waitFor((e) => e.type === "ready");
+    const closed = new Promise<{ code: number; reason: string }>((resolve) => socket.ws.addEventListener("close", (ev) => resolve({ code: ev.code, reason: ev.reason })));
+    await api(owner.cookie, `/api/server/users/${member.user.id}/suspension`, { method: "POST" });
+    expect(await closed).toEqual({ code: 4001, reason: "suspended" });
+  });
+
+  it("can limit workspace creation to the owner", async () => {
+    const owner = await signIn("owner");
+    const member = await signUp();
+    await api(owner.cookie, "/api/server", { method: "PATCH", json: { workspaceCreation: "owner" } });
+
+    expect((await api<CurrentUser>(member.cookie, "/api/me")).canCreateWorkspace).toBe(false);
+    expect((await apiRaw(member.cookie, "/api/workspaces", { method: "POST", json: { name: "Mine" } })).status).toBe(403);
+    expect((await api<CurrentUser>(owner.cookie, "/api/me")).canCreateWorkspace).toBe(true);
+    await createWorkspace(owner, "Owner's");
+
+    const settings = await api<ServerSettings>(owner.cookie, "/api/server", { method: "PATCH", json: { workspaceCreation: "everyone" } });
+    expect(settings).toMatchObject({ workspaceCreation: "everyone", registration: "open" });
+    await createWorkspace(member, "Mine");
   });
 });
 

@@ -124,9 +124,12 @@ export const banSchema = z.object({
   deleteRecentMessages: z.boolean().optional(),
 });
 
-export const updateServerSettingsSchema = z.object({
-  registration: z.enum(["open", "invite"]),
-});
+export const updateServerSettingsSchema = z
+  .object({
+    registration: z.enum(["open", "invite"]).optional(),
+    workspaceCreation: z.enum(["everyone", "owner"]).optional(),
+  })
+  .refine((v) => v.registration !== undefined || v.workspaceCreation !== undefined, "Nothing to update");
 
 export const createInviteSchema = z.object({
   /** Seconds until expiry, or null for never. */

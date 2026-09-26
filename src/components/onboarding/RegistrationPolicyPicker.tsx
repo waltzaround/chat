@@ -1,29 +1,32 @@
-import { Globe, Lock } from "lucide-react";
+import { Crown, Globe, Lock, Users } from "lucide-react";
 import { toast } from "sonner";
 import { useServerSettings, useUpdateServerSettings } from "@/lib/queries";
 import { errorMessage } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import type { RegistrationPolicy } from "@shared/types";
+import type { RegistrationPolicy, ServerSettings, WorkspaceCreationPolicy } from "@shared/types";
 
-const OPTIONS: Array<{ value: RegistrationPolicy; title: string; description: string; icon: typeof Lock }> = [
-  { value: "invite", title: "Invite only", description: "People need an invite link to create an account.", icon: Lock },
-  { value: "open", title: "Anyone with the URL", description: "Anyone who finds this server can create an account.", icon: Globe },
-];
+interface Option<V extends string> {
+  value: V;
+  title: string;
+  description: string;
+  icon: typeof Lock;
+}
 
-/** Server owner only: who can create an account on this server. Saves on click. */
-export function RegistrationPolicyPicker() {
+/** Server owner only: radio cards for one server setting. Saves on click. */
+function ServerSettingPicker<K extends "registration" | "workspaceCreation">({ setting, label, options }: { setting: K; label: string; options: Option<ServerSettings[K]>[] }) {
   const settings = useServerSettings();
   const update = useUpdateServerSettings();
-  const current = update.isPending ? update.variables?.registration : settings.data?.registration;
+  const pending = update.isPending ? (update.variables as Partial<ServerSettings> | undefined)?.[setting] : undefined;
+  const current = pending ?? settings.data?.[setting];
 
-  const choose = (registration: RegistrationPolicy) => {
-    if (registration === current) return;
-    update.mutate({ registration }, { onError: (err) => toast.error(errorMessage(err)) });
+  const choose = (value: ServerSettings[K]) => {
+    if (value === current) return;
+    update.mutate({ [setting]: value }, { onError: (err) => toast.error(errorMessage(err)) });
   };
 
   return (
-    <div role="radiogroup" aria-label="Who can create an account" className="grid gap-2 text-left">
-      {OPTIONS.map(({ value, title, description, icon: Icon }) => {
+    <div role="radiogroup" aria-label={label} className="grid gap-2 text-left">
+      {options.map(({ value, title, description, icon: Icon }) => {
         const selected = current === value;
         return (
           <button
@@ -48,4 +51,22 @@ export function RegistrationPolicyPicker() {
       })}
     </div>
   );
+}
+
+const REGISTRATION: Option<RegistrationPolicy>[] = [
+  { value: "invite", title: "Invite only", description: "People need an invite link to create an account.", icon: Lock },
+  { value: "open", title: "Anyone with the URL", description: "Anyone who finds this server can create an account.", icon: Globe },
+];
+
+const WORKSPACE_CREATION: Option<WorkspaceCreationPolicy>[] = [
+  { value: "everyone", title: "Everyone", description: "Anyone with an account can start their own workspace here.", icon: Users },
+  { value: "owner", title: "Only me", description: "Members join your workspaces but cannot create new ones.", icon: Crown },
+];
+
+export function RegistrationPolicyPicker() {
+  return <ServerSettingPicker setting="registration" label="Who can create an account" options={REGISTRATION} />;
+}
+
+export function WorkspaceCreationPicker() {
+  return <ServerSettingPicker setting="workspaceCreation" label="Who can create workspaces" options={WORKSPACE_CREATION} />;
 }

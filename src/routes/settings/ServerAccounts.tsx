@@ -1,22 +1,45 @@
 import { useEffect, useState } from "react";
-import { Check, Copy, KeyRound, Loader2, Mail, Search } from "lucide-react";
+import { Ban, Check, Copy, KeyRound, Loader2, Mail, MoreHorizontal, RotateCcw, Search } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { UserAvatar } from "@/components/common/UserAvatar";
-import { useCreatePasswordResetLink, useServerSettings, useServerUsers } from "@/lib/queries";
+import { useCreatePasswordResetLink, useServerSettings, useServerUsers, useSetSuspended } from "@/lib/queries";
 import { errorMessage } from "@/lib/api";
 import type { PasswordResetLink, ServerUser } from "@shared/types";
 
-/** Server owner: find any account and make a password-reset link for it. */
+/** Server owner: find any account, make a password-reset link, or suspend it. */
 export function ServerAccounts() {
   const [input, setInput] = useState("");
   const [query, setQuery] = useState("");
   const users = useServerUsers(query);
   const createLink = useCreatePasswordResetLink();
   const [issued, setIssued] = useState<{ user: ServerUser; link: PasswordResetLink } | null>(null);
+  const [confirmSuspend, setConfirmSuspend] = useState<ServerUser | null>(null);
+  const setSuspended = useSetSuspended();
+
+  const changeSuspension = (user: ServerUser, suspended: boolean) => {
+    setSuspended.mutate(
+      { userId: user.id, suspended },
+      {
+        onSuccess: () => toast.success(suspended ? `${user.displayName} is suspended` : `${user.displayName} can sign in again`),
+        onError: (err) => toast.error(errorMessage(err)),
+      },
+    );
+  };
 
   useEffect(() => {
     const id = setTimeout(() => setQuery(input.trim()), 250);
@@ -49,15 +72,34 @@ export function ServerAccounts() {
                 <p className="flex items-center gap-1.5 truncate text-sm font-medium">
                   {user.displayName}
                   {user.isServerOwner ? <Badge variant="secondary">Owner</Badge> : null}
+                  {user.suspended ? <Badge variant="destructive">Suspended</Badge> : null}
                 </p>
                 <p className="truncate text-xs text-muted-foreground">
                   @{user.username} · {user.email}
                 </p>
               </div>
               {user.isServerOwner ? null : (
-                <Button type="button" variant="outline" size="sm" onClick={() => resetFor(user)} disabled={createLink.isPending}>
-                  <KeyRound className="size-3.5" aria-hidden /> Reset link
-                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button type="button" variant="ghost" size="icon" className="size-8" aria-label={`Manage ${user.displayName}`}>
+                      <MoreHorizontal className="size-4" aria-hidden />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onSelect={() => resetFor(user)} disabled={createLink.isPending || user.suspended}>
+                      <KeyRound className="size-3.5" aria-hidden /> Password reset link
+                    </DropdownMenuItem>
+                    {user.suspended ? (
+                      <DropdownMenuItem onSelect={() => changeSuspension(user, false)}>
+                        <RotateCcw className="size-3.5" aria-hidden /> Unsuspend
+                      </DropdownMenuItem>
+                    ) : (
+                      <DropdownMenuItem variant="destructive" onSelect={() => setConfirmSuspend(user)}>
+                        <Ban className="size-3.5" aria-hidden /> Suspend account
+                      </DropdownMenuItem>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
               )}
             </li>
           ))
@@ -66,6 +108,28 @@ export function ServerAccounts() {
         )}
       </ul>
       <ResetLinkDialog issued={issued} onClose={() => setIssued(null)} />
+      <AlertDialog open={!!confirmSuspend} onOpenChange={(open) => !open && setConfirmSuspend(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Suspend {confirmSuspend?.displayName}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              @{confirmSuspend?.username} is signed out everywhere and can't sign in to any workspace on this server. Their messages and memberships stay, and you can unsuspend them any time.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={() => {
+                if (confirmSuspend) changeSuspension(confirmSuspend, true);
+                setConfirmSuspend(null);
+              }}
+            >
+              Suspend
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

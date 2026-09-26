@@ -7,6 +7,7 @@ import { ApiError } from "../lib/errors";
 import { parseBody, parseQuery } from "../lib/validate";
 import { audit } from "../lib/audit";
 import { notifyWorkspace } from "../lib/hub";
+import { canCreateWorkspace } from "../instance";
 import { hydrateMessages } from "../lib/messages";
 import { fileUrl, iso, isoRequired, toUserSummary, toWorkspaceSummary } from "../lib/serialize";
 import { track } from "../analytics/track";
@@ -141,6 +142,7 @@ workspaceRoutes.post("/", async (c) => {
   const user = c.get("user");
   checkRateLimit(`ws-create:${user.id}`, 5, 60 * 60 * 1000);
   const input = await parseBody(c, createWorkspaceSchema);
+  if (!(await canCreateWorkspace(c.env.DB, user.id))) throw ApiError.forbidden("Only the server owner can create workspaces on this server");
 
   const owned = await db.select({ count: sql<number>`count(*)` }).from(schema.workspaces).where(eq(schema.workspaces.ownerUserId, user.id));
   if (Number(owned[0]?.count ?? 0) >= 25) throw ApiError.conflict("You have reached the maximum number of workspaces");
