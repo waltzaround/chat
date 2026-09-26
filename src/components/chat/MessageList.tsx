@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
+import { useSearchParams } from "react-router";
 import { ArrowDown, Hash, Loader2, MessageCircle } from "lucide-react";
 import { useMe, useMessageHistory } from "@/lib/queries";
 import { useRealtime } from "@/realtime/RealtimeProvider";
@@ -49,6 +50,10 @@ export function MessageList({
   const [unread] = useState(() => ({ after: channel.lastReadSequence, through: channel.lastSequence }));
   const [unreadDismissed, setUnreadDismissed] = useState(false);
   const [jumping, setJumping] = useState(false);
+  // ?m=<sequence> (search results, pins, copied links): scroll to that message and flash it.
+  const [params, setParams] = useSearchParams();
+  const target = Number(params.get("m")) || null;
+  const [flash, setFlash] = useState<number | null>(null);
   const prependState = useRef<{ total: number; offset: number } | null>(null);
 
   const messages = useMemo(() => {
@@ -194,6 +199,37 @@ export function MessageList({
     }
   };
 
+  // Jump to ?m=: load older pages until the message is in the list, then scroll to it.
+  useEffect(() => {
+    if (!target || !history.data) return;
+    let cancelled = false;
+    void (async () => {
+      let result: { data?: typeof history.data; hasNextPage: boolean } = history;
+      for (let pages = 0; pages < 30 && !result.data?.pages.some((p) => p.messages.some((m) => m.sequence <= target)) && result.hasNextPage; pages++) {
+        result = await history.fetchNextPage();
+      }
+      if (cancelled) return;
+      requestAnimationFrame(() => {
+        const index = rowsRef.current.findIndex((r) => r.kind === "message" && r.message.sequence === target);
+        if (index >= 0) {
+          initialScrolled.current = true;
+          virtualizer.scrollToIndex(index, { align: "center" });
+          setFlash(target);
+          setTimeout(() => setFlash(null), 2000);
+        }
+        setParams((p) => {
+          p.delete("m");
+          return p;
+        }, { replace: true });
+      });
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // Only when a new target arrives or the first page loads.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [target, !!history.data]);
+
   if (history.isPending) {
     return (
       <div className="flex flex-1 items-center justify-center text-muted-foreground" role="status">
@@ -254,6 +290,7 @@ export function MessageList({
                       <span className="h-px flex-1 bg-border" />
                     </div>
                   ) : row.kind === "message" ? (
+                    <div className={cn("transition-colors duration-700", flash === row.message.sequence && "bg-primary/15")}>
                     <MessageItem
                       message={row.message}
                       compact={row.compact}
@@ -264,6 +301,7 @@ export function MessageList({
                       onEdit={onEdit}
                       isEditing={editingId === row.message.id}
                     />
+                    </div>
                   ) : (
                     <PendingMessageItem pending={row.pending} compact={row.compact} me={me.data!} />
                   )}

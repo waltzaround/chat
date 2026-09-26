@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useSearchParams } from "react-router";
 import { Pin } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { UserAvatar } from "@/components/common/UserAvatar";
@@ -11,6 +12,11 @@ import { formatFull } from "@/lib/format";
 export function PinnedMessagesButton({ channelId }: { channelId: string }) {
   const [open, setOpen] = useState(false);
   const pins = usePins(channelId, open);
+  const [, setParams] = useSearchParams();
+  const jump = (sequence: number) => {
+    setOpen(false);
+    setParams({ m: String(sequence) });
+  };
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
@@ -27,7 +33,8 @@ export function PinnedMessagesButton({ channelId }: { channelId: string }) {
             <li className="p-4 text-center text-sm text-muted-foreground">Loading…</li>
           ) : pins.data?.length ? (
             pins.data.map((m) => (
-              <li key={m.id} className="flex gap-2.5 border-b px-3 py-2.5 last:border-0">
+              <li key={m.id} className="border-b last:border-0">
+                <button type="button" onClick={() => jump(m.sequence)} className="flex w-full gap-2.5 px-3 py-2.5 text-left hover:bg-accent">
                 <UserAvatar user={m.author} size="sm" />
                 <div className="min-w-0 flex-1">
                   <p className="text-xs">
@@ -36,6 +43,7 @@ export function PinnedMessagesButton({ channelId }: { channelId: string }) {
                   </p>
                   <div className="message-body line-clamp-4 text-sm">{m.content ? <Markdown content={m.content} /> : <span className="italic text-muted-foreground">Attachment</span>}</div>
                 </div>
+                </button>
               </li>
             ))
           ) : (

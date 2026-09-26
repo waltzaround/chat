@@ -574,6 +574,16 @@ export function useDeleteEmoji(workspaceId: string) {
   });
 }
 
+/** Search every channel you can see, in all your workspaces and DMs. */
+export function useGlobalSearch(q: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ["search-everywhere", q],
+    queryFn: () => apiGet<SearchResponse>(`/api/search?${new URLSearchParams({ q, limit: "25" })}`),
+    enabled: enabled && q.trim().length > 0,
+    staleTime: 30_000,
+  });
+}
+
 export function useSearch(workspaceId: string, q: string, filters: { channelId?: string; authorId?: string }) {
   return useQuery({
     queryKey: keys.search(workspaceId, q, filters.channelId, filters.authorId),

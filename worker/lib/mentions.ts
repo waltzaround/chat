@@ -3,6 +3,7 @@ import { schema, type Db } from "../db";
 import { Permission, buildContext, channelPermissions, hasPermission, toOverwriteLike } from "../permissions/resolve";
 import type { PermissionBits } from "@shared/permissions";
 import { usersBlocking } from "./blocks";
+import { chunked } from "./chunks";
 
 /** Cap on how many people one message can notify. */
 const MAX_RECIPIENTS = 5000;
@@ -53,26 +54,28 @@ export async function mentionRecipients(db: Db, input: MentionInput): Promise<st
   if (input.replyToAuthorId) candidates.add(input.replyToAuthorId);
   if (here) for (const id of input.onlineUserIds()) candidates.add(id);
   if (parsed.usernames.length) {
-    const named = await db.select({ id: schema.users.id }).from(schema.users).where(inArray(schema.users.username, parsed.usernames));
+    const named = await chunked(parsed.usernames, (names) => db.select({ id: schema.users.id }).from(schema.users).where(inArray(schema.users.username, names)));
     for (const u of named) candidates.add(u.id);
   }
   candidates.delete(input.authorUserId);
   if (!everyone && candidates.size === 0) return [];
 
-  const members = await db
-    .select({ member: schema.workspaceMembers })
-    .from(schema.workspaceMembers)
-    .innerJoin(schema.users, eq(schema.users.id, schema.workspaceMembers.userId))
-    .where(
-      and(
-        eq(schema.workspaceMembers.workspaceId, input.workspaceId),
-        eq(schema.workspaceMembers.status, "active"),
-        isNull(schema.users.suspendedAt),
-        isNull(schema.users.deletedAt),
-        everyone ? undefined : inArray(schema.workspaceMembers.userId, [...candidates]),
-      ),
-    )
-    .limit(MAX_RECIPIENTS + 1);
+  const membersOf = (userIds: string[] | null) =>
+    db
+      .select({ member: schema.workspaceMembers })
+      .from(schema.workspaceMembers)
+      .innerJoin(schema.users, eq(schema.users.id, schema.workspaceMembers.userId))
+      .where(
+        and(
+          eq(schema.workspaceMembers.workspaceId, input.workspaceId),
+          eq(schema.workspaceMembers.status, "active"),
+          isNull(schema.users.suspendedAt),
+          isNull(schema.users.deletedAt),
+          userIds ? inArray(schema.workspaceMembers.userId, userIds) : undefined,
+        ),
+      )
+      .limit(MAX_RECIPIENTS + 1);
+  const members = everyone ? await membersOf(null) : await chunked([...candidates], (ids) => membersOf(ids));
 
   const [workspace, roles, memberRoles, overwrites] = await Promise.all([
     db.query.workspaces.findFirst({ where: eq(schema.workspaces.id, input.workspaceId) }),

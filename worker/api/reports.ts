@@ -14,6 +14,7 @@ import { Permission, hasPermission, requireChannelAccess, requireMember, resolve
 import { newId } from "@shared/id";
 import { reportMessageSchema, resolveReportSchema } from "@shared/schemas";
 import type { ReportReason, ReportedMessage } from "@shared/types";
+import { chunked } from "../lib/chunks";
 
 /** POST /api/channels/:channelId/messages/:messageId/report: anyone who can see a message can flag it. */
 export const reportRoutes = new Hono<AppEnv>();
@@ -65,7 +66,9 @@ async function moderatedChannels(db: AppEnv["Variables"]["db"], workspaceId: str
 reportQueueRoutes.get("/:workspaceId/reports", async (c) => {
   const { channels } = await moderatedChannels(c.get("db"), c.req.param("workspaceId"), c.get("user").id);
   const names = new Map(channels.map((ch) => [ch.id, ch.name]));
-  return c.json(await listReports(c.get("db"), inArray(schema.messageReports.channelId, channels.map((ch) => ch.id)), (id) => names.get(id) ?? "unknown"));
+  // Filter by workspace in SQL and by moderated channel here (a channel list could pass D1's parameter limit).
+  const all = await listReports(c.get("db"), eq(schema.messageReports.workspaceId, c.req.param("workspaceId")), (id) => names.get(id) ?? "unknown");
+  return c.json(all.filter((r) => names.has(r.channelId)));
 });
 
 /** Open reports matching `where`, grouped by message. */
@@ -80,8 +83,8 @@ export async function listReports(db: AppEnv["Variables"]["db"], where: SQL, cha
   const userIds = [...new Set(rows.flatMap((r) => [r.authorUserId, r.reporterUserId]))];
   const messageIds = [...new Set(rows.map((r) => r.messageId))];
   const [users, messages] = await Promise.all([
-    userIds.length ? db.select().from(schema.users).where(inArray(schema.users.id, userIds)) : [],
-    messageIds.length ? db.select({ id: schema.messages.id, deletedAt: schema.messages.deletedAt }).from(schema.messages).where(inArray(schema.messages.id, messageIds)) : [],
+    chunked(userIds, (ids) => db.select().from(schema.users).where(inArray(schema.users.id, ids))),
+    chunked(messageIds, (ids) => db.select({ id: schema.messages.id, deletedAt: schema.messages.deletedAt }).from(schema.messages).where(inArray(schema.messages.id, ids))),
   ]);
   const userById = new Map(users.map((u) => [u.id, toUserSummary(u)]));
   const deleted = new Set(messages.filter((m) => m.deletedAt).map((m) => m.id));

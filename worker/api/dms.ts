@@ -12,6 +12,7 @@ import { newId, slugify } from "@shared/id";
 import { Permission } from "@shared/permissions";
 import { openDmSchema } from "@shared/schemas";
 import type { DirectMessage, UserSummary } from "@shared/types";
+import { chunked } from "../lib/chunks";
 
 /**
  * Direct messages. Each conversation is a small workspace (kind "dm") with the two
@@ -37,9 +38,9 @@ dmRoutes.get("/", async (c) => {
   const peerIds = pairs.map((p) => (p.userA === me ? p.userB : p.userA));
   const channelIds = pairs.map((p) => p.channelId);
   const [peers, channels, reads] = await Promise.all([
-    db.select().from(schema.users).where(inArray(schema.users.id, peerIds)),
-    db.select().from(schema.channels).where(inArray(schema.channels.id, channelIds)),
-    db.select().from(schema.channelReadStates).where(and(eq(schema.channelReadStates.userId, me), inArray(schema.channelReadStates.channelId, channelIds))),
+    chunked(peerIds, (ids) => db.select().from(schema.users).where(inArray(schema.users.id, ids))),
+    chunked(channelIds, (ids) => db.select().from(schema.channels).where(inArray(schema.channels.id, ids))),
+    chunked(channelIds, (ids) => db.select().from(schema.channelReadStates).where(and(eq(schema.channelReadStates.userId, me), inArray(schema.channelReadStates.channelId, ids)))),
   ]);
   const peerBy = new Map(peers.map((u) => [u.id, u]));
   const channelBy = new Map(channels.map((ch) => [ch.id, ch]));

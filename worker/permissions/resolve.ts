@@ -2,7 +2,7 @@
  * The single place where membership and permissions are resolved on the server.
  * Every API handler and the WorkspaceHub go through these helpers.
  */
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import {
   ALL_PERMISSIONS,
   Permission,
@@ -178,13 +178,17 @@ export async function resolveAllChannelPermissions(
   ctx: MemberContext,
 ): Promise<Map<string, { channel: ChannelRow; permissions: PermissionBits }>> {
   const mask = await dmBlockMask(db, ctx);
-  const channels = await db.query.channels.findMany({ where: eq(schema.channels.workspaceId, ctx.workspaceId) });
-  const ids = channels.map((c) => c.id);
-  const overwrites = ids.length
-    ? await db.query.channelPermissionOverwrites.findMany({
-        where: inArray(schema.channelPermissionOverwrites.channelId, ids),
-      })
-    : [];
+  // Joined on the workspace rather than listing channel ids: a list of ids would hit
+  // D1's 100-parameter limit in workspaces with many channels.
+  const [channels, overwrites] = await Promise.all([
+    db.query.channels.findMany({ where: eq(schema.channels.workspaceId, ctx.workspaceId) }),
+    db
+      .select({ override: schema.channelPermissionOverwrites })
+      .from(schema.channelPermissionOverwrites)
+      .innerJoin(schema.channels, eq(schema.channels.id, schema.channelPermissionOverwrites.channelId))
+      .where(eq(schema.channels.workspaceId, ctx.workspaceId))
+      .then((rows) => rows.map((r) => r.override)),
+  ]);
   const byChannel = new Map<string, OverwriteLike[]>();
   for (const o of overwrites) {
     const list = byChannel.get(o.channelId) ?? [];

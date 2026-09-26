@@ -15,6 +15,7 @@ import { emojiRoutes } from "./api/emojis";
 import { serverRoutes } from "./api/server";
 import { reportQueueRoutes, reportRoutes } from "./api/reports";
 import { dmGuard, dmRoutes } from "./api/dms";
+import { searchRoutes } from "./api/search";
 import { loadMemberContext } from "./permissions/resolve";
 import { hubFor } from "./lib/hub";
 import { handleQueue } from "./queues/consumer";
@@ -93,6 +94,7 @@ app.use("/api/workspaces/:workspaceId/*", dmGuard);
 
 app.route("/api", meRoutes);
 app.route("/api/dms", dmRoutes);
+app.route("/api/search", searchRoutes);
 app.route("/api/workspaces", workspaceRoutes);
 app.route("/api/workspaces", emojiRoutes);
 app.route("/api/channels", channelRoutes);

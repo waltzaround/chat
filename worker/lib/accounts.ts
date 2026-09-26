@@ -67,13 +67,13 @@ export async function deleteUserMessagesBatch(env: Env, db: Db, userId: string):
     .select({ id: schema.messages.id })
     .from(schema.messages)
     .where(and(eq(schema.messages.authorUserId, userId), isNull(schema.messages.deletedAt)))
-    .limit(100);
+    .limit(50);
   if (batch.length === 0) return;
   const ids = batch.map((m) => m.id);
   const attachments = await db.select({ key: schema.messageAttachments.r2Key }).from(schema.messageAttachments).where(inArray(schema.messageAttachments.messageId, ids));
   await db.update(schema.messages).set({ deletedAt: new Date(), content: "" }).where(inArray(schema.messages.id, ids));
   if (attachments.length) await env.UPLOADS.delete(attachments.map((a) => a.key));
-  if (batch.length === 100) await env.BACKGROUND_QUEUE.send({ type: "user.messages.delete", userId });
+  if (batch.length === 50) await env.BACKGROUND_QUEUE.send({ type: "user.messages.delete", userId });
 }
 
 async function deletePrefix(env: Env, prefix: string): Promise<void> {
@@ -102,7 +102,7 @@ function authoredPage(db: Db, userId: string, cursor: Cursor | null) {
       ),
     )
     .orderBy(asc(schema.messages.createdAt), asc(schema.messages.id))
-    .limit(500);
+    .limit(90); // attachment lookups below take one parameter per message
 }
 
 /**

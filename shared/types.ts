@@ -223,6 +223,8 @@ export interface SearchResult {
   message: Message;
   channelName: string;
   snippet: string;
+  /** Present in search across all workspaces: where the message is. */
+  workspace?: { id: string; name: string; kind: "community" | "dm"; dmPeerName: string | null };
 }
 
 export interface SearchResponse {

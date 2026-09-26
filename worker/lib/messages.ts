@@ -7,6 +7,7 @@ import { and, asc, desc, eq, gt, inArray, isNull, lt, sql } from "drizzle-orm";
 import type { Attachment, Message, MessageAuthor, ReactionSummary, ReplyContext, UserSummary } from "@shared/types";
 import { schema, type Db } from "../db";
 import { fileUrl, iso, isoRequired, toUserSummary } from "./serialize";
+import { chunked } from "./chunks";
 
 type MessageRow = typeof schema.messages.$inferSelect;
 type AttachmentRow = typeof schema.messageAttachments.$inferSelect;
@@ -60,16 +61,16 @@ export async function hydrateMessages(db: Db, rows: MessageRow[], viewerUserId: 
   const ids = rows.map((r) => r.id);
   const replyIds = [...new Set(rows.map((r) => r.replyToMessageId).filter((x): x is string => !!x))];
 
-  const replyRows = replyIds.length ? await db.select().from(schema.messages).where(inArray(schema.messages.id, replyIds)) : [];
+  const replyRows = await chunked(replyIds, (ids) => db.select().from(schema.messages).where(inArray(schema.messages.id, ids)));
   const authorIds = [...new Set([...rows.map((r) => r.authorUserId), ...replyRows.map((r) => r.authorUserId)])];
 
   const [authors, members, memberRoleRows, roles, attachments, reactions] = await Promise.all([
-    db.select().from(schema.users).where(inArray(schema.users.id, authorIds)),
-    db.select().from(schema.workspaceMembers).where(and(eq(schema.workspaceMembers.workspaceId, workspaceId), inArray(schema.workspaceMembers.userId, authorIds))),
-    db.select().from(schema.memberRoles).where(and(eq(schema.memberRoles.workspaceId, workspaceId), inArray(schema.memberRoles.userId, authorIds))),
+    chunked(authorIds, (chunk) => db.select().from(schema.users).where(inArray(schema.users.id, chunk))),
+    chunked(authorIds, (chunk) => db.select().from(schema.workspaceMembers).where(and(eq(schema.workspaceMembers.workspaceId, workspaceId), inArray(schema.workspaceMembers.userId, chunk)))),
+    chunked(authorIds, (chunk) => db.select().from(schema.memberRoles).where(and(eq(schema.memberRoles.workspaceId, workspaceId), inArray(schema.memberRoles.userId, chunk)))),
     db.select().from(schema.roles).where(eq(schema.roles.workspaceId, workspaceId)),
-    db.select().from(schema.messageAttachments).where(inArray(schema.messageAttachments.messageId, ids)),
-    db.select().from(schema.messageReactions).where(inArray(schema.messageReactions.messageId, ids)),
+    chunked(ids, (chunk) => db.select().from(schema.messageAttachments).where(inArray(schema.messageAttachments.messageId, chunk))),
+    chunked(ids, (chunk) => db.select().from(schema.messageReactions).where(inArray(schema.messageReactions.messageId, chunk))),
   ]);
 
   const roleById = new Map(roles.map((r) => [r.id, r]));

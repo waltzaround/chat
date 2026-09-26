@@ -46,6 +46,7 @@ import {
   updateWorkspaceSchema,
 } from "@shared/schemas";
 import type { AuditEntry, Ban, Channel, Invite, Member, Role, SearchResponse, WorkspaceDetail } from "@shared/types";
+import { chunked } from "../lib/chunks";
 
 export const workspaceRoutes = new Hono<AppEnv>();
 workspaceRoutes.use("*", requireUser);
@@ -451,7 +452,7 @@ workspaceRoutes.get("/:workspaceId/bans", async (c) => {
   requirePermission(ctx.basePermissions, Permission.BAN_MEMBERS, "Ban members");
   const rows = await db.query.bans.findMany({ where: eq(schema.bans.workspaceId, ctx.workspaceId), orderBy: desc(schema.bans.createdAt) });
   const userIds = [...new Set(rows.flatMap((b) => [b.userId, b.bannedBy]))];
-  const users = userIds.length ? await db.select().from(schema.users).where(inArray(schema.users.id, userIds)) : [];
+  const users = await chunked(userIds, (ids) => db.select().from(schema.users).where(inArray(schema.users.id, ids)));
   const byId = new Map(users.map((u) => [u.id, u]));
   const body: Ban[] = rows.map((b) => ({
     userId: b.userId,
@@ -592,7 +593,7 @@ workspaceRoutes.get("/:workspaceId/invites", async (c) => {
     orderBy: desc(schema.invites.createdAt),
   });
   const creatorIds = [...new Set(rows.map((r) => r.createdBy))];
-  const creators = creatorIds.length ? await db.select().from(schema.users).where(inArray(schema.users.id, creatorIds)) : [];
+  const creators = await chunked(creatorIds, (ids) => db.select().from(schema.users).where(inArray(schema.users.id, ids)));
   const byId = new Map(creators.map((u) => [u.id, u]));
   return c.json(rows.map((r) => toInvite(r, byId.get(r.createdBy), c.get("origin"))));
 });
@@ -640,7 +641,7 @@ workspaceRoutes.get("/:workspaceId/audit-log", async (c) => {
   requirePermission(ctx.basePermissions, Permission.MANAGE_WORKSPACE, "Manage workspace");
   const rows = await db.query.auditLog.findMany({ where: eq(schema.auditLog.workspaceId, ctx.workspaceId), orderBy: desc(schema.auditLog.createdAt), limit: 100 });
   const actorIds = [...new Set(rows.map((r) => r.actorUserId))];
-  const actors = actorIds.length ? await db.select().from(schema.users).where(inArray(schema.users.id, actorIds)) : [];
+  const actors = await chunked(actorIds, (ids) => db.select().from(schema.users).where(inArray(schema.users.id, ids)));
   const byId = new Map(actors.map((u) => [u.id, u]));
   const body: AuditEntry[] = rows.map((r) => ({
     id: r.id,

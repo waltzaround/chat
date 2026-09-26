@@ -30,6 +30,32 @@ describe("data export", () => {
   });
 });
 
+describe("large exports", () => {
+  it("exports more messages than D1 allows query parameters", async () => {
+    const me = await signUp("chatty");
+    const ws = await createWorkspace(me, "Chatty");
+    // Straight into D1: the send rate limit would otherwise stop at 30.
+    const channelId = textChannel(ws).id;
+    const now = Date.now();
+    await env.DB.batch(
+      Array.from({ length: 120 }, (_, i) =>
+        env.DB.prepare("INSERT INTO messages (id, workspace_id, channel_id, channel_sequence, author_user_id, content, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)").bind(
+          crypto.randomUUID(),
+          ws.id,
+          channelId,
+          i + 1,
+          me.user.id,
+          `message ${i}`,
+          now + i,
+        ),
+      ),
+    );
+    const data = (await (await apiRaw(me.cookie, "/api/me/export")).json()) as { messages: Array<{ content: string }> };
+    expect(data.messages).toHaveLength(120);
+    expect(data.messages.at(-1)?.content).toBe("message 119");
+  });
+});
+
 describe("account deletion", () => {
   it("asks for confirmation, needs owned workspaces handed over, then anonymises the account", async () => {
     const leaver = await signUp("leaver");
