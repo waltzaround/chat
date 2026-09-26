@@ -20,6 +20,13 @@ export default defineConfig(async () => {
             TEST_MIGRATIONS: migrations,
             BETTER_AUTH_SECRET: "test-secret-test-secret-test-secret-1234",
             APP_URL: "http://localhost",
+            // Keep a developer's real .dev.vars credentials out of the tests.
+            TURNSTILE_SECRET_KEY: "",
+            CLOUDFLARE_ACCOUNT_ID: "",
+            REALTIMEKIT_APP_ID: "",
+            CLOUDFLARE_REALTIME_API_TOKEN: "",
+            R2_ACCESS_KEY_ID: "",
+            R2_SECRET_ACCESS_KEY: "",
           },
         },
       }),
