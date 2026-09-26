@@ -10,6 +10,7 @@ import { notifyWorkspace } from "../lib/hub";
 import { canCreateWorkspace } from "../instance";
 import { hydrateMessages } from "../lib/messages";
 import { unreadMentionCounts } from "../lib/mentions";
+import { filterTerms } from "@shared/moderation";
 import { fileUrl, iso, isoRequired, toUserSummary, toWorkspaceSummary } from "../lib/serialize";
 import { track } from "../analytics/track";
 import { checkRateLimit } from "../security/ratelimit";
@@ -89,6 +90,7 @@ async function buildWorkspaceDetail(db: AppEnv["Variables"]["db"], ctx: MemberCo
       permissions,
       lastReadSequence: readBy.get(channel.id) ?? 0,
       mentionCount: mentions.get(channel.id) ?? 0,
+      slowmodeSeconds: channel.slowmodeSeconds,
     }));
   const visibleMentions = channels.reduce((sum, ch) => sum + ch.mentionCount, 0);
   let dmPeer = null;
@@ -108,6 +110,7 @@ async function buildWorkspaceDetail(db: AppEnv["Variables"]["db"], ctx: MemberCo
     myNickname: ctx.member.nickname,
     createdAt: isoRequired(ctx.workspace.createdAt),
     dmPeer,
+    wordFilter: hasPermission(ctx.basePermissions, Permission.MANAGE_WORKSPACE) ? ctx.workspace.wordFilter : "",
   };
 }
 
@@ -210,9 +213,16 @@ workspaceRoutes.patch("/:workspaceId", async (c) => {
   if (input.iconKey && !(await c.env.UPLOADS.head(input.iconKey))) throw ApiError.validation(undefined, "Upload not found — did the transfer finish?");
   await db
     .update(schema.workspaces)
-    .set({ name: input.name ?? ctx.workspace.name, iconKey: input.iconKey === undefined ? ctx.workspace.iconKey : input.iconKey, updatedAt: new Date() })
+    .set({
+      name: input.name ?? ctx.workspace.name,
+      iconKey: input.iconKey === undefined ? ctx.workspace.iconKey : input.iconKey,
+      wordFilter: input.wordFilter === undefined ? ctx.workspace.wordFilter : filterTerms(input.wordFilter).join("\n"),
+      updatedAt: new Date(),
+    })
     .where(eq(schema.workspaces.id, ctx.workspaceId));
-  await audit(db, { workspaceId: ctx.workspaceId, actorUserId: ctx.userId, action: "workspace.updated", details: input });
+  // The filtered words themselves stay out of the audit log.
+  const { wordFilter, ...logged } = input;
+  await audit(db, { workspaceId: ctx.workspaceId, actorUserId: ctx.userId, action: "workspace.updated", details: wordFilter === undefined ? logged : { ...logged, wordFilter: "updated" } });
   await notifyWorkspace(c.env, ctx.workspaceId, { type: "workspace.updated", reason: "workspace" });
   const fresh = await requireMember(db, ctx.workspaceId, ctx.userId);
   return c.json(await buildWorkspaceDetail(db, fresh));

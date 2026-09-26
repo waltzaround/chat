@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { SLOWMODE_OPTIONS } from "./moderation";
 
 export const MESSAGE_MAX_LENGTH = 2000;
 export const MAX_ATTACHMENTS_PER_MESSAGE = 10;
@@ -58,6 +59,8 @@ export const createWorkspaceSchema = z.object({
 export const updateWorkspaceSchema = z.object({
   name: z.string().trim().min(1).max(64).optional(),
   iconKey: z.string().max(200).nullable().optional(),
+  /** One word or phrase per line. */
+  wordFilter: z.string().max(5000).optional(),
 });
 
 export const createCategorySchema = z.object({
@@ -81,6 +84,7 @@ export const updateChannelSchema = z.object({
   topic: z.string().trim().max(256).nullable().optional(),
   categoryId: idSchema.nullable().optional(),
   position: z.number().int().min(0).optional(),
+  slowmodeSeconds: z.number().int().refine((n) => (SLOWMODE_OPTIONS as readonly number[]).includes(n), "Pick one of the slow mode options").optional(),
 });
 
 export const reorderSchema = z.object({

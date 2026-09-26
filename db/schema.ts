@@ -94,6 +94,8 @@ export const workspaces = sqliteTable(
     ownerUserId: text("owner_user_id").notNull().references(() => users.id),
     /** community, or dm: a direct message conversation (see dmPairs). */
     kind: text("kind").notNull().default("community"),
+    /** Words and phrases members can't send, one per line. */
+    wordFilter: text("word_filter").notNull().default(""),
     createdAt: timestamp("created_at").notNull(),
     updatedAt: timestamp("updated_at").notNull(),
   },
@@ -162,6 +164,8 @@ export const channels = sqliteTable(
     kind: text("kind").notNull(),
     position: integer("position").notNull().default(0),
     createdBy: text("created_by").references(() => users.id),
+    /** Seconds each member waits between messages (0 = off). Moderators are exempt. */
+    slowmodeSeconds: integer("slowmode_seconds").notNull().default(0),
     createdAt: timestamp("created_at").notNull(),
     /** Highest allocated channel_sequence; the WorkspaceHub reconciles against this. */
     lastSequence: integer("last_sequence").notNull().default(0),

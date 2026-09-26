@@ -322,7 +322,7 @@ export function useCreateWorkspace() {
 export function useUpdateWorkspace(workspaceId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: { name?: string; iconKey?: string | null }) => apiPatch<WorkspaceDetail>(`/api/workspaces/${workspaceId}`, input),
+    mutationFn: (input: { name?: string; iconKey?: string | null; wordFilter?: string }) => apiPatch<WorkspaceDetail>(`/api/workspaces/${workspaceId}`, input),
     onSuccess: (ws) => {
       qc.setQueryData(keys.workspace(ws.id), ws);
       void qc.invalidateQueries({ queryKey: keys.workspaces });
@@ -378,7 +378,8 @@ export function useCreateCategory(workspaceId: string) {
 export function useUpdateChannel(workspaceId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ channelId, ...input }: { channelId: string; name?: string; topic?: string | null; categoryId?: string | null; position?: number }) => apiPatch(`/api/channels/${channelId}`, input),
+    mutationFn: ({ channelId, ...input }: { channelId: string; name?: string; topic?: string | null; categoryId?: string | null; position?: number; slowmodeSeconds?: number }) =>
+      apiPatch(`/api/channels/${channelId}`, input),
     onSuccess: () => void qc.invalidateQueries({ queryKey: keys.workspace(workspaceId) }),
   });
 }

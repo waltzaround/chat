@@ -7,6 +7,7 @@ import { MessageComposer, type ComposerReply } from "./MessageComposer";
 import { TypingIndicator } from "./TypingIndicator";
 import { DmHeaderMenu } from "@/components/dms/DmHeaderMenu";
 import { PinnedMessagesButton } from "./PinnedMessages";
+import { formatSlowmode } from "@shared/moderation";
 import { useBlockedIds } from "@/lib/queries";
 import type { Channel, Message, WorkspaceDetail } from "@shared/types";
 
@@ -63,6 +64,9 @@ export function TextChannelView({ channel, workspace, embedded }: { channel: Cha
               : undefined
           }
         />
+        {channel.slowmodeSeconds > 0 && !hasPermission(channel.permissions, Permission.MANAGE_MESSAGES) && !hasPermission(channel.permissions, Permission.MANAGE_CHANNELS) ? (
+          <p className="mt-1 text-[11px] text-muted-foreground">Slow mode is on: one message every {formatSlowmode(channel.slowmodeSeconds)}.</p>
+        ) : null}
         <TypingIndicator channelId={channel.id} workspaceId={workspace.id} />
       </div>
     </div>

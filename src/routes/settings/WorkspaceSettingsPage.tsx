@@ -5,6 +5,7 @@ import {
   ChevronRight, Edit2, Plus, Folder, Smile, Flag,
 } from "lucide-react";
 import { toast } from "sonner";
+import { Textarea } from "@/components/ui/textarea";
 import { useQueryClient } from "@tanstack/react-query";
 import { SettingsLayout } from "./SettingsLayout";
 import { RoleEditor } from "./RoleEditor";
@@ -218,6 +219,9 @@ function OverviewTab({ ws, meId }: { ws: WorkspaceDetail; meId: string }) {
           </Button>
         </div>
       </form>
+
+      <Separator />
+      <WordFilterSettings ws={ws} />
 
       {isOwner && (
         <>
@@ -641,6 +645,38 @@ function AuditTab({ ws }: { ws: WorkspaceDetail }) {
     <div className="grid gap-4">
       <h2 className="text-base font-semibold">Audit Log</h2>
       <AuditLogPanel workspaceId={ws.id} />
+    </div>
+  );
+}
+
+/** Words and phrases members can't send. Moderators are exempt. */
+function WordFilterSettings({ ws }: { ws: WorkspaceDetail }) {
+  const update = useUpdateWorkspace(ws.id);
+  const [value, setValue] = useState(ws.wordFilter);
+  const dirty = value.trim() !== ws.wordFilter.trim();
+  const save = () =>
+    update.mutate(
+      { wordFilter: value },
+      {
+        onSuccess: (fresh) => {
+          setValue(fresh.wordFilter);
+          toast.success("Word filter saved");
+        },
+        onError: (err) => toast.error(errorMessage(err)),
+      },
+    );
+  return (
+    <div className="grid gap-2">
+      <h3 className="text-sm font-semibold">Word filter</h3>
+      <p className="text-xs text-muted-foreground">
+        Messages containing these words or phrases are refused. One per line; whole words only, so "ass" doesn't catch "class". Members with Manage Messages or Manage Channels aren't filtered.
+      </p>
+      <Textarea value={value} onChange={(e) => setValue(e.target.value)} rows={4} maxLength={5000} placeholder={"spoiler\nbuy followers"} className="font-mono text-sm" aria-label="Filtered words" />
+      <div>
+        <Button type="button" onClick={save} disabled={!dirty || update.isPending}>
+          {update.isPending ? "Saving…" : "Save word filter"}
+        </Button>
+      </div>
     </div>
   );
 }

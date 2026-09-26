@@ -10,6 +10,7 @@ import { audit } from "../lib/audit";
 import { hubFor, notifyWorkspace } from "../lib/hub";
 import { hydrateMessages, loadMessage, loadMessagePage, reactionSummary, softDeleteMessage } from "../lib/messages";
 import { recordMentions } from "../lib/mentions";
+import { findFilteredTerm } from "@shared/moderation";
 import { checkRateLimit } from "../security/ratelimit";
 import { Permission, hasPermission, requireChannelAccess } from "../permissions/resolve";
 import { createMessageSchema, editMessageSchema, messagesQuerySchema, overwriteSchema, readSchema, updateChannelSchema, emojiSchema } from "@shared/schemas";
@@ -22,7 +23,7 @@ channelRoutes.use("*", requireUser);
 
 channelRoutes.get("/:channelId", async (c) => {
   const { channel, permissions } = await requireChannelAccess(c.get("db"), c.req.param("channelId"), c.get("user").id);
-  return c.json({ id: channel.id, workspaceId: channel.workspaceId, categoryId: channel.categoryId, name: channel.name, topic: channel.topic, kind: channel.kind, position: channel.position, lastSequence: channel.lastSequence, permissions, lastReadSequence: 0, mentionCount: 0 });
+  return c.json({ id: channel.id, workspaceId: channel.workspaceId, categoryId: channel.categoryId, name: channel.name, topic: channel.topic, kind: channel.kind, position: channel.position, lastSequence: channel.lastSequence, permissions, lastReadSequence: 0, mentionCount: 0, slowmodeSeconds: channel.slowmodeSeconds });
 });
 
 channelRoutes.patch("/:channelId", async (c) => {
@@ -40,6 +41,7 @@ channelRoutes.patch("/:channelId", async (c) => {
       topic: input.topic === undefined ? channel.topic : input.topic,
       categoryId: input.categoryId === undefined ? channel.categoryId : input.categoryId,
       position: input.position ?? channel.position,
+      slowmodeSeconds: input.slowmodeSeconds ?? channel.slowmodeSeconds,
     })
     .where(eq(schema.channels.id, channel.id));
   await audit(db, { workspaceId: channel.workspaceId, actorUserId: ctx.userId, action: "channel.updated", targetType: "channel", targetId: channel.id, details: input });
@@ -144,8 +146,12 @@ channelRoutes.post("/:channelId/messages", async (c) => {
 channelRoutes.patch("/:channelId/messages/:messageId", async (c) => {
   const db = c.get("db");
   const user = c.get("user");
-  const { channel, permissions } = await requireChannelAccess(db, c.req.param("channelId"), user.id);
+  const { channel, permissions, ctx } = await requireChannelAccess(db, c.req.param("channelId"), user.id);
   const input = await parseBody(c, editMessageSchema);
+  const exempt = hasPermission(permissions, Permission.MANAGE_MESSAGES) || hasPermission(permissions, Permission.MANAGE_CHANNELS);
+  if (!exempt && findFilteredTerm(input.content, ctx.workspace.wordFilter)) {
+    throw ApiError.validation(undefined, "Your message contains a word or phrase this workspace doesn't allow.");
+  }
   const row = await db.query.messages.findFirst({ where: and(eq(schema.messages.id, c.req.param("messageId")), eq(schema.messages.channelId, channel.id)) });
   if (!row || row.deletedAt) throw ApiError.notFound("Message");
   if (row.authorUserId !== user.id) throw ApiError.forbidden("You can only edit your own messages");

@@ -74,6 +74,8 @@ export interface Channel {
   lastReadSequence: number;
   /** Unread messages here that mention you. */
   mentionCount: number;
+  /** Seconds between messages per member; 0 is off. */
+  slowmodeSeconds: number;
 }
 
 export interface Role {
@@ -96,6 +98,8 @@ export interface WorkspaceDetail extends WorkspaceSummary {
   createdAt: string;
   /** In a direct message conversation, the other person. */
   dmPeer: UserSummary | null;
+  /** Filtered words, one per line. Only sent to members who can manage the workspace. */
+  wordFilter: string;
 }
 
 export interface Member extends UserSummary {

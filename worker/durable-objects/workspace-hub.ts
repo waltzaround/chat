@@ -10,7 +10,8 @@
  * restored after hibernation lives in its serialized attachment.
  */
 import { DurableObject } from "cloudflare:workers";
-import { and, eq, isNull, max, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, max, sql } from "drizzle-orm";
+import { findFilteredTerm } from "@shared/moderation";
 import type { ClientEvent, PresenceEntry, ServerEvent, VoiceParticipantState } from "@shared/events";
 import { parseClientEvent, WS_CLOSE } from "@shared/events";
 import { Permission, hasPermission } from "@shared/permissions";
@@ -221,6 +222,8 @@ export class WorkspaceHub extends DurableObject<Env> {
         if (row.authorUserId !== att.userId) return this.send(ws, { type: "error", code: "forbidden", message: "You can only edit your own messages" });
         const access = await this.access(att.userId, row.channelId);
         if (!access) return this.send(ws, { type: "error", code: "not_found", message: "Channel not found" });
+        const blocked = await this.checkModeration(access, att.userId, event.content, false);
+        if (blocked) return this.send(ws, { type: "error", code: blocked.code, message: blocked.message });
         await this.db.update(schema.messages).set({ content: event.content, editedAt: new Date() }).where(eq(schema.messages.id, row.id));
         await recordMentions(this.db, { ...row, content: event.content }, access.permissions, () => this.onlineUserIds());
         const message = await loadMessage(this.db, row.id, att.userId);
@@ -365,6 +368,10 @@ export class WorkspaceHub extends DurableObject<Env> {
       const message = await loadMessage(this.db, existing.id, input.userId);
       if (message) return { ok: true, message, duplicate: true };
     }
+
+    // Moderation rules. Checked after the idempotency lookup so a retry is never blocked.
+    const moderationError = await this.checkModeration(access, input.userId, content, true);
+    if (moderationError) return moderationError;
 
     if (input.replyTo) {
       const target = await this.db.query.messages.findFirst({ where: and(eq(schema.messages.id, input.replyTo), eq(schema.messages.channelId, input.channelId)) });
@@ -592,6 +599,28 @@ export class WorkspaceHub extends DurableObject<Env> {
     }
     this.accessCache.set(key, { access, expiresAt: Date.now() + ACCESS_CACHE_MS });
     return access;
+  }
+
+  /**
+   * The workspace's word filter, and (for new messages) the channel's slow mode.
+   * Moderators are exempt from both.
+   */
+  private async checkModeration(access: ChannelAccess, userId: string, content: string, isNew: boolean): Promise<{ ok: false; status: number; code: ApiErrorCode; message: string } | null> {
+    if (hasPermission(access.permissions, Permission.MANAGE_MESSAGES) || hasPermission(access.permissions, Permission.MANAGE_CHANNELS)) return null;
+    if (findFilteredTerm(content, access.ctx.workspace.wordFilter)) {
+      return { ok: false, status: 400, code: "validation_failed", message: "Your message contains a word or phrase this workspace doesn't allow." };
+    }
+    const wait = access.channel.slowmodeSeconds;
+    if (!isNew || wait <= 0) return null;
+    const [last] = await this.db
+      .select({ createdAt: schema.messages.createdAt })
+      .from(schema.messages)
+      .where(and(eq(schema.messages.channelId, access.channel.id), eq(schema.messages.authorUserId, userId)))
+      .orderBy(desc(schema.messages.createdAt))
+      .limit(1);
+    const remaining = last ? Math.ceil((last.createdAt.getTime() + wait * 1000 - Date.now()) / 1000) : 0;
+    if (remaining <= 0) return null;
+    return { ok: false, status: 429, code: "rate_limited", message: `Slow mode is on. You can send another message in ${remaining < 60 ? `${remaining}s` : `${Math.ceil(remaining / 60)}m`}.` };
   }
 
   /** Members connected to this workspace right now, for @here. */
