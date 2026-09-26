@@ -5,7 +5,7 @@ import { useMe, useMessageHistory } from "@/lib/queries";
 import { useRealtime } from "@/realtime/RealtimeProvider";
 import { usePendingMessages, useSyncVersion } from "@/realtime/hooks";
 import type { PendingMessage } from "@/realtime/RealtimeProvider";
-import { formatDayDivider, isSameDay } from "@/lib/format";
+import { formatDayDivider, formatTime, isSameDay } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { MessageItem, PendingMessageItem } from "./MessageItem";
 import { EmptyState } from "@/components/common/EmptyState";
@@ -16,7 +16,8 @@ type Row =
   | { kind: "divider"; key: string; label: string }
   | { kind: "message"; key: string; message: Message; compact: boolean }
   | { kind: "pending"; key: string; pending: PendingMessage; compact: boolean }
-  | { kind: "top"; key: string };
+  | { kind: "top"; key: string }
+  | { kind: "unread"; key: string };
 
 const GROUP_WINDOW_MS = 5 * 60 * 1000;
 const BOTTOM_THRESHOLD = 48;
@@ -43,6 +44,11 @@ export function MessageList({
   const [atBottom, setAtBottom] = useState(true);
   const [unseen, setUnseen] = useState(0);
   const initialScrolled = useRef(false);
+  // What was unread when you opened the channel. The "New" line marks where that
+  // starts; messages arriving while you watch don't move it.
+  const [unread] = useState(() => ({ after: channel.lastReadSequence, through: channel.lastSequence }));
+  const [unreadDismissed, setUnreadDismissed] = useState(false);
+  const [jumping, setJumping] = useState(false);
   const prependState = useRef<{ total: number; offset: number } | null>(null);
 
   const messages = useMemo(() => {
@@ -57,8 +63,13 @@ export function MessageList({
     const rows: Row[] = [];
     if (history.hasNextPage) rows.push({ kind: "top", key: "top" });
     let prev: Message | null = null;
+    let unreadPlaced = false;
     for (const m of messages) {
       if (!prev || !isSameDay(prev.createdAt, m.createdAt)) rows.push({ kind: "divider", key: `d-${m.id}`, label: formatDayDivider(m.createdAt) });
+      if (!unreadPlaced && m.sequence > unread.after && m.sequence <= unread.through && m.author.id !== me.data?.id) {
+        rows.push({ kind: "unread", key: "unread" });
+        unreadPlaced = true;
+      }
       const compact = !!prev && isSameDay(prev.createdAt, m.createdAt) && prev.author.id === m.author.id && !m.replyTo && new Date(m.createdAt).getTime() - new Date(prev.createdAt).getTime() < GROUP_WINDOW_MS;
       rows.push({ kind: "message", key: m.id, message: m, compact });
       prev = m;
@@ -68,12 +79,15 @@ export function MessageList({
       rows.push({ kind: "pending", key: p.clientMessageId, pending: p, compact });
     }
     return rows;
-  }, [messages, pending, history.hasNextPage, me.data?.id]);
+  }, [messages, pending, history.hasNextPage, me.data?.id, unread]);
+
+  const rowsRef = useRef(rows);
+  rowsRef.current = rows;
 
   const virtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: (i) => (rows[i]?.kind === "divider" ? 36 : rows[i]?.kind === "top" ? 40 : rows[i]?.kind === "message" && !rows[i].compact ? 64 : 28),
+    estimateSize: (i) => (rows[i]?.kind === "divider" ? 36 : rows[i]?.kind === "top" ? 40 : rows[i]?.kind === "unread" ? 20 : rows[i]?.kind === "message" && !rows[i].compact ? 64 : 28),
     getItemKey: (i) => rows[i]?.key ?? i,
     overscan: 12,
   });
@@ -151,6 +165,35 @@ export function MessageList({
     return () => document.removeEventListener("visibilitychange", onVis);
   }, [atBottom, newest, channel.id, rt]);
 
+  // "N new messages" bar: shown while the New line is above the view (or not loaded yet).
+  const unreadIndex = rows.findIndex((r) => r.kind === "unread");
+  const firstUnread = messages.find((m) => m.sequence > unread.after && m.author.id !== me.data?.id);
+  const hadUnread = unread.through > unread.after;
+  const unreadCount = firstUnread ? messages.filter((m) => m.sequence > unread.after && m.sequence <= unread.through && m.author.id !== me.data?.id).length : unread.through - unread.after;
+  const firstVisible = virtualizer.getVirtualItems().find((vi) => vi.end > (virtualizer.scrollOffset ?? 0));
+  const lineAbove = unreadIndex === -1 || (firstVisible !== undefined && firstVisible.index > unreadIndex);
+  const showUnreadBar = hadUnread && !unreadDismissed && lineAbove && initialScrolled.current;
+
+  const jumpToUnread = async () => {
+    setJumping(true);
+    try {
+      // Load older pages until the first unread message is in the list.
+      let result = history;
+      let pages = 0;
+      while (!result.data?.pages.some((p) => p.messages.some((m) => m.sequence <= unread.after + 1)) && result.hasNextPage && pages < 20) {
+        result = await history.fetchNextPage();
+        pages += 1;
+      }
+      requestAnimationFrame(() => {
+        const index = rowsRef.current.findIndex((r) => r.kind === "unread");
+        if (index >= 0) virtualizer.scrollToIndex(index, { align: "start" });
+      });
+      setUnreadDismissed(true);
+    } finally {
+      setJumping(false);
+    }
+  };
+
   if (history.isPending) {
     return (
       <div className="flex flex-1 items-center justify-center text-muted-foreground" role="status">
@@ -167,6 +210,20 @@ export function MessageList({
 
   return (
     <div className="relative min-h-0 flex-1">
+      {showUnreadBar ? (
+        <div className="absolute inset-x-3 top-2 z-10 flex items-center gap-2 rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground shadow-md" role="status">
+          <span className="min-w-0 flex-1 truncate font-medium">
+            {unreadCount} new message{unreadCount === 1 ? "" : "s"}
+            {firstUnread ? ` since ${formatTime(firstUnread.createdAt)}` : ""}
+          </span>
+          <button type="button" onClick={() => void jumpToUnread()} disabled={jumping} className="rounded px-2 py-0.5 font-semibold hover:bg-primary-foreground/15">
+            {jumping ? "Loading…" : "Jump"}
+          </button>
+          <button type="button" onClick={() => setUnreadDismissed(true)} className="rounded px-2 py-0.5 hover:bg-primary-foreground/15">
+            Mark as read
+          </button>
+        </div>
+      ) : null}
       <div ref={scrollRef} onScroll={onScroll} className="h-full overflow-y-auto overscroll-contain" role="log" aria-live="polite" aria-label={`Messages in ${channel.name}`}>
         {rows.length === 0 ? (
           workspace.kind === "dm" ? (
@@ -184,6 +241,11 @@ export function MessageList({
                   {row.kind === "top" ? (
                     <div className="flex h-10 items-center justify-center text-xs text-muted-foreground">
                       {history.isFetchingNextPage ? <Loader2 className="size-4 animate-spin" aria-label="Loading older messages" /> : <span>Scroll up for older messages</span>}
+                    </div>
+                  ) : row.kind === "unread" ? (
+                    <div className="relative mx-4 my-1 flex items-center" role="separator" aria-label="New messages">
+                      <span className="h-px flex-1 bg-destructive" />
+                      <span className="rounded-sm bg-destructive px-1.5 py-px text-[10px] font-bold uppercase tracking-wide text-white">New</span>
                     </div>
                   ) : row.kind === "divider" ? (
                     <div className="relative mx-4 my-2 flex items-center" role="separator" aria-label={row.label}>
