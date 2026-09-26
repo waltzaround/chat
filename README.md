@@ -109,6 +109,8 @@ Other commands:
 | `npm run db:seed` | Generate `db/seed.sql` and load it into local D1 |
 | `npm run realtimekit:presets` | Create the two RealtimeKit presets the app expects |
 | `npm run setup` | Create the Cloudflare resources and deploy (see [Run your own server](#run-your-own-server)) |
+| `npm run update` | Bring this copy up to date with upstream (see [Updating](#updating)) |
+| `npm run backup` / `restore` | Save the database to `backups/`, or load a backup into an empty database |
 | `npm run recover` | Print a one-time password-reset link for the owner (or `--email` any account); `--local` for the dev database |
 | `npm run deploy` | `vite build`, apply remote D1 migrations, then `wrangler deploy` |
 | `node scripts/e2e-smoke.mjs` | Browser smoke test against a running dev server (needs `npx playwright install chromium`) |
@@ -129,6 +131,8 @@ Everything except voice/video: auth (email/password), workspaces, channels, real
 
 Voice needs a RealtimeKit app (see below). Until the three RealtimeKit secrets are set, joining a voice room shows an explicit "Voice is not configured on this deployment" message rather than failing silently.
 
+## Running your server
+
 ### Owner setup and who can join
 
 Your first sign-up is a three-step setup: create your account, name your workspace, and invite people. The last step gives you a permanent invite link and asks who can create accounts:
@@ -138,12 +142,28 @@ Your first sign-up is a three-step setup: create your account, name your workspa
 
 The owner can change this later under User Settings → Server. Servers that already had accounts before this feature treat their earliest account as the owner and stay open.
 
+### Updating
+
+Run `npm run update` in your copy, review the changes, then deploy. Database migrations run as part of every deploy.
+
+- **A git clone of this repo** (the terminal setup): `npm run update` runs `git pull --autostash`, which keeps your uncommitted database id. Then run `npm run deploy`.
+- **A deploy-button copy**: it has no shared history with this repo, so `npm run update` downloads the latest version and lays it over your copy. Your own `wrangler.jsonc` values are kept (names, database id, Turnstile key, email settings), and files deleted upstream are removed. The included **Update from upstream** GitHub Action does this every Monday, or on demand from the Actions tab, and opens a pull request. Merging it redeploys. If the Action can't open the pull request, turn on *Allow GitHub Actions to create and approve pull requests* in the repo's Settings → Actions → General.
+
+### Backups
+
+| To… | Use |
+| --- | --- |
+| Undo a mistake (deleted channel, bad change) | **D1 Time Travel**, which is automatic: 7 days back on the free plan, 30 on the Workers Paid plan. `npx wrangler d1 time-travel info DB --timestamp=2026-09-01T12:00:00Z` shows the restore point; `npx wrangler d1 time-travel restore DB --timestamp=…` rewinds the database in place. It prints a bookmark that undoes the restore. |
+| Keep a copy outside Cloudflare | `npm run backup` saves the database to `backups/<time>.sql`. It holds password hashes and the server's auth secret, so store it privately. |
+| Rebuild from a backup | Create an empty database (`npx wrangler d1 create chat-restored`), put its id in `wrangler.jsonc` as `database_id`, run `npm run restore -- backups/<file>.sql`, then `npm run deploy`. |
+
+Uploaded files live in R2 and are not in these backups. To copy the bucket elsewhere, use an S3-compatible tool such as `rclone` with an R2 API token.
+
 ## Deployment notes
 
 - **Configuration.** Everything is optional. `APP_URL` is blank by default, so auth and invite links use the origin each request arrives on. Set it only to pin one origin. `BETTER_AUTH_SECRET` is generated on first run and stored in the `instance_settings` D1 table, unless you set it as a secret. Changing it signs everyone out.
 - **Database id.** `database_id` in `wrangler.jsonc` is empty on purpose. The deploy button fills it in on the deployer's clone, and `npm run setup` writes it locally. Leave that change uncommitted: a committed id would point every deploy at one database, and an empty one makes `wrangler deploy` create a new database in whichever account you are logged into.
 - **Build pipeline.** `npm run deploy` (which Workers Builds runs too) is `vite build`, then `wrangler d1 migrations apply DB --remote`, then `wrangler deploy`. The migration uses the `DB` binding name, so it still works if the database was renamed.
-- **Updating.** Pull the latest code and run `npm run deploy` from the clone you ran setup in. Deploy-button installs redeploy on every push to the copied repo.
 - **Turnstile.** The committed site key and the `.dev.vars.example` secret are Cloudflare's always-pass test pair. With no secret, the check is skipped. `npm run setup` creates a real widget for your `workers.dev` hostname and any `--app-url`.
 
 ## Architecture notes

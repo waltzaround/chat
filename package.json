@@ -17,6 +17,9 @@
     "deploy": "npm run build && npm run db:migrate:remote && wrangler deploy",
     "setup": "tsx scripts/onboard.ts",
     "recover": "tsx scripts/recover.ts",
+    "update": "tsx scripts/update.ts",
+    "backup": "tsx scripts/backup.ts backup",
+    "restore": "tsx scripts/backup.ts restore",
     "cf-typegen": "wrangler types worker/env.d.ts",
     "realtimekit:presets": "tsx scripts/realtimekit-presets.ts"
   },

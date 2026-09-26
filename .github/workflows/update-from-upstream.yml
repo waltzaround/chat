@@ -1,0 +1,47 @@
+# Keeps a copy made with the Deploy to Cloudflare button up to date. Weekly (or on
+# demand from the Actions tab) it pulls the latest upstream release into a pull request.
+# Merging it redeploys through Workers Builds, which also runs database migrations.
+name: Update from upstream
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "23 4 * * 1"
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update:
+    # Upstream itself has nothing to update from.
+    if: github.repository != 'waltzaround/beacon'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Pull in upstream
+        run: node --experimental-strip-types scripts/update.ts
+      - name: Open a pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "Already up to date."
+            exit 0
+          fi
+          commit=$(node -p "require('./.beacon-upstream.json').commit.slice(0, 7)")
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -C upstream-update
+          git add -A
+          git commit -m "Update from upstream ($commit)"
+          git push --force origin upstream-update
+          body="Brings in the latest upstream changes ($commit). This deployment's wrangler.jsonc values (names, database id, Turnstile key, email) are kept. Review the diff, then merge to deploy."
+          if gh pr view upstream-update --json state -q .state 2>/dev/null | grep -q OPEN; then
+            echo "Updated the open pull request."
+          elif ! gh pr create --head upstream-update --title "Update from upstream ($commit)" --body "$body"; then
+            echo "::warning::Pushed branch upstream-update but could not open a pull request. Turn on 'Allow GitHub Actions to create and approve pull requests' in Settings → Actions → General, or open one from that branch."
+          fi

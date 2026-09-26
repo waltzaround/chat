@@ -71,6 +71,27 @@ export function enableEmail(source: string, from: string): string {
   return next;
 }
 
+/**
+ * For `npm run update`: take upstream's wrangler.jsonc and put this deployment's own
+ * values back (names, database id, public URL, Turnstile key, email).
+ */
+export function carryOverDeployment(local: string, upstream: string): string {
+  const mine = readWranglerProject(local);
+  let next = patchWranglerProject(upstream, {
+    workerName: mine.workerName,
+    databaseName: mine.databaseName,
+    databaseId: mine.databaseId,
+    bucketName: mine.bucketName,
+    queueName: mine.queueName,
+    // A leftover localhost value would pin a live deployment to localhost; blank auto-detects.
+    appUrl: mine.appUrl && publicHostname(mine.appUrl) ? mine.appUrl : "",
+    turnstileSiteKey: mine.turnstileSiteKey,
+  });
+  const emailFrom = fieldPattern("EMAIL_FROM").exec(local)?.[1];
+  if (emailFrom && /"send_email"\s*:/.test(local)) next = enableEmail(next, JSON.parse(`"${emailFrom}"`) as string);
+  return next;
+}
+
 export function assertEmailAddress(value: string): void {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) throw new Error(`"${value}" is not an email address.`);
 }

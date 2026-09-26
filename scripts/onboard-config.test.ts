@@ -6,6 +6,7 @@ import {
   assertEmailAddress,
   enableEmail,
   assertWorkerName,
+  carryOverDeployment,
   extractJson,
   isPlaceholderAuthSecret,
   normalizeAppUrl,
@@ -81,6 +82,26 @@ test("turns on email with a sender var and a send_email binding", () => {
   assert.doesNotMatch(legacy, /EMAIL_FROM/);
   assert.match(enableEmail(legacy, "chat@example.com"), /"vars": \{\n    "EMAIL_FROM": "chat@example.com",/);
   assert.throws(() => assertEmailAddress("chat"), /not an email/);
+});
+
+test("keeps a deployment's own values when taking upstream's wrangler.jsonc", () => {
+  const mine = enableEmail(
+    patchWranglerProject(source, { workerName: "acme", databaseId: "33333333-3333-4333-8333-333333333333", bucketName: "acme-uploads", turnstileSiteKey: "0xMINE" }),
+    "chat@acme.example",
+  );
+  const upstream = source.replace('"observability": { "enabled": true },', '"observability": { "enabled": true, "head_sampling_rate": 1 },');
+  const merged = carryOverDeployment(mine, upstream);
+  const project = readWranglerProject(merged);
+  assert.equal(project.workerName, "acme");
+  assert.equal(project.databaseId, "33333333-3333-4333-8333-333333333333");
+  assert.equal(project.bucketName, "acme-uploads");
+  assert.equal(project.turnstileSiteKey, "0xMINE");
+  assert.match(merged, /"head_sampling_rate": 1/);
+  assert.match(merged, /"EMAIL_FROM": "chat@acme.example"/);
+  assert.match(merged, /"send_email"/);
+  assert.doesNotMatch(carryOverDeployment(source, upstream), /"send_email"/);
+  assert.equal(readWranglerProject(carryOverDeployment(patchWranglerProject(source, { appUrl: "http://localhost:5173" }), upstream)).appUrl, "");
+  assert.equal(readWranglerProject(carryOverDeployment(patchWranglerProject(source, { appUrl: "https://chat.acme.example" }), upstream)).appUrl, "https://chat.acme.example");
 });
 
 test("suggests a workers.dev subdomain", () => {
