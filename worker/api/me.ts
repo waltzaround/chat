@@ -7,7 +7,7 @@ import { ApiError } from "../lib/errors";
 import { parseBody } from "../lib/validate";
 import { toCurrentUser, toUserSummary, toWorkspaceSummary } from "../lib/serialize";
 import { notifyWorkspace } from "../lib/hub";
-import { canCreateWorkspace, registrationPolicy, serverOwnerId } from "../instance";
+import { canCreateWorkspace, registrationPolicy, serverOwnerId, verifiedEmailRequiredSince } from "../instance";
 import { emailEnabled } from "../email";
 import { deleteAccountSchema, updateMeSchema } from "@shared/schemas";
 import { deleteAccount, exportAccount } from "../lib/accounts";
@@ -30,6 +30,7 @@ meRoutes.get("/auth-config", async (c) => {
     claimRequired: !owner && !!c.env.OWNER_CLAIM_TOKEN?.trim(),
     registration,
     passwordResetEmail: emailEnabled(c.env),
+    requireVerifiedEmail: emailEnabled(c.env) && (await verifiedEmailRequiredSince(c.env.DB)) !== null,
   };
   return c.json(body);
 });

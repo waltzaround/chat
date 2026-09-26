@@ -26,6 +26,7 @@ export interface CurrentUser extends UserSummary {
   canCreateWorkspace: boolean;
   /** Signs in with a password (not only Google/GitHub). Deleting the account asks for it. */
   hasPassword: boolean;
+  emailVerified: boolean;
 }
 
 export interface WorkspaceSummary {
@@ -265,6 +266,8 @@ export interface AuthConfig {
   registration: RegistrationPolicy;
   /** "Forgot password?" can email a reset link (needs email set up, on the Workers Paid plan). */
   passwordResetEmail: boolean;
+  /** New accounts must confirm their email before signing in. */
+  requireVerifiedEmail: boolean;
 }
 
 export type ReportReason = "spam" | "harassment" | "inappropriate" | "other";
@@ -294,6 +297,8 @@ export interface ServerSettings {
   workspaceCreation: WorkspaceCreationPolicy;
   /** Email is set up, so members can reset their own password. */
   emailEnabled: boolean;
+  /** New accounts must confirm their email before signing in (needs email). */
+  requireVerifiedEmail: boolean;
 }
 
 /** An account as the server owner sees it in User Settings → Server. */

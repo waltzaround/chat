@@ -21,6 +21,18 @@ export async function sendPasswordResetEmail(env: Env, to: { email: string; name
   });
 }
 
+export async function sendVerificationEmail(env: Env, to: { email: string; name: string }, link: string): Promise<void> {
+  if (!emailEnabled(env)) throw new Error("Email is not configured on this server");
+  const greeting = to.name ? `Hi ${to.name},` : "Hi,";
+  await env.EMAIL!.send({
+    from: env.EMAIL_FROM!.trim(),
+    to: to.email,
+    subject: "Confirm your email",
+    text: `${greeting}\n\nConfirm this is your email address by opening this link:\n\n${link}\n\nIf you didn't create an account, ignore this email.`,
+    html: `<p>${escapeHtml(greeting)}</p><p>Confirm this is your email address:</p><p><a href="${escapeHtml(link)}">Confirm my email</a></p><p>If you didn't create an account, ignore this email.</p>`,
+  });
+}
+
 function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
 }

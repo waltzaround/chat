@@ -31,6 +31,7 @@ export function toCurrentUser(u: UserRow, server: { ownerId: string | null; canC
     isServerOwner: server.ownerId === u.id,
     canCreateWorkspace: server.canCreateWorkspace,
     hasPassword: server.hasPassword,
+    emailVerified: !!u.emailVerified,
     email: u.email,
     bio: u.bio,
     status: (u.status as PreferredStatus) ?? "online",

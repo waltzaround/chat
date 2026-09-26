@@ -73,6 +73,20 @@ export async function setWorkspaceCreationPolicy(db: D1Database, policy: Workspa
   await setSetting(db, "workspace_creation", policy);
 }
 
+/**
+ * When set, accounts created after this time (ms) must verify their email before
+ * they can sign in. Older accounts are unaffected, so turning it on locks nobody out.
+ */
+export async function verifiedEmailRequiredSince(db: D1Database): Promise<number | null> {
+  const value = await getSetting(db, "require_verified_email_since");
+  return value ? Number(value) : null;
+}
+
+export async function setVerifiedEmailRequired(db: D1Database, required: boolean): Promise<void> {
+  if (required) await db.prepare("INSERT OR IGNORE INTO instance_settings (key, value) VALUES ('require_verified_email_since', ?)").bind(String(Date.now())).run();
+  else await db.prepare("DELETE FROM instance_settings WHERE key = 'require_verified_email_since'").run();
+}
+
 export async function canCreateWorkspace(db: D1Database, userId: string): Promise<boolean> {
   if ((await workspaceCreationPolicy(db)) === "everyone") return true;
   return (await serverOwnerId(db)) === userId;

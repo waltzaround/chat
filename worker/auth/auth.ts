@@ -6,8 +6,8 @@ import { newId } from "@shared/id";
 import { usernameSchema } from "@shared/schemas";
 import type { Env } from "../env";
 import type { Db } from "../db";
-import { assertMayRegister, claimOwnership, RegistrationError } from "../instance";
-import { emailEnabled, sendPasswordResetEmail } from "../email";
+import { assertMayRegister, claimOwnership, RegistrationError, verifiedEmailRequiredSince } from "../instance";
+import { emailEnabled, sendPasswordResetEmail, sendVerificationEmail } from "../email";
 
 export type Auth = ReturnType<typeof buildAuth>;
 
@@ -64,6 +64,18 @@ function buildAuth(env: Env, db: Db, origin: string, secret: string) {
         : {}),
     },
     socialProviders,
+    // With email set up, every new account gets a link to confirm its address.
+    ...(emailEnabled(env)
+      ? {
+          emailVerification: {
+            sendOnSignUp: true,
+            autoSignInAfterVerification: true,
+            sendVerificationEmail: async ({ user, url }: { user: { email: string; name: string }; url: string }) => {
+              await sendVerificationEmail(env, user, url);
+            },
+          },
+        }
+      : {}),
     user: {
       fields: { name: "displayName" },
       additionalFields: {
@@ -88,9 +100,15 @@ function buildAuth(env: Env, db: Db, origin: string, secret: string) {
         create: {
           // Covers every way in: email, Google, GitHub.
           before: async (session) => {
-            const row = await env.DB.prepare("SELECT suspended_at FROM users WHERE id = ?").bind(session.userId).first<{ suspended_at: number | null }>();
+            const row = await env.DB.prepare("SELECT suspended_at, email_verified, created_at FROM users WHERE id = ?")
+              .bind(session.userId)
+              .first<{ suspended_at: number | null; email_verified: number; created_at: number }>();
             if (row?.suspended_at) {
               throw new APIError("FORBIDDEN", { message: "This account is suspended. Contact the server owner.", code: "account_suspended" });
+            }
+            const since = await verifiedEmailRequiredSince(env.DB);
+            if (row && since !== null && !row.email_verified && row.created_at >= since) {
+              throw new APIError("FORBIDDEN", { message: "Confirm your email first: open the link we sent you, then sign in.", code: "email_not_verified" });
             }
           },
         },

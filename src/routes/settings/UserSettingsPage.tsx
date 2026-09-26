@@ -15,7 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
-import { useBlocks, useMe, useSetBlocked, useUpdateMe, useWorkspaces } from "@/lib/queries";
+import { useAuthConfig, useBlocks, useMe, useServerSettings, useSetBlocked, useUpdateMe, useUpdateServerSettings, useWorkspaces } from "@/lib/queries";
 import { UserAvatar } from "@/components/common/UserAvatar";
 import { browserNotificationsSupported, useNotificationPrefs } from "@/lib/notifications";
 import { useTheme, type Theme } from "@/lib/theme";
@@ -89,6 +89,7 @@ export function UserSettingsPage() {
 
 function ProfileTab() {
   const { data: me } = useMe();
+  const emailOn = useAuthConfig().data?.passwordResetEmail ?? false;
   const update = useUpdateMe();
 
   const [avatarKey, setAvatarKey] = useState<string | null>(null);
@@ -175,6 +176,22 @@ function ProfileTab() {
         <div className="grid gap-1.5">
           <Label htmlFor="email">Email</Label>
           <Input id="email" value={me?.email ?? ""} readOnly disabled className="opacity-60" />
+          {emailOn && me ? (
+            me.emailVerified ? (
+              <p className="text-xs text-muted-foreground">Confirmed.</p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Not confirmed yet.{" "}
+                <button
+                  type="button"
+                  className="text-primary hover:underline"
+                  onClick={() => void authClient.sendVerificationEmail({ email: me.email, callbackURL: "/settings/profile" }).then(() => toast.success("Check your inbox for the link"))}
+                >
+                  Send a confirmation link
+                </button>
+              </p>
+            )
+          ) : null}
         </div>
         <div className="grid gap-1.5">
           <Label htmlFor="bio">Bio</Label>
@@ -283,6 +300,7 @@ function ServerTab() {
         <RegistrationPolicyPicker />
         <p className="text-xs text-muted-foreground">Invite links from any workspace let people sign up, whichever you choose.</p>
       </div>
+      <VerifiedEmailSetting />
       <div className="grid gap-2">
         <p className="text-sm font-medium">Who can create workspaces</p>
         <WorkspaceCreationPicker />
@@ -343,6 +361,30 @@ function ChangePassword() {
         </Button>
       </div>
     </form>
+  );
+}
+
+function VerifiedEmailSetting() {
+  const settings = useServerSettings().data;
+  const update = useUpdateServerSettings();
+  if (!settings) return null;
+  return (
+    <div className="flex items-center justify-between gap-4 rounded-md border px-4 py-3">
+      <div>
+        <p className="text-sm font-medium">Require a confirmed email</p>
+        <p className="text-xs text-muted-foreground">
+          {settings.emailEnabled
+            ? "New accounts must open the link we email them before they can sign in. Existing accounts aren't affected."
+            : "Needs email, which needs the Workers Paid plan. Set it up with npm run setup."}
+        </p>
+      </div>
+      <Switch
+        checked={settings.requireVerifiedEmail}
+        disabled={!settings.emailEnabled || update.isPending}
+        onCheckedChange={(v) => update.mutate({ requireVerifiedEmail: v }, { onError: (err) => toast.error(errorMessage(err)) })}
+        aria-label="Require a confirmed email"
+      />
+    </div>
   );
 }
 

@@ -8,7 +8,7 @@ import { toUserSummary } from "../lib/serialize";
 import { resetPasswordUrl } from "../auth/auth";
 import { emailEnabled } from "../email";
 import { parseBody } from "../lib/validate";
-import { registrationPolicy, serverOwnerId, setRegistrationPolicy, setWorkspaceCreationPolicy, workspaceCreationPolicy } from "../instance";
+import { registrationPolicy, serverOwnerId, setRegistrationPolicy, setVerifiedEmailRequired, setWorkspaceCreationPolicy, verifiedEmailRequiredSince, workspaceCreationPolicy } from "../instance";
 import { hubFor } from "../lib/hub";
 import { userHub } from "../lib/notify";
 import { WS_CLOSE } from "@shared/events";
@@ -31,8 +31,8 @@ serverRoutes.use("*", async (c, next) => {
 });
 
 async function settings(env: AppEnv["Bindings"]): Promise<ServerSettings> {
-  const [registration, workspaceCreation] = await Promise.all([registrationPolicy(env.DB), workspaceCreationPolicy(env.DB)]);
-  return { registration, workspaceCreation, emailEnabled: emailEnabled(env) };
+  const [registration, workspaceCreation, since] = await Promise.all([registrationPolicy(env.DB), workspaceCreationPolicy(env.DB), verifiedEmailRequiredSince(env.DB)]);
+  return { registration, workspaceCreation, emailEnabled: emailEnabled(env), requireVerifiedEmail: since !== null };
 }
 
 serverRoutes.get("/", async (c) => c.json(await settings(c.env)));
@@ -41,6 +41,10 @@ serverRoutes.patch("/", async (c) => {
   const input = await parseBody(c, updateServerSettingsSchema);
   if (input.registration) await setRegistrationPolicy(c.env.DB, input.registration);
   if (input.workspaceCreation) await setWorkspaceCreationPolicy(c.env.DB, input.workspaceCreation);
+  if (input.requireVerifiedEmail !== undefined) {
+    if (input.requireVerifiedEmail && !emailEnabled(c.env)) throw ApiError.validation(undefined, "Set up email first: verification needs the Workers Paid plan and a sender address");
+    await setVerifiedEmailRequired(c.env.DB, input.requireVerifiedEmail);
+  }
   return c.json(await settings(c.env));
 });
 

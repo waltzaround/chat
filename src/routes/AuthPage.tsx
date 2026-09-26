@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { KeyRound, Loader2, Lock } from "lucide-react";
+import { KeyRound, Loader2, Lock, Mail } from "lucide-react";
 import { authClient, type SocialProvider } from "@/lib/auth-client";
 import { useAuthConfig, keys } from "@/lib/queries";
 import { apiGet } from "@/lib/api";
@@ -42,6 +42,8 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
   const [username, setUsername] = useState("");
   const [usernameEdited, setUsernameEdited] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Set when the server wants the email confirmed before signing in.
+  const [unverified, setUnverified] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [challengeRequired, setChallengeRequired] = useState(mode === "register");
@@ -73,10 +75,12 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
     try {
       const headers = turnstileToken ? { "x-turnstile-token": turnstileToken } : undefined;
       if (mode === "register") {
-        const res = await authClient.signUp.email({ email, password, name: displayName.trim() || username.trim(), username: username.trim().toLowerCase() }, { headers });
+        const res = await authClient.signUp.email({ email, password, name: displayName.trim() || username.trim(), username: username.trim().toLowerCase(), callbackURL: "/" }, { headers });
+        if (res.error?.code === "email_not_verified") return setUnverified(email.trim());
         if (res.error) throw new Error(res.error.message ?? "Could not create your account");
       } else {
         const res = await authClient.signIn.email({ email, password }, { headers });
+        if (res.error?.code === "email_not_verified") return setUnverified(email.trim());
         if (res.error) {
           const r = await apiGet<{ turnstileRequired: boolean }>("/api/auth-challenge").catch(() => ({ turnstileRequired: false }));
           setChallengeRequired(r.turnstileRequired);
@@ -137,7 +141,9 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
           </div>
         </div>
 
-        {blocked ? (
+        {unverified ? (
+          <CheckEmail email={unverified} />
+        ) : blocked ? (
           <SignUpClosed reason={blocked} />
         ) : (
           <>
@@ -202,6 +208,9 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
                 </div>
                 <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete={mode === "login" ? "current-password" : "new-password"} required minLength={8} />
                 {mode === "register" ? <p className="text-[11px] text-muted-foreground">At least 8 characters.</p> : null}
+                {mode === "register" && config.data?.requireVerifiedEmail && !owner ? (
+                  <p className="text-[11px] text-muted-foreground">We'll email you a link to confirm your address before you can sign in.</p>
+                ) : null}
               </div>
               {showTurnstile && siteKey ? <Turnstile siteKey={siteKey} onToken={onToken} className="mt-1" /> : null}
               {error ? (
@@ -242,6 +251,29 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
         )}
       </div>
     </main>
+  );
+}
+
+function CheckEmail({ email }: { email: string }) {
+  const [sent, setSent] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const resend = async () => {
+    setBusy(true);
+    await authClient.sendVerificationEmail({ email, callbackURL: "/" });
+    setBusy(false);
+    setSent(true);
+  };
+  return (
+    <div className="grid gap-3 text-sm">
+      <div className="flex items-center gap-2 font-medium">
+        <Mail className="size-4 text-muted-foreground" aria-hidden />
+        Check your email
+      </div>
+      <p className="text-muted-foreground">We sent a link to {email}. Open it to confirm your address, and you'll be signed in.</p>
+      <Button type="button" variant="outline" onClick={() => void resend()} disabled={busy || sent}>
+        {sent ? "Sent. Check your inbox" : "Send the link again"}
+      </Button>
+    </div>
   );
 }
 
