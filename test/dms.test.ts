@@ -40,6 +40,9 @@ describe("direct messages", () => {
     const list = await api<DirectMessage[]>(b.cookie, "/api/dms");
     expect(list).toHaveLength(1);
     expect(list[0]).toMatchObject({ workspaceId: dm.workspaceId, unreadCount: 1, peer: { id: a.user.id } });
+    const sent = await api<{ messages: Array<{ sequence: number }> }>(b.cookie, `/api/channels/${dm.channelId}/messages`);
+    await api(b.cookie, `/api/channels/${dm.channelId}/read`, { method: "POST", json: { sequence: sent.messages.at(-1)!.sequence } });
+    expect((await api<DirectMessage[]>(b.cookie, "/api/dms"))[0]?.unreadCount).toBe(0);
     const workspaces = await api<WorkspaceSummary[]>(b.cookie, "/api/me/workspaces");
     expect(workspaces.some((w) => w.id === dm.workspaceId)).toBe(false);
     const detail = await api<WorkspaceDetail>(b.cookie, `/api/workspaces/${dm.workspaceId}`);
