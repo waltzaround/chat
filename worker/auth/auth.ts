@@ -1,4 +1,5 @@
 import { betterAuth } from "better-auth";
+import { bearer } from "better-auth/plugins";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { APIError } from "better-auth/api";
 import { schema } from "@db/schema";
@@ -64,6 +65,9 @@ function buildAuth(env: Env, db: Db, origin: string, secret: string) {
         : {}),
     },
     socialProviders,
+    // Native apps sign in with a token (sent back in the set-auth-token header) instead
+    // of a cookie. Only signed tokens are accepted.
+    plugins: [bearer({ requireSignature: true })],
     // With email set up, every new account gets a link to confirm its address.
     ...(emailEnabled(env)
       ? {

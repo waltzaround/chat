@@ -13,9 +13,28 @@ import { deleteAccountSchema, updateMeSchema } from "@shared/schemas";
 import { deleteAccount, exportAccount } from "../lib/accounts";
 import { unreadMentionCounts } from "../lib/mentions";
 import { checkRateLimit } from "../security/ratelimit";
-import type { AuthConfig, WorkspaceSummary } from "@shared/types";
+import type { AuthConfig, InstanceInfo, WorkspaceSummary } from "@shared/types";
+import { API_VERSION, APP_VERSION } from "@shared/version";
+import { realtimekitConfigured } from "../realtimekit/client";
 
 export const meRoutes = new Hono<AppEnv>();
+
+/** Public: identifies this server to native apps before they sign in. */
+meRoutes.get("/instance", async (c) => {
+  const body: InstanceInfo = {
+    software: "beacon-chat",
+    version: APP_VERSION,
+    apiVersion: API_VERSION,
+    registration: await registrationPolicy(c.env.DB),
+    features: {
+      voice: realtimekitConfigured(c.env),
+      passwordResetEmail: emailEnabled(c.env),
+      googleSignIn: !!(c.env.GOOGLE_CLIENT_ID && c.env.GOOGLE_CLIENT_SECRET),
+      githubSignIn: !!(c.env.GITHUB_CLIENT_ID && c.env.GITHUB_CLIENT_SECRET),
+    },
+  };
+  return c.json(body);
+});
 
 /** Public: which auth providers are available, the Turnstile site key, and whether this is a fresh deployment. */
 meRoutes.get("/auth-config", async (c) => {

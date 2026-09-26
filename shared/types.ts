@@ -292,6 +292,16 @@ export interface ReportedMessage {
   reports: Array<{ reporter: UserSummary | null; reason: ReportReason; note: string | null; createdAt: string }>;
 }
 
+/** What a client learns about a server before signing in: GET /api/instance. */
+export interface InstanceInfo {
+  /** Always "beacon-chat", so apps can tell they've found a server of this kind. */
+  software: "beacon-chat";
+  version: string;
+  apiVersion: number;
+  registration: RegistrationPolicy;
+  features: { voice: boolean; passwordResetEmail: boolean; googleSignIn: boolean; githubSignIn: boolean };
+}
+
 /** "invite": only people with a working invite link can create an account. */
 export type RegistrationPolicy = "open" | "invite";
 
