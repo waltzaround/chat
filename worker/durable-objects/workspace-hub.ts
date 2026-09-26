@@ -22,6 +22,8 @@ import { batchAll, createDb, schema, type Db } from "../db";
 import { loadChannelAccess, type ChannelAccess } from "../permissions/resolve";
 import { hydrateMessages, loadMessage, loadMessagePage, reactionSummary, softDeleteMessage } from "../lib/messages";
 import { track } from "../analytics/track";
+import { recordMentions } from "../lib/mentions";
+import { notifyUsers } from "../lib/notify";
 import type { ApiErrorCode } from "../lib/errors";
 
 interface Attachment {
@@ -220,6 +222,7 @@ export class WorkspaceHub extends DurableObject<Env> {
         const access = await this.access(att.userId, row.channelId);
         if (!access) return this.send(ws, { type: "error", code: "not_found", message: "Channel not found" });
         await this.db.update(schema.messages).set({ content: event.content, editedAt: new Date() }).where(eq(schema.messages.id, row.id));
+        await recordMentions(this.db, { ...row, content: event.content }, access.permissions, () => this.onlineUserIds());
         const message = await loadMessage(this.db, row.id, att.userId);
         if (message) this.broadcastToChannel(row.channelId, { type: "message.updated", message });
         return;
@@ -419,6 +422,23 @@ export class WorkspaceHub extends DurableObject<Env> {
     this.clearTyping(input.channelId, input.userId);
     this.broadcastToChannel(input.channelId, { type: "message.created", message, clientMessageId: input.clientMessageId });
     this.broadcastActivity(input.channelId, sequence, input.userId);
+    const mentioned = await recordMentions(this.db, row, access.permissions, () => this.onlineUserIds());
+    if (mentioned.length) {
+      this.ctx.waitUntil(
+        notifyUsers(this.env, mentioned, {
+          kind: "mention",
+          workspaceId: access.channel.workspaceId,
+          workspaceName: access.ctx.workspace.name,
+          channelId: input.channelId,
+          channelName: access.channel.name,
+          messageId: id,
+          sequence,
+          author: message.author,
+          preview: content.slice(0, 140),
+          createdAt: now.toISOString(),
+        }),
+      );
+    }
     track(this.env, { name: "message.sent", workspaceId: access.channel.workspaceId, channelId: input.channelId });
     return { ok: true, message, duplicate: false };
   }
@@ -566,6 +586,11 @@ export class WorkspaceHub extends DurableObject<Env> {
     }
     this.accessCache.set(key, { access, expiresAt: Date.now() + ACCESS_CACHE_MS });
     return access;
+  }
+
+  /** Members connected to this workspace right now, for @here. */
+  private onlineUserIds(): string[] {
+    return [...new Set(this.ctx.getWebSockets().map((ws) => this.attachment(ws)?.userId).filter((id): id is string => !!id))];
   }
 
   private attachment(ws: WebSocket): Attachment | null {

@@ -1,11 +1,14 @@
 /// <reference types="@cloudflare/workers-types/experimental" />
 import type { WorkspaceHub } from "./durable-objects/workspace-hub";
+import type { UserHub } from "./durable-objects/user-hub";
+import type { NotificationPayload } from "@shared/events";
 
 export interface Env {
   // Bindings
   DB: D1Database;
   UPLOADS: R2Bucket;
   WORKSPACE_HUB: DurableObjectNamespace<WorkspaceHub>;
+  USER_HUB: DurableObjectNamespace<UserHub>;
   BACKGROUND_QUEUE: Queue<BackgroundJob>;
   ANALYTICS?: AnalyticsEngineDataset;
   ASSETS: Fetcher;
@@ -49,4 +52,6 @@ export type BackgroundJob =
   | { type: "workspace.deleted"; workspaceId: string; r2Prefix: string }
   | { type: "message.deleted"; attachmentKeys: string[] }
   /** A deleted account asked for its messages to go too. Processed in batches. */
-  | { type: "user.messages.delete"; userId: string };
+  | { type: "user.messages.delete"; userId: string }
+  /** Deliver a notification to many people (e.g. @everyone). */
+  | { type: "notify.users"; userIds: string[]; notification: NotificationPayload };

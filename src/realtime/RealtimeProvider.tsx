@@ -91,6 +91,7 @@ export function RealtimeProvider({ workspaceId, userId, children }: { workspaceI
   const socketRef = useRef<WorkspaceSocket | null>(null);
   const typingSentAt = useRef(new Map<string, number>());
   const readTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  const mentionsCleared = useRef(new Set<string>());
   const readPending = useRef(new Map<string, number>());
 
   useEffect(() => {
@@ -117,7 +118,7 @@ export function RealtimeProvider({ workspaceId, userId, children }: { workspaceI
           workspaceCache.patchChannel(qc, workspaceId, message.channelId, (c) => ({ ...c, lastSequence: Math.max(c.lastSequence, message.sequence) }));
           if (event.clientMessageId && message.author.id === userId) removePending(message.channelId, event.clientMessageId);
           if (message.author.id === userId) {
-            workspaceCache.patchChannel(qc, workspaceId, message.channelId, (c) => ({ ...c, lastReadSequence: Math.max(c.lastReadSequence, message.sequence) }));
+            workspaceCache.markChannelRead(qc, workspaceId, message.channelId, message.sequence);
           }
           // Someone who sends a message is no longer typing.
           store.set((s) => {
@@ -153,7 +154,7 @@ export function RealtimeProvider({ workspaceId, userId, children }: { workspaceI
           workspaceCache.patchChannel(qc, workspaceId, event.channelId, (c) => ({ ...c, lastSequence: Math.max(c.lastSequence, event.lastSequence) }));
           break;
         case "read.updated":
-          workspaceCache.patchChannel(qc, workspaceId, event.channelId, (c) => ({ ...c, lastReadSequence: Math.max(c.lastReadSequence, event.sequence) }));
+          workspaceCache.markChannelRead(qc, workspaceId, event.channelId, event.sequence);
           break;
         case "voice.updated":
           store.set((s) => ({ ...s, voice: { ...s.voice, [event.channelId]: event.participants } }));
@@ -211,7 +212,7 @@ export function RealtimeProvider({ workspaceId, userId, children }: { workspaceI
       });
     };
 
-    const socket = new WorkspaceSocket(workspaceId, {
+    const socket = new WorkspaceSocket(`/ws/workspaces/${workspaceId}`, {
       onEvent: handleEvent,
       onStatus: (status, attempt) => store.set({ status, attempt }),
       onFatal: (code, reason) => store.set({ fatal: { code, reason } }),
@@ -233,6 +234,9 @@ export function RealtimeProvider({ workspaceId, userId, children }: { workspaceI
       readPending.current.delete(channelId);
       readTimers.current.delete(channelId);
       if (seq !== undefined) send({ type: "channel.read", channelId, sequence: seq });
+      // Mentions were read: once the server has the new read marker, refresh the rail's
+      // counts so a refetch that raced the read can't leave a stale badge.
+      if (mentionsCleared.current.delete(channelId)) setTimeout(() => void qc.invalidateQueries({ queryKey: keys.workspaces }), 800);
     };
     return {
       store,
@@ -289,7 +293,7 @@ export function RealtimeProvider({ workspaceId, userId, children }: { workspaceI
         send({ type: "typing.stop", channelId });
       },
       markRead: (channelId, sequence) => {
-        workspaceCache.patchChannel(qc, workspaceId, channelId, (c) => (c.lastReadSequence >= sequence ? c : { ...c, lastReadSequence: sequence }));
+        if (workspaceCache.markChannelRead(qc, workspaceId, channelId, sequence)) mentionsCleared.current.add(channelId);
         const prev = readPending.current.get(channelId) ?? 0;
         if (sequence <= prev) return;
         readPending.current.set(channelId, sequence);

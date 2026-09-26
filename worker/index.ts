@@ -21,6 +21,8 @@ import { track } from "./analytics/track";
 import type { PreferredStatus } from "@shared/types";
 
 export { WorkspaceHub } from "./durable-objects/workspace-hub";
+export { UserHub } from "./durable-objects/user-hub";
+import { userHub } from "./lib/notify";
 
 const app = new Hono<AppEnv>();
 
@@ -119,6 +121,14 @@ app.get("/ws/workspaces/:workspaceId", async (c) => {
   headers.set("x-workspace-id", workspaceId);
   headers.set("x-user-status", (session.user.status as PreferredStatus) ?? "online");
   return hubFor(c.env, workspaceId).fetch(new Request(c.req.raw.url, { headers, method: "GET" }));
+});
+
+// Per-user notifications (mentions, DMs), whichever workspace is open.
+app.get("/ws/me", async (c) => {
+  if (c.req.header("Upgrade") !== "websocket") return c.text("Expected WebSocket upgrade", 426);
+  const session = await resolveSession(c.get("auth"), c.get("db"), c.req.raw.headers);
+  if (!session) return c.text("Unauthenticated", 401);
+  return userHub(c.env, session.user.id).fetch(new Request(c.req.raw.url, { headers: c.req.raw.headers, method: "GET" }));
 });
 
 // Anything else is a static asset (SPA fallback handled by Workers Static Assets).

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { MentionBadge } from "@/components/common/MentionBadge";
 import { Hash, Link2, MicOff, Monitor, Pencil, Settings2, Trash2, Video, Volume2 } from "lucide-react";
 import { toast } from "sonner";
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger } from "@/components/ui/context-menu";
@@ -69,7 +70,11 @@ export function ChannelItem({
           >
             <Icon className="size-4 shrink-0 text-muted-foreground" aria-hidden />
             <span className="min-w-0 flex-1 truncate">{channel.name}</span>
-            {unread ? <span className="size-2 rounded-full bg-foreground" aria-label="Unread messages" /> : null}
+            {!active && channel.mentionCount > 0 ? (
+              <MentionBadge count={channel.mentionCount} />
+            ) : unread ? (
+              <span className="size-2 rounded-full bg-foreground" aria-label="Unread messages" />
+            ) : null}
             {canManage ? (
               <span
                 role="button"

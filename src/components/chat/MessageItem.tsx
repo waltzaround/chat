@@ -1,10 +1,11 @@
-import { memo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import { AlertCircle, CornerUpLeft, Flag, Loader2, MoreHorizontal, Pencil, Reply, SmilePlus, Trash2, Copy, Link2 } from "lucide-react";
 import { toast } from "sonner";
 import { useRealtime } from "@/realtime/RealtimeProvider";
 import type { PendingMessage } from "@/realtime/RealtimeProvider";
 import { Permission, hasPermission } from "@/lib/permissions";
-import { useEmojiMap, useEmojis } from "@/lib/queries";
+import { useEmojiMap, useEmojis, useMe, useMembers } from "@/lib/queries";
+import { mentionsUser, type MentionContext } from "@/lib/mentions";
 import { formatFull, formatMessageTimestamp, formatTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { UserAvatar } from "@/components/common/UserAvatar";
@@ -47,6 +48,14 @@ export const MessageItem = memo(function MessageItem({
   const canReact = hasPermission(channel.permissions, Permission.ADD_REACTIONS);
   const canDelete = isMine || hasPermission(channel.permissions, Permission.MANAGE_MESSAGES);
   const name = message.author.nickname ?? message.author.displayName;
+  const me = useMe().data;
+  const members = useMembers(workspace.id).data;
+  const mentionCtx = useMemo<MentionContext | undefined>(
+    () => (me ? { me: me.username.toLowerCase(), known: new Set((members ?? []).map((m) => m.username.toLowerCase())) } : undefined),
+    [me, members],
+  );
+  // Highlight messages that call for your attention, like other chat apps do.
+  const mentionsMe = !isMine && !!me && (mentionsUser(message.content, me.username) || message.replyTo?.author?.id === me.id);
 
   const react = (emoji: string) => {
     const existing = message.reactions.find((r) => r.emoji === emoji);
@@ -64,7 +73,12 @@ export const MessageItem = memo(function MessageItem({
 
   return (
     <article
-      className={cn("group relative px-4 py-0.5 hover:bg-accent/40", !compact && "mt-3", isEditing && "bg-accent/60")}
+      className={cn(
+        "group relative px-4 py-0.5 hover:bg-accent/40",
+        !compact && "mt-3",
+        mentionsMe && "border-l-2 border-warning bg-warning/10 pl-[14px] hover:bg-warning/15",
+        isEditing && "bg-accent/60",
+      )}
       aria-label={`${name} at ${formatFull(message.createdAt)}`}
       id={`m-${message.sequence}`}
     >
@@ -112,7 +126,7 @@ export const MessageItem = memo(function MessageItem({
           ) : null}
           {message.content ? (
             <div className={cn("message-body", message.editedAt && "edited")}>
-              <Markdown content={message.content} emojis={emojis} />
+              <Markdown content={message.content} emojis={emojis} mentions={mentionCtx} />
               {message.editedAt ? (
                 <Tooltip>
                   <TooltipTrigger asChild>

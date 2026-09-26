@@ -49,6 +49,10 @@
       {
         "name": "WORKSPACE_HUB",
         "class_name": "WorkspaceHub"
+      },
+      {
+        "name": "USER_HUB",
+        "class_name": "UserHub"
       }
     ]
   },
@@ -56,6 +60,10 @@
     {
       "tag": "v1",
       "new_sqlite_classes": ["WorkspaceHub"]
+    },
+    {
+      "tag": "v2",
+      "new_sqlite_classes": ["UserHub"]
     }
   ],
   "queues": {

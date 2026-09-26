@@ -14,7 +14,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
-import { useMe, useUpdateMe } from "@/lib/queries";
+import { useMe, useUpdateMe, useWorkspaces } from "@/lib/queries";
+import { browserNotificationsSupported, useNotificationPrefs } from "@/lib/notifications";
 import { useTheme, type Theme } from "@/lib/theme";
 import { authClient } from "@/lib/auth-client";
 import { errorMessage } from "@/lib/api";
@@ -341,25 +342,74 @@ function ChangePassword() {
 // ---------------------------------------------------------------------------
 
 function NotificationsTab() {
+  const [prefs, setPrefs] = useNotificationPrefs();
+  const workspaces = useWorkspaces().data ?? [];
+  const supported = browserNotificationsSupported();
+  const [permission, setPermission] = useState<NotificationPermission | "unsupported">(supported ? Notification.permission : "unsupported");
+
+  const setDesktop = async (on: boolean) => {
+    if (on && permission !== "granted") {
+      const result = await Notification.requestPermission();
+      setPermission(result);
+      if (result !== "granted") {
+        toast.error("Your browser blocked notifications. Allow them for this site in the browser's settings, then try again.");
+        return;
+      }
+    }
+    setPrefs((p) => ({ ...p, desktop: on }));
+  };
+
+  const toggleMuted = (id: string, muted: boolean) =>
+    setPrefs((p) => ({ ...p, mutedWorkspaces: muted ? [...p.mutedWorkspaces, id] : p.mutedWorkspaces.filter((w) => w !== id) }));
+
   return (
-    <div className="grid gap-6">
-      <h2 className="text-base font-semibold">Notifications</h2>
-      <p className="text-sm text-muted-foreground">Notification preferences are coming soon.</p>
-      <div className="grid gap-3">
-        {[
-          { id: "desktop", label: "Desktop notifications", description: "Show a browser notification when you receive a message" },
-          { id: "sounds", label: "Sounds", description: "Play sounds for incoming messages and events" },
-        ].map((item) => (
-          <div key={item.id} className="flex items-center justify-between rounded-md border border-border px-4 py-3 opacity-50">
-            <div>
-              <p className="text-sm font-medium">{item.label}</p>
-              <p className="text-xs text-muted-foreground">{item.description}</p>
-            </div>
-            <Switch disabled aria-label={item.label} />
-          </div>
-        ))}
+    <div className="grid max-w-lg gap-6">
+      <div className="space-y-1">
+        <h2 className="text-base font-semibold">Notifications</h2>
+        <p className="text-sm text-muted-foreground">You're notified when someone mentions you (@you, @everyone or @here), replies to you, or sends you a direct message. These settings are for this device.</p>
       </div>
-      <p className="text-xs text-muted-foreground">These settings are not wired yet and will be enabled in a future update.</p>
+      <div className="grid gap-3">
+        <div className="flex items-center justify-between gap-4 rounded-md border px-4 py-3">
+          <div>
+            <p className="text-sm font-medium">Desktop notifications</p>
+            <p className="text-xs text-muted-foreground">
+              {!supported
+                ? "This browser doesn't support notifications."
+                : permission === "denied"
+                  ? "Blocked by your browser. Allow notifications for this site in the browser's settings."
+                  : "Show a notification while this app is open in a tab."}
+            </p>
+          </div>
+          <Switch checked={prefs.desktop && permission === "granted"} onCheckedChange={(v) => void setDesktop(v)} disabled={!supported || permission === "denied"} aria-label="Desktop notifications" />
+        </div>
+        <div className="flex items-center justify-between gap-4 rounded-md border px-4 py-3">
+          <div>
+            <p className="text-sm font-medium">Show message text</p>
+            <p className="text-xs text-muted-foreground">Turn off to show only who sent it, e.g. on a shared screen.</p>
+          </div>
+          <Switch checked={prefs.showText} onCheckedChange={(v) => setPrefs((p) => ({ ...p, showText: v }))} aria-label="Show message text" />
+        </div>
+      </div>
+      {workspaces.length ? (
+        <div className="grid gap-2">
+          <p className="text-sm font-medium">Workspaces</p>
+          <p className="text-xs text-muted-foreground">A muted workspace never shows desktop notifications. Mention badges still count.</p>
+          <ul className="divide-y rounded-md border">
+            {workspaces.map((w) => {
+              const muted = prefs.mutedWorkspaces.includes(w.id);
+              return (
+                <li key={w.id} className="flex items-center justify-between gap-3 px-4 py-2.5">
+                  <span className="truncate text-sm">{w.name}</span>
+                  <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                    Mute
+                    <Switch checked={muted} onCheckedChange={(v) => toggleMuted(w.id, v)} aria-label={`Mute ${w.name}`} />
+                  </label>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ) : null}
     </div>
   );
 }

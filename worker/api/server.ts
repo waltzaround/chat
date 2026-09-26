@@ -10,6 +10,8 @@ import { emailEnabled } from "../email";
 import { parseBody } from "../lib/validate";
 import { registrationPolicy, serverOwnerId, setRegistrationPolicy, setWorkspaceCreationPolicy, workspaceCreationPolicy } from "../instance";
 import { hubFor } from "../lib/hub";
+import { userHub } from "../lib/notify";
+import { WS_CLOSE } from "@shared/events";
 import { deleteServerUserSchema, updateServerSettingsSchema } from "@shared/schemas";
 import { deleteAccount } from "../lib/accounts";
 import type { PasswordResetLink, ServerSettings, ServerUser } from "@shared/types";
@@ -94,7 +96,10 @@ serverRoutes.post("/users/:userId/suspension", async (c) => {
     .select({ workspaceId: schema.workspaceMembers.workspaceId })
     .from(schema.workspaceMembers)
     .where(and(eq(schema.workspaceMembers.userId, userId), eq(schema.workspaceMembers.status, "active")));
-  await Promise.all(memberships.map((m) => hubFor(c.env, m.workspaceId).disconnectUser(userId, "suspended").catch((err) => console.error("disconnect failed", err))));
+  await Promise.all([
+    ...memberships.map((m) => hubFor(c.env, m.workspaceId).disconnectUser(userId, "suspended").catch((err) => console.error("disconnect failed", err))),
+    userHub(c.env, userId).disconnect(WS_CLOSE.UNAUTHENTICATED, "suspended").catch((err) => console.error("disconnect failed", err)),
+  ]);
   return c.body(null, 204);
 });
 

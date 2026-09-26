@@ -306,6 +306,19 @@ export const customEmojis = sqliteTable(
   (t) => [uniqueIndex("custom_emojis_workspace_name_idx").on(t.workspaceId, t.name)],
 );
 
+/** Who a message notifies. Unread mention badges count rows past the reader's read marker. */
+export const messageMentions = sqliteTable(
+  "message_mentions",
+  {
+    messageId: text("message_id").notNull().references(() => messages.id, { onDelete: "cascade" }),
+    userId: text("user_id").notNull(),
+    workspaceId: text("workspace_id").notNull(),
+    channelId: text("channel_id").notNull(),
+    sequence: integer("sequence").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.messageId, t.userId] }), index("message_mentions_user_idx").on(t.userId, t.channelId, t.sequence)],
+);
+
 /** A member flagged a message for moderators. One per reporter per message. */
 export const messageReports = sqliteTable(
   "message_reports",
@@ -373,6 +386,7 @@ export const schema = {
   voiceChannelMeetings,
   customEmojis,
   messageReports,
+  messageMentions,
   auditLog,
   rateLimits,
 };

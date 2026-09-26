@@ -35,6 +35,8 @@ export interface WorkspaceSummary {
   iconUrl: string | null;
   ownerUserId: string;
   memberCount: number;
+  /** Unread messages that mention you, across the channels you can see. */
+  mentionCount: number;
 }
 
 export interface Category {
@@ -58,6 +60,8 @@ export interface Channel {
   /** Resolved permissions of the requesting user in this channel. */
   permissions: PermissionBits;
   lastReadSequence: number;
+  /** Unread messages here that mention you. */
+  mentionCount: number;
 }
 
 export interface Role {

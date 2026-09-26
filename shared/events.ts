@@ -5,7 +5,7 @@
  */
 import { z } from "zod";
 import { emojiSchema, idSchema, messageContentSchema } from "./schemas";
-import type { Message, PresenceStatus, ReactionSummary } from "./types";
+import type { Message, PresenceStatus, ReactionSummary, UserSummary } from "./types";
 
 // ---------------------------------------------------------------------------
 // Client → Server
@@ -105,3 +105,23 @@ export const WS_CLOSE = {
   REPLACED: 4010,
   SERVER_RESTART: 4012,
 } as const;
+
+// ---------------------------------------------------------------------------
+// Per-user channel (/ws/me → UserHub): reaches you whichever workspace is open
+// ---------------------------------------------------------------------------
+
+export interface NotificationPayload {
+  kind: "mention" | "dm";
+  workspaceId: string;
+  workspaceName: string;
+  channelId: string;
+  channelName: string;
+  messageId: string;
+  sequence: number;
+  author: UserSummary;
+  /** Start of the message text, for the notification body. */
+  preview: string;
+  createdAt: string;
+}
+
+export type UserEvent = { type: "notification"; notification: NotificationPayload } | { type: "pong" };

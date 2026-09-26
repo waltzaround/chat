@@ -209,6 +209,30 @@ export const workspaceCache = {
       return { ...ws, channels: ws.channels.map((c) => (c.id === channelId ? (typeof patch === "function" ? patch(c) : { ...c, ...patch }) : c)) };
     });
   },
+
+  /** Adjust a workspace's mention badge in the rail. */
+  addWorkspaceMentions(qc: QueryClient, workspaceId: string, delta: number) {
+    qc.setQueryData<WorkspaceSummary[]>(keys.workspaces, (list) => list?.map((w) => (w.id === workspaceId ? { ...w, mentionCount: Math.max(0, w.mentionCount + delta) } : w)));
+  },
+
+  /** A message mentioning you arrived in a channel you aren't reading. */
+  addMention(qc: QueryClient, workspaceId: string, channelId: string, sequence: number) {
+    workspaceCache.patchChannel(qc, workspaceId, channelId, (c) => ({ ...c, mentionCount: c.mentionCount + 1, lastSequence: Math.max(c.lastSequence, sequence) }));
+    workspaceCache.addWorkspaceMentions(qc, workspaceId, 1);
+  },
+
+  /** Move the read marker; once caught up, the channel's mentions are read too. Returns how many were cleared. */
+  markChannelRead(qc: QueryClient, workspaceId: string, channelId: string, sequence: number): number {
+    let cleared = 0;
+    workspaceCache.patchChannel(qc, workspaceId, channelId, (c) => {
+      const lastReadSequence = Math.max(c.lastReadSequence, sequence);
+      const caughtUp = lastReadSequence >= c.lastSequence && c.mentionCount > 0;
+      if (caughtUp) cleared = c.mentionCount;
+      return lastReadSequence === c.lastReadSequence && !caughtUp ? c : { ...c, lastReadSequence, mentionCount: caughtUp ? 0 : c.mentionCount };
+    });
+    if (cleared) workspaceCache.addWorkspaceMentions(qc, workspaceId, -cleared);
+    return cleared;
+  },
 };
 
 // ---------------------------------------------------------------------------

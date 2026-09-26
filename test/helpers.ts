@@ -104,6 +104,16 @@ export interface Collected {
   close: () => void;
 }
 
+/** The per-user socket that carries mention and DM notifications. */
+export async function openUserSocket(s: Session): Promise<Collected & { ws: WebSocket }> {
+  const res = await SELF.fetch(`${ORIGIN}/ws/me`, { headers: { Upgrade: "websocket", Cookie: s.cookie, Origin: ORIGIN } });
+  if (res.status !== 101) throw new Error(`WebSocket upgrade failed: ${res.status} ${await res.text()}`);
+  const ws = res.webSocket!;
+  const collected = collect(ws);
+  ws.accept();
+  return { ...collected, ws };
+}
+
 export function collect(ws: WebSocket): Collected {
   const events: Array<{ type: string } & Record<string, unknown>> = [];
   const waiters: Array<{ pred: (e: { type: string } & Record<string, unknown>) => boolean; resolve: (e: never) => void }> = [];

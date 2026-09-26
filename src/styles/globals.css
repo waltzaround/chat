@@ -168,6 +168,13 @@
 .message-body del {
   @apply opacity-70;
 }
+/* @mentions: yours (and @everyone/@here) stand out more */
+.message-body .mention {
+  @apply rounded-sm bg-primary/15 px-0.5 font-medium text-primary;
+}
+.message-body .mention-me {
+  @apply bg-warning/25 text-foreground;
+}
 /* Custom emoji rendered inline with text */
 .message-body img.emoji {
   @apply inline-block size-[1.375em] object-contain align-[-0.3em];

@@ -7,13 +7,14 @@ import { uploadFile } from "@/lib/uploads";
 import { errorMessage } from "@/lib/api";
 import { formatBytes } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { useEmojis } from "@/lib/queries";
+import { useEmojis, useMe, useMembers } from "@/lib/queries";
 import type { EmojiEntry } from "@/lib/emoji";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Progress } from "@/components/ui/progress";
 import { EmojiPicker } from "./EmojiPicker";
 import { EmojiAutocomplete, findShortcodeAtCaret, useAutocompleteResults, type ShortcodeMatch } from "./EmojiAutocomplete";
+import { MentionAutocomplete, findMentionAtCaret, useMentionSuggestions, type MentionOption } from "./MentionAutocomplete";
 import { MAX_ATTACHMENTS_PER_MESSAGE, MAX_UPLOAD_BYTES, MESSAGE_MAX_LENGTH } from "@shared/schemas";
 import type { Attachment, Channel, Message, ReplyContext } from "@shared/types";
 
@@ -59,6 +60,12 @@ export function MessageComposer({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const canAttach = hasPermission(channel.permissions, Permission.ATTACH_FILES) && !editing;
   const suggestions = useAutocompleteResults(match, customEmojis);
+  const [mention, setMention] = useState<ShortcodeMatch | null>(null);
+  const members = useMembers(channel.workspaceId).data;
+  const meId = useMe().data?.id;
+  const mentionOptions = useMentionSuggestions(mention, members, hasPermission(channel.permissions, Permission.MENTION_EVERYONE), meId);
+  const emojiActive = !!match && suggestions.length > 0;
+  const mentionActive = !emojiActive && !!mention && mentionOptions.length > 0;
 
   // Enter/leave edit mode.
   useEffect(() => {
@@ -101,12 +108,31 @@ export function MessageComposer({
 
   /** Recompute the `:shortcode` under the caret; called after any edit or caret move. */
   const refreshMatch = useCallback((text: string, caret: number) => {
+    const at = findMentionAtCaret(text, caret);
+    const atDismissed = at && dismissedFor.current === `@${at.start}:${at.query}`;
+    setMention((prev) => (atDismissed || !at ? null : prev?.start === at.start && prev?.query === at.query ? prev : at));
+    if (!at || at.query !== mention?.query) setSelected(0);
     const m = findShortcodeAtCaret(text, caret);
     if (m && dismissedFor.current === `${m.start}:${m.query}`) return setMatch(null);
     if (!m) dismissedFor.current = null;
     setMatch((prev) => (prev?.start === m?.start && prev?.query === m?.query ? prev : m));
     if (!m || m.query !== match?.query) setSelected(0);
-  }, [match?.query]);
+  }, [match?.query, mention?.query]);
+
+  const insertMention = useCallback(
+    (option: MentionOption, range: { start: number; end: number }) => {
+      const el = textareaRef.current;
+      const insertion = `@${option.username} `;
+      const next = value.slice(0, range.start) + insertion + value.slice(range.end);
+      setValue(next);
+      setMention(null);
+      requestAnimationFrame(() => {
+        el?.focus();
+        el?.setSelectionRange(range.start + insertion.length, range.start + insertion.length);
+      });
+    },
+    [value],
+  );
 
   const insertEmoji = useCallback(
     (entry: EmojiEntry, range?: { start: number; end: number }) => {
@@ -193,6 +219,7 @@ export function MessageComposer({
     rt.stopTyping(channel.id);
     setValue("");
     setMatch(null);
+    setMention(null);
     localStorage.removeItem(draftKey(channel.id));
     for (const u of uploads) if (u.previewUrl) URL.revokeObjectURL(u.previewUrl);
     setUploads([]);
@@ -201,6 +228,25 @@ export function MessageComposer({
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     // Autocomplete navigation takes precedence while suggestions are showing.
+    if (mentionActive && mention) {
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        const step = e.key === "ArrowDown" ? 1 : -1;
+        setSelected((i) => (i + step + mentionOptions.length) % mentionOptions.length);
+        return;
+      }
+      if (e.key === "Enter" || e.key === "Tab") {
+        e.preventDefault();
+        insertMention(mentionOptions[selected] ?? mentionOptions[0]!, mention);
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        dismissedFor.current = `@${mention.start}:${mention.query}`;
+        setMention(null);
+        return;
+      }
+    }
     if (match && suggestions.length > 0) {
       if (e.key === "ArrowDown") {
         e.preventDefault();
@@ -273,6 +319,9 @@ export function MessageComposer({
       onDragLeave={() => setDragging(false)}
       onDrop={onDrop}
     >
+      {mentionActive && mention ? (
+        <MentionAutocomplete options={mentionOptions} selected={selected} onSelectedChange={setSelected} onPick={(o) => insertMention(o, mention)} />
+      ) : null}
       {match && suggestions.length > 0 ? (
         <EmojiAutocomplete match={match} customEmojis={customEmojis} selected={selected} onSelectedChange={setSelected} onPick={(entry) => insertEmoji(entry, { start: match.start, end: match.end })} />
       ) : null}
@@ -347,7 +396,10 @@ export function MessageComposer({
           onBlur={() => {
             rt.stopTyping(channel.id);
             // Delay so a mousedown on a suggestion can insert before the list disappears.
-            setTimeout(() => setMatch(null), 120);
+            setTimeout(() => {
+              setMatch(null);
+              setMention(null);
+            }, 120);
           }}
           placeholder={placeholder}
           disabled={disabled}
@@ -355,8 +407,8 @@ export function MessageComposer({
           maxLength={MESSAGE_MAX_LENGTH + 200}
           aria-label={placeholder}
           aria-autocomplete="list"
-          aria-controls={match && suggestions.length ? "emoji-autocomplete" : undefined}
-          aria-activedescendant={match && suggestions.length ? `emoji-option-${selected}` : undefined}
+          aria-controls={mentionActive ? "mention-autocomplete" : emojiActive ? "emoji-autocomplete" : undefined}
+          aria-activedescendant={mentionActive ? `mention-option-${selected}` : emojiActive ? `emoji-option-${selected}` : undefined}
           className="max-h-80 min-h-[36px] flex-1 resize-none bg-transparent px-1 py-1.5 text-[0.95rem] leading-snug outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed"
         />
         {remaining < 200 ? (

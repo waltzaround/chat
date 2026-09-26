@@ -1,8 +1,9 @@
 import { useState } from "react";
+import { MentionBadge } from "@/components/common/MentionBadge";
 import { NavLink, useParams } from "react-router";
 import { Compass, Plus } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { useMe, useWorkspaces } from "@/lib/queries";
+import { useMe, useWorkspace, useWorkspaces } from "@/lib/queries";
 import { cn } from "@/lib/utils";
 import { WorkspaceIcon } from "./WorkspaceIcon";
 import { CreateWorkspaceDialog } from "./CreateWorkspaceDialog";
@@ -14,6 +15,10 @@ export function WorkspaceRail() {
   const { workspaceId } = useParams();
   const [createOpen, setCreateOpen] = useState(false);
   const canCreate = useMe().data?.canCreateWorkspace ?? false;
+  // The open workspace's per-channel counts are the freshest source for its badge.
+  const openWorkspace = useWorkspace(workspaceId).data;
+  const mentionsFor = (ws: { id: string; mentionCount: number }) =>
+    ws.id === openWorkspace?.id ? openWorkspace.channels.reduce((sum, c) => sum + c.mentionCount, 0) : ws.mentionCount;
   const [joinOpen, setJoinOpen] = useState(false);
 
   return (
@@ -44,9 +49,13 @@ export function WorkspaceRail() {
                         )}
                       >
                         <WorkspaceIcon workspace={ws} size="lg" className={cn("transition-all", active ? "rounded-xl" : "group-hover:rounded-xl")} />
+                        <MentionBadge count={mentionsFor(ws)} className="absolute -right-1 -bottom-1 ring-2 ring-rail" />
                       </NavLink>
                     </TooltipTrigger>
-                    <TooltipContent side="right">{ws.name}</TooltipContent>
+                    <TooltipContent side="right">
+                      {ws.name}
+                      {mentionsFor(ws) ? ` · ${mentionsFor(ws)} ${mentionsFor(ws) === 1 ? "mention" : "mentions"}` : ""}
+                    </TooltipContent>
                   </Tooltip>
                 </li>
               );

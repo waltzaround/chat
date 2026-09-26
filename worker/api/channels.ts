@@ -8,6 +8,7 @@ import { parseBody, parseQuery } from "../lib/validate";
 import { audit } from "../lib/audit";
 import { hubFor, notifyWorkspace } from "../lib/hub";
 import { loadMessage, loadMessagePage, reactionSummary, softDeleteMessage } from "../lib/messages";
+import { recordMentions } from "../lib/mentions";
 import { checkRateLimit } from "../security/ratelimit";
 import { Permission, hasPermission, requireChannelAccess } from "../permissions/resolve";
 import { createMessageSchema, editMessageSchema, messagesQuerySchema, overwriteSchema, readSchema, updateChannelSchema, emojiSchema } from "@shared/schemas";
@@ -20,7 +21,7 @@ channelRoutes.use("*", requireUser);
 
 channelRoutes.get("/:channelId", async (c) => {
   const { channel, permissions } = await requireChannelAccess(c.get("db"), c.req.param("channelId"), c.get("user").id);
-  return c.json({ id: channel.id, workspaceId: channel.workspaceId, categoryId: channel.categoryId, name: channel.name, topic: channel.topic, kind: channel.kind, position: channel.position, lastSequence: channel.lastSequence, permissions, lastReadSequence: 0 });
+  return c.json({ id: channel.id, workspaceId: channel.workspaceId, categoryId: channel.categoryId, name: channel.name, topic: channel.topic, kind: channel.kind, position: channel.position, lastSequence: channel.lastSequence, permissions, lastReadSequence: 0, mentionCount: 0 });
 });
 
 channelRoutes.patch("/:channelId", async (c) => {
@@ -142,13 +143,14 @@ channelRoutes.post("/:channelId/messages", async (c) => {
 channelRoutes.patch("/:channelId/messages/:messageId", async (c) => {
   const db = c.get("db");
   const user = c.get("user");
-  const { channel } = await requireChannelAccess(db, c.req.param("channelId"), user.id);
+  const { channel, permissions } = await requireChannelAccess(db, c.req.param("channelId"), user.id);
   const input = await parseBody(c, editMessageSchema);
   const row = await db.query.messages.findFirst({ where: and(eq(schema.messages.id, c.req.param("messageId")), eq(schema.messages.channelId, channel.id)) });
   if (!row || row.deletedAt) throw ApiError.notFound("Message");
   if (row.authorUserId !== user.id) throw ApiError.forbidden("You can only edit your own messages");
   checkRateLimit(`edit:${user.id}`, 20, 10_000);
   await db.update(schema.messages).set({ content: input.content, editedAt: new Date() }).where(eq(schema.messages.id, row.id));
+  await recordMentions(db, { ...row, content: input.content }, permissions, () => []);
   const message = (await loadMessage(db, row.id, user.id))!;
   await notifyWorkspace(c.env, channel.workspaceId, { type: "message.updated", message }, channel.id);
   return c.json(message);

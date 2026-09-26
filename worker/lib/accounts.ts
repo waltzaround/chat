@@ -4,6 +4,8 @@ import { schema, type Db } from "../db";
 import { ApiError } from "./errors";
 import { notifyWorkspace } from "./hub";
 import { serverOwnerId } from "../instance";
+import { userHub } from "./notify";
+import { WS_CLOSE } from "@shared/events";
 import { fileUrl, iso, isoRequired } from "./serialize";
 
 /**
@@ -48,7 +50,10 @@ export async function deleteAccount(env: Env, db: Db, userId: string, opts: { de
   ]);
 
   // Leaving each workspace also closes the person's open connections there.
-  await Promise.all(memberships.map((m) => notifyWorkspace(env, m.workspaceId, { type: "member.removed", userId, reason: "left" })));
+  await Promise.all([
+    ...memberships.map((m) => notifyWorkspace(env, m.workspaceId, { type: "member.removed", userId, reason: "left" })),
+    userHub(env, userId).disconnect(WS_CLOSE.UNAUTHENTICATED, "deleted").catch((err) => console.error("disconnect failed", err)),
+  ]);
   await deletePrefix(env, `avatars/${userId}/`);
   if (opts.deleteMessages) await env.BACKGROUND_QUEUE.send({ type: "user.messages.delete", userId });
 }

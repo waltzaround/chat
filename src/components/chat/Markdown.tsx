@@ -4,13 +4,14 @@ import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
 import type { CustomEmoji } from "@shared/types";
 import { CUSTOM_EMOJI_URL_PREFIX, expandShortcodes } from "@/lib/emoji";
+import { remarkMentions, type MentionContext } from "@/lib/mentions";
 
 /**
  * Lightweight, safe Markdown. react-markdown never renders raw HTML; we
  * further restrict the element set and only allow http(s)/mailto links plus
  * same-origin custom-emoji images.
  */
-const ALLOWED = ["p", "br", "strong", "em", "del", "code", "pre", "a", "blockquote", "ul", "ol", "li", "text", "img"];
+const ALLOWED = ["p", "br", "strong", "em", "del", "code", "pre", "a", "blockquote", "ul", "ol", "li", "text", "img", "span"];
 
 const components: Components = {
   a: ({ href, children }) => (
@@ -49,14 +50,15 @@ function urlTransform(url: string): string {
 
 const EMPTY = new Map<string, CustomEmoji>();
 
-export const Markdown = memo(function Markdown({ content, emojis = EMPTY }: { content: string; emojis?: Map<string, CustomEmoji> }) {
+export const Markdown = memo(function Markdown({ content, emojis = EMPTY, mentions }: { content: string; emojis?: Map<string, CustomEmoji>; mentions?: MentionContext }) {
   const expanded = useMemo(() => expandShortcodes(content, emojis), [content, emojis]);
   // A message made only of emoji renders larger, like most chat apps.
   const jumbo = useMemo(() => isEmojiOnly(expanded), [expanded]);
+  const plugins = useMemo(() => (mentions ? [remarkGfm, remarkBreaks, remarkMentions(mentions)] : [remarkGfm, remarkBreaks]), [mentions]);
   return (
     <div className={jumbo ? "jumbo-emoji" : undefined}>
       <ReactMarkdown
-        remarkPlugins={[remarkGfm, remarkBreaks]}
+        remarkPlugins={plugins}
         allowedElements={[...ALLOWED, "h1", "h2", "h3", "h4", "h5", "h6", "hr", "table", "thead", "tbody", "tr", "th", "td", "input"]}
         unwrapDisallowed
         skipHtml

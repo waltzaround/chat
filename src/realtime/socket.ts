@@ -3,8 +3,8 @@ import { WS_CLOSE } from "@shared/events";
 
 export type SocketStatus = "connecting" | "open" | "reconnecting" | "closed";
 
-export interface SocketCallbacks {
-  onEvent: (event: ServerEvent) => void;
+export interface SocketCallbacks<E extends { type: string } = ServerEvent> {
+  onEvent: (event: E) => void;
   onStatus: (status: SocketStatus, attempt: number) => void;
   /** Called when the server tells us not to retry (auth/permission). */
   onFatal: (code: number, reason: string) => void;
@@ -14,11 +14,12 @@ const HEARTBEAT_MS = 30_000;
 const MAX_BACKOFF_MS = 30_000;
 
 /**
- * Reconnecting WebSocket to a WorkspaceHub. Reconnects are a normal condition:
+ * Reconnecting WebSocket to a hub: a WorkspaceHub (/ws/workspaces/:id), or the
+ * per-user UserHub (/ws/me) with its own event type. Reconnects are a normal condition:
  * exponential backoff with jitter, a heartbeat that also detects dead sockets,
  * and immediate retry when the tab regains connectivity or focus.
  */
-export class WorkspaceSocket {
+export class WorkspaceSocket<E extends { type: string } = ServerEvent> {
   private ws: WebSocket | null = null;
   private attempt = 0;
   private closedByUser = false;
@@ -28,8 +29,8 @@ export class WorkspaceSocket {
   private queue: string[] = [];
 
   constructor(
-    private readonly workspaceId: string,
-    private readonly callbacks: SocketCallbacks,
+    private readonly path: string,
+    private readonly callbacks: SocketCallbacks<E>,
   ) {
     window.addEventListener("online", this.handleOnline);
     document.addEventListener("visibilitychange", this.handleVisibility);
@@ -40,7 +41,7 @@ export class WorkspaceSocket {
     if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) return;
     this.callbacks.onStatus(this.attempt === 0 ? "connecting" : "reconnecting", this.attempt);
     const proto = location.protocol === "https:" ? "wss:" : "ws:";
-    const ws = new WebSocket(`${proto}//${location.host}/ws/workspaces/${this.workspaceId}`);
+    const ws = new WebSocket(`${proto}//${location.host}${this.path}`);
     this.ws = ws;
 
     ws.onopen = () => {
@@ -51,9 +52,9 @@ export class WorkspaceSocket {
       this.startHeartbeat();
     };
     ws.onmessage = (ev) => {
-      let data: ServerEvent;
+      let data: E;
       try {
-        data = JSON.parse(String(ev.data)) as ServerEvent;
+        data = JSON.parse(String(ev.data)) as E;
       } catch {
         return;
       }

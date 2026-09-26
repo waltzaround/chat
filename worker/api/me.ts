@@ -10,6 +10,7 @@ import { canCreateWorkspace, registrationPolicy, serverOwnerId } from "../instan
 import { emailEnabled } from "../email";
 import { deleteAccountSchema, updateMeSchema } from "@shared/schemas";
 import { deleteAccount, exportAccount } from "../lib/accounts";
+import { unreadMentionCounts } from "../lib/mentions";
 import { checkRateLimit } from "../security/ratelimit";
 import type { AuthConfig, WorkspaceSummary } from "@shared/types";
 
@@ -117,6 +118,7 @@ meRoutes.get("/me/workspaces", async (c) => {
     .innerJoin(schema.workspaces, eq(schema.workspaces.id, schema.workspaceMembers.workspaceId))
     .where(and(eq(schema.workspaceMembers.userId, user.id), eq(schema.workspaceMembers.status, "active")))
     .orderBy(schema.workspaceMembers.joinedAt);
-  const body: WorkspaceSummary[] = rows.map((r) => toWorkspaceSummary(r.workspace, Number(r.memberCount)));
+  const mentions = await unreadMentionCounts(c.get("db"), user.id, "workspace");
+  const body: WorkspaceSummary[] = rows.map((r) => toWorkspaceSummary(r.workspace, Number(r.memberCount), mentions.get(r.workspace.id) ?? 0));
   return c.json(body);
 });

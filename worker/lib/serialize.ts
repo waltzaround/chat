@@ -38,7 +38,7 @@ export function toCurrentUser(u: UserRow, server: { ownerId: string | null; canC
   };
 }
 
-export function toWorkspaceSummary(w: WorkspaceRow, memberCount: number): WorkspaceSummary {
+export function toWorkspaceSummary(w: WorkspaceRow, memberCount: number, mentionCount = 0): WorkspaceSummary {
   return {
     id: w.id,
     name: w.name,
@@ -46,5 +46,6 @@ export function toWorkspaceSummary(w: WorkspaceRow, memberCount: number): Worksp
     iconUrl: fileUrl(w.iconKey),
     ownerUserId: w.ownerUserId,
     memberCount,
+    mentionCount,
   };
 }

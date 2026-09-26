@@ -9,6 +9,7 @@ import { audit } from "../lib/audit";
 import { notifyWorkspace } from "../lib/hub";
 import { canCreateWorkspace } from "../instance";
 import { hydrateMessages } from "../lib/messages";
+import { unreadMentionCounts } from "../lib/mentions";
 import { fileUrl, iso, isoRequired, toUserSummary, toWorkspaceSummary } from "../lib/serialize";
 import { track } from "../analytics/track";
 import { checkRateLimit } from "../security/ratelimit";
@@ -65,11 +66,12 @@ async function memberCount(db: AppEnv["Variables"]["db"], workspaceId: string): 
 }
 
 async function buildWorkspaceDetail(db: AppEnv["Variables"]["db"], ctx: MemberContext): Promise<WorkspaceDetail> {
-  const [categories, channelPerms, readStates, count] = await Promise.all([
+  const [categories, channelPerms, readStates, count, mentions] = await Promise.all([
     db.query.categories.findMany({ where: eq(schema.categories.workspaceId, ctx.workspaceId), orderBy: asc(schema.categories.position) }),
     resolveAllChannelPermissions(db, ctx),
     db.query.channelReadStates.findMany({ where: eq(schema.channelReadStates.userId, ctx.userId) }),
     memberCount(db, ctx.workspaceId),
+    unreadMentionCounts(db, ctx.userId, "channel", ctx.workspaceId),
   ]);
   const readBy = new Map(readStates.map((r) => [r.channelId, r.lastReadSequence]));
   const channels: Channel[] = [...channelPerms.values()]
@@ -86,9 +88,11 @@ async function buildWorkspaceDetail(db: AppEnv["Variables"]["db"], ctx: MemberCo
       lastSequence: channel.lastSequence,
       permissions,
       lastReadSequence: readBy.get(channel.id) ?? 0,
+      mentionCount: mentions.get(channel.id) ?? 0,
     }));
+  const visibleMentions = channels.reduce((sum, ch) => sum + ch.mentionCount, 0);
   return {
-    ...toWorkspaceSummary(ctx.workspace, count),
+    ...toWorkspaceSummary(ctx.workspace, count, visibleMentions),
     categories: categories.map((cat) => ({ id: cat.id, workspaceId: cat.workspaceId, name: cat.name, position: cat.position })),
     channels,
     roles: ctx.roles.sort((a, b) => b.position - a.position).map(toRole),
