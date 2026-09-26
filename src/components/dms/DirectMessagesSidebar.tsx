@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { NavLink, useNavigate } from "react-router";
-import { Loader2, Plus, Search } from "lucide-react";
+import { Loader2, Plus, Search, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { UserAvatar } from "@/components/common/UserAvatar";
 import { MentionBadge } from "@/components/common/MentionBadge";
 import { UserPanel } from "@/components/channels/UserPanel";
-import { useDmPeople, useDms, useOpenDm } from "@/lib/queries";
+import { useCloseDm, useDmPeople, useDms, useOpenDm } from "@/lib/queries";
 import { errorMessage } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -16,6 +16,8 @@ import { cn } from "@/lib/utils";
 export function DirectMessagesSidebar({ activeWorkspaceId, onNavigate }: { activeWorkspaceId?: string; onNavigate?: () => void }) {
   const dms = useDms();
   const [newOpen, setNewOpen] = useState(false);
+  const close = useCloseDm();
+  const navigate = useNavigate();
 
   return (
     <aside className="flex w-60 shrink-0 flex-col border-r border-sidebar-border bg-sidebar" aria-label="Direct messages">
@@ -33,7 +35,7 @@ export function DirectMessagesSidebar({ activeWorkspaceId, onNavigate }: { activ
             {dms.data.map((dm) => {
               const active = dm.workspaceId === activeWorkspaceId;
               return (
-                <li key={dm.workspaceId}>
+                <li key={dm.workspaceId} className="group/dm relative">
                   <NavLink
                     to={`/w/${dm.workspaceId}/c/${dm.channelId}`}
                     onClick={onNavigate}
@@ -46,8 +48,16 @@ export function DirectMessagesSidebar({ activeWorkspaceId, onNavigate }: { activ
                   >
                     <UserAvatar user={dm.peer} size="sm" />
                     <span className="min-w-0 flex-1 truncate">{dm.peer.displayName}</span>
-                    {!active ? <MentionBadge count={dm.unreadCount} noun="message" /> : null}
+                    {!active ? <MentionBadge count={dm.unreadCount} noun="message" className="group-hover/dm:hidden" /> : null}
                   </NavLink>
+                  <button
+                    type="button"
+                    aria-label={`Close conversation with ${dm.peer.displayName}`}
+                    onClick={() => close.mutate(dm.workspaceId, { onSuccess: () => active && navigate("/dms") })}
+                    className="absolute top-1/2 right-1.5 hidden size-6 -translate-y-1/2 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:flex group-hover/dm:flex"
+                  >
+                    <X className="size-3.5" aria-hidden />
+                  </button>
                 </li>
               );
             })}

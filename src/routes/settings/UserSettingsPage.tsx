@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useParams } from "react-router";
-import { LogOut, Monitor, Moon, Sun, User, Bell, Mic, Server } from "lucide-react";
+import { LogOut, Monitor, Moon, Sun, User, Bell, Mic, Server, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { SettingsLayout } from "./SettingsLayout";
 import { RegistrationPolicyPicker, WorkspaceCreationPicker } from "@/components/onboarding/RegistrationPolicyPicker";
@@ -15,7 +15,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
-import { useMe, useUpdateMe, useWorkspaces } from "@/lib/queries";
+import { useBlocks, useMe, useSetBlocked, useUpdateMe, useWorkspaces } from "@/lib/queries";
+import { UserAvatar } from "@/components/common/UserAvatar";
 import { browserNotificationsSupported, useNotificationPrefs } from "@/lib/notifications";
 import { useTheme, type Theme } from "@/lib/theme";
 import { authClient } from "@/lib/auth-client";
@@ -27,6 +28,7 @@ const TABS = [
   { id: "profile", label: "Profile", icon: <User className="size-3.5" /> },
   { id: "appearance", label: "Appearance", icon: <Monitor className="size-3.5" /> },
   { id: "notifications", label: "Notifications", icon: <Bell className="size-3.5" /> },
+  { id: "privacy", label: "Privacy", icon: <ShieldCheck className="size-3.5" /> },
   { id: "voice", label: "Voice & Video", icon: <Mic className="size-3.5" /> },
 ];
 
@@ -74,6 +76,7 @@ export function UserSettingsPage() {
       )}
       {activeTab === "appearance" && <AppearanceTab />}
       {activeTab === "notifications" && <NotificationsTab />}
+      {activeTab === "privacy" && <PrivacyTab />}
       {activeTab === "voice" && <VoiceTab />}
       {activeTab === "server" && <ServerTab />}
     </SettingsLayout>
@@ -340,6 +343,45 @@ function ChangePassword() {
         </Button>
       </div>
     </form>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Privacy tab
+// ---------------------------------------------------------------------------
+
+function PrivacyTab() {
+  const blocks = useBlocks();
+  const setBlocked = useSetBlocked();
+  return (
+    <div className="grid max-w-lg gap-6">
+      <div className="space-y-1">
+        <h2 className="text-base font-semibold">Privacy</h2>
+        <p className="text-sm text-muted-foreground">
+          When you block someone, neither of you can send direct messages to the other, their mentions and replies don't notify you, and their messages are hidden behind "Show message". They aren't told. Block someone from their profile card.
+        </p>
+      </div>
+      <div className="grid gap-2">
+        <p className="text-sm font-medium">Blocked people</p>
+        {blocks.data?.length ? (
+          <ul className="divide-y rounded-md border">
+            {blocks.data.map((u) => (
+              <li key={u.id} className="flex items-center gap-3 px-3 py-2">
+                <UserAvatar user={u} size="sm" />
+                <span className="min-w-0 flex-1 truncate text-sm">
+                  {u.displayName} <span className="text-muted-foreground">@{u.username}</span>
+                </span>
+                <Button type="button" size="sm" variant="outline" onClick={() => setBlocked.mutate({ userId: u.id, blocked: false })} disabled={setBlocked.isPending}>
+                  Unblock
+                </Button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="rounded-md border px-3 py-4 text-center text-sm text-muted-foreground">{blocks.isPending ? "Loading…" : "You haven't blocked anyone."}</p>
+        )}
+      </div>
+    </div>
   );
 }
 

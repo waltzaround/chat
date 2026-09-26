@@ -5,6 +5,8 @@ import { ChannelHeader } from "./ChannelHeader";
 import { MessageList } from "./MessageList";
 import { MessageComposer, type ComposerReply } from "./MessageComposer";
 import { TypingIndicator } from "./TypingIndicator";
+import { DmHeaderMenu } from "@/components/dms/DmHeaderMenu";
+import { useBlockedIds } from "@/lib/queries";
 import type { Channel, Message, WorkspaceDetail } from "@shared/types";
 
 export function TextChannelView({ channel, workspace, embedded }: { channel: Channel; workspace: WorkspaceDetail; embedded?: boolean }) {
@@ -26,10 +28,17 @@ export function TextChannelView({ channel, workspace, embedded }: { channel: Cha
   }, []);
 
   const canSend = hasPermission(channel.permissions, Permission.SEND_MESSAGES);
+  const blocked = useBlockedIds();
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      {!embedded ? <ChannelHeader channel={channel} dmPeer={workspace.kind === "dm" ? workspace.dmPeer : undefined} /> : null}
+      {!embedded ? (
+        <ChannelHeader
+          channel={channel}
+          dmPeer={workspace.kind === "dm" ? workspace.dmPeer : undefined}
+          actions={workspace.kind === "dm" ? <DmHeaderMenu workspaceId={workspace.id} peer={workspace.dmPeer} /> : undefined}
+        />
+      ) : null}
       <MessageList key={channel.id} channel={channel} workspace={workspace} onReply={onReply} onEdit={onEdit} editingId={editing?.id ?? null} />
       <div className="shrink-0 px-4 pb-4">
         <MessageComposer
@@ -40,6 +49,13 @@ export function TextChannelView({ channel, workspace, embedded }: { channel: Cha
           onDoneEditing={() => setEditing(null)}
           disabled={!canSend}
           placeholderName={workspace.kind === "dm" ? `@${workspace.dmPeer?.displayName ?? "Deleted user"}` : undefined}
+          disabledReason={
+            workspace.kind === "dm" && !canSend
+              ? workspace.dmPeer && blocked.has(workspace.dmPeer.id)
+                ? `You blocked ${workspace.dmPeer.displayName}. Unblock them to message.`
+                : "You can't message this person."
+              : undefined
+          }
         />
         <TypingIndicator channelId={channel.id} workspaceId={workspace.id} />
       </div>

@@ -5,7 +5,8 @@ import { requireUser } from "../auth/middleware";
 import { schema } from "../db";
 import { ApiError } from "../lib/errors";
 import { parseBody } from "../lib/validate";
-import { toCurrentUser, toWorkspaceSummary } from "../lib/serialize";
+import { toCurrentUser, toUserSummary, toWorkspaceSummary } from "../lib/serialize";
+import { notifyWorkspace } from "../lib/hub";
 import { canCreateWorkspace, registrationPolicy, serverOwnerId } from "../instance";
 import { emailEnabled } from "../email";
 import { deleteAccountSchema, updateMeSchema } from "@shared/schemas";
@@ -44,6 +45,43 @@ async function serverContext(db: D1Database, userId: string) {
 
 function credentialAccount(db: D1Database, userId: string) {
   return db.prepare("SELECT password FROM accounts WHERE user_id = ? AND provider_id = 'credential' AND password IS NOT NULL").bind(userId).first<{ password: string }>();
+}
+
+/** People you've blocked. */
+meRoutes.get("/me/blocks", async (c) => {
+  const db = c.get("db");
+  const rows = await db
+    .select({ user: schema.users })
+    .from(schema.userBlocks)
+    .innerJoin(schema.users, eq(schema.users.id, schema.userBlocks.blockedUserId))
+    .where(eq(schema.userBlocks.blockerUserId, c.get("user").id));
+  return c.json(rows.map((r) => toUserSummary(r.user)));
+});
+
+meRoutes.put("/me/blocks/:userId", async (c) => {
+  const me = c.get("user").id;
+  const userId = c.req.param("userId");
+  if (userId === me) throw ApiError.validation(undefined, "You can't block yourself");
+  const target = await c.get("db").query.users.findFirst({ where: eq(schema.users.id, userId) });
+  if (!target) throw ApiError.notFound("User");
+  await c.get("db").insert(schema.userBlocks).values({ blockerUserId: me, blockedUserId: userId, createdAt: new Date() }).onConflictDoNothing();
+  await refreshDm(c.env, c.get("db"), me, userId);
+  return c.body(null, 204);
+});
+
+meRoutes.delete("/me/blocks/:userId", async (c) => {
+  const me = c.get("user").id;
+  const userId = c.req.param("userId");
+  await c.get("db").delete(schema.userBlocks).where(and(eq(schema.userBlocks.blockerUserId, me), eq(schema.userBlocks.blockedUserId, userId)));
+  await refreshDm(c.env, c.get("db"), me, userId);
+  return c.body(null, 204);
+});
+
+/** Their DM's permissions just changed: drop the hub's cache and refresh both clients. */
+async function refreshDm(env: AppEnv["Bindings"], db: AppEnv["Variables"]["db"], a: string, b: string) {
+  const [userA, userB] = a < b ? [a, b] : [b, a];
+  const pair = await db.query.dmPairs.findFirst({ where: and(eq(schema.dmPairs.userA, userA), eq(schema.dmPairs.userB, userB)) });
+  if (pair) await notifyWorkspace(env, pair.workspaceId, { type: "workspace.updated", reason: "members" });
 }
 
 /** Delete your own account. Asks for your username, and your password if you have one. */

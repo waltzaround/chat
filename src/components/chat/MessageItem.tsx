@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { useRealtime } from "@/realtime/RealtimeProvider";
 import type { PendingMessage } from "@/realtime/RealtimeProvider";
 import { Permission, hasPermission } from "@/lib/permissions";
-import { useEmojiMap, useEmojis, useMe, useMembers } from "@/lib/queries";
+import { useBlockedIds, useEmojiMap, useEmojis, useMe, useMembers } from "@/lib/queries";
 import { mentionsUser, type MentionContext } from "@/lib/mentions";
 import { formatFull, formatMessageTimestamp, formatTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -54,6 +54,8 @@ export const MessageItem = memo(function MessageItem({
     () => (me ? { me: me.username.toLowerCase(), known: new Set((members ?? []).map((m) => m.username.toLowerCase())) } : undefined),
     [me, members],
   );
+  const blocked = useBlockedIds();
+  const [revealed, setRevealed] = useState(false);
   // Highlight messages that call for your attention, like other chat apps do.
   const mentionsMe = !isMine && !!me && (mentionsUser(message.content, me.username) || message.replyTo?.author?.id === me.id);
 
@@ -70,6 +72,17 @@ export const MessageItem = memo(function MessageItem({
     await navigator.clipboard.writeText(`${window.location.origin}/w/${workspace.id}/c/${channel.id}?m=${message.sequence}`);
     toast.success("Link copied");
   };
+
+  if (blocked.has(message.author.id) && !revealed) {
+    return (
+      <div className={cn("px-4 py-1 text-xs text-muted-foreground", !compact && "mt-3")} id={`m-${message.sequence}`}>
+        Message from someone you blocked.{" "}
+        <button type="button" className="text-primary hover:underline" onClick={() => setRevealed(true)}>
+          Show message
+        </button>
+      </div>
+    );
+  }
 
   return (
     <article

@@ -2,6 +2,7 @@ import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { schema, type Db } from "../db";
 import { Permission, buildContext, channelPermissions, hasPermission, toOverwriteLike } from "../permissions/resolve";
 import type { PermissionBits } from "@shared/permissions";
+import { usersBlocking } from "./blocks";
 
 /** Cap on how many people one message can notify. */
 const MAX_RECIPIENTS = 5000;
@@ -85,7 +86,9 @@ export async function mentionRecipients(db: Db, input: MentionInput): Promise<st
   const channelOverwrites = toOverwriteLike(overwrites);
 
   const out: string[] = [];
+  const blockingAuthor = await usersBlocking(db, input.authorUserId, members.map((m) => m.member.userId));
   for (const { member } of members) {
+    if (blockingAuthor.has(member.userId)) continue;
     if (member.userId === input.authorUserId) continue;
     const ctx = buildContext(workspace, member, roles, rolesBy.get(member.userId) ?? []);
     if (hasPermission(channelPermissions(ctx, channelOverwrites), Permission.VIEW_CHANNEL)) out.push(member.userId);

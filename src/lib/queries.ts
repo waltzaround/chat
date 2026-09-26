@@ -33,6 +33,7 @@ export const keys = {
   serverSettings: ["server-settings"] as const,
   serverUsers: (q: string) => ["server-users", q] as const,
   dms: ["dms"] as const,
+  blocks: ["blocks"] as const,
   dmPeople: (q: string) => ["dm-people", q] as const,
   workspaces: ["workspaces"] as const,
   workspace: (id: string) => ["workspace", id] as const,
@@ -114,6 +115,37 @@ export function useSetSuspended() {
 
 export function useCreatePasswordResetLink() {
   return useMutation({ mutationFn: (userId: string) => apiPost<PasswordResetLink>(`/api/server/users/${userId}/password-reset`, {}) });
+}
+
+export function useBlocks() {
+  return useQuery({ queryKey: keys.blocks, queryFn: () => apiGet<UserSummary[]>("/api/me/blocks"), staleTime: 60_000 });
+}
+
+/** Ids of people you've blocked, for collapsing their messages. */
+export function useBlockedIds(): Set<string> {
+  const data = useBlocks().data;
+  return useMemo(() => new Set((data ?? []).map((u) => u.id)), [data]);
+}
+
+export function useSetBlocked() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ userId, blocked }: { userId: string; blocked: boolean }) =>
+      blocked ? api<void>(`/api/me/blocks/${userId}`, { method: "PUT" }) : apiDelete(`/api/me/blocks/${userId}`),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: keys.blocks });
+      void qc.invalidateQueries({ queryKey: keys.dms });
+      void qc.invalidateQueries({ queryKey: ["workspace"] });
+    },
+  });
+}
+
+export function useCloseDm() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (workspaceId: string) => apiPost<void>(`/api/dms/${workspaceId}/close`, {}),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: keys.dms }),
+  });
 }
 
 export function useDms() {

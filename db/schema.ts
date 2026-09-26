@@ -321,6 +321,28 @@ export const dmPairs = sqliteTable(
   (t) => [primaryKey({ columns: [t.userA, t.userB] }), index("dm_pairs_user_b_idx").on(t.userB)],
 );
 
+/** blocker has blocked blocked. */
+export const userBlocks = sqliteTable(
+  "user_blocks",
+  {
+    blockerUserId: text("blocker_user_id").notNull(),
+    blockedUserId: text("blocked_user_id").notNull(),
+    createdAt: timestamp("created_at").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.blockerUserId, t.blockedUserId] }), index("user_blocks_blocked_idx").on(t.blockedUserId)],
+);
+
+/** A closed DM stays out of the list until a message past this sequence arrives. */
+export const dmHidden = sqliteTable(
+  "dm_hidden",
+  {
+    userId: text("user_id").notNull(),
+    workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+    hiddenThroughSequence: integer("hidden_through_sequence").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.workspaceId] })],
+);
+
 /** Who a message notifies. Unread mention badges count rows past the reader's read marker. */
 export const messageMentions = sqliteTable(
   "message_mentions",
@@ -403,6 +425,8 @@ export const schema = {
   messageReports,
   messageMentions,
   dmPairs,
+  userBlocks,
+  dmHidden,
   auditLog,
   rateLimits,
 };

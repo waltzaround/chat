@@ -40,6 +40,7 @@ export function MessageComposer({
   onDoneEditing,
   disabled,
   placeholderName,
+  disabledReason,
 }: {
   channel: Channel;
   reply: ComposerReply | null;
@@ -49,6 +50,8 @@ export function MessageComposer({
   disabled: boolean;
   /** Who you're writing to, when it isn't a channel (a direct message). */
   placeholderName?: string;
+  /** Why sending is off, shown instead of the generic permission message. */
+  disabledReason?: string;
 }) {
   const rt = useRealtime();
   const customEmojis = useEmojis(channel.workspaceId).data ?? [];
@@ -305,7 +308,7 @@ export function MessageComposer({
   };
 
   const placeholder = disabled
-    ? "You do not have permission to send messages here"
+    ? (disabledReason ?? "You do not have permission to send messages here")
     : editing
       ? "Edit your message"
       : `Message ${placeholderName ?? `${channel.kind === "text" ? "#" : ""}${channel.name}`}`;

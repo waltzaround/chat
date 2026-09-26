@@ -14,6 +14,7 @@ import {
 } from "@shared/permissions";
 import { schema, type Db } from "../db";
 import { ApiError } from "../lib/errors";
+import { blockedEitherWay } from "../lib/blocks";
 
 export type RoleRow = typeof schema.roles.$inferSelect;
 export type ChannelRow = typeof schema.channels.$inferSelect;
@@ -142,7 +143,19 @@ export async function loadChannelAccess(db: Db, channelId: string, userId: strin
   const overwrites = await db.query.channelPermissionOverwrites.findMany({
     where: eq(schema.channelPermissionOverwrites.channelId, channelId),
   });
-  return { channel, ctx, permissions: channelPermissions(ctx, toOverwriteLike(overwrites)) };
+  return { channel, ctx, permissions: (await dmBlockMask(db, ctx)) & channelPermissions(ctx, toOverwriteLike(overwrites)) };
+}
+
+/**
+ * In a DM where either person has blocked the other, both can still read the history
+ * but nobody can write, react or upload. Every other workspace is unaffected.
+ */
+export async function dmBlockMask(db: Db, ctx: MemberContext): Promise<PermissionBits> {
+  if (ctx.workspace.kind !== "dm") return ~0;
+  const pair = await db.query.dmPairs.findFirst({ where: eq(schema.dmPairs.workspaceId, ctx.workspaceId) });
+  if (!pair) return ~0;
+  const other = pair.userA === ctx.userId ? pair.userB : pair.userA;
+  return (await blockedEitherWay(db, ctx.userId, other)) ? ~(Permission.SEND_MESSAGES | Permission.ADD_REACTIONS | Permission.ATTACH_FILES) : ~0;
 }
 
 /** Like loadChannelAccess but throws 404 when the channel is not visible to the user. */
@@ -164,6 +177,7 @@ export async function resolveAllChannelPermissions(
   db: Db,
   ctx: MemberContext,
 ): Promise<Map<string, { channel: ChannelRow; permissions: PermissionBits }>> {
+  const mask = await dmBlockMask(db, ctx);
   const channels = await db.query.channels.findMany({ where: eq(schema.channels.workspaceId, ctx.workspaceId) });
   const ids = channels.map((c) => c.id);
   const overwrites = ids.length
@@ -179,7 +193,7 @@ export async function resolveAllChannelPermissions(
   }
   const out = new Map<string, { channel: ChannelRow; permissions: PermissionBits }>();
   for (const channel of channels) {
-    out.set(channel.id, { channel, permissions: channelPermissions(ctx, byChannel.get(channel.id) ?? []) });
+    out.set(channel.id, { channel, permissions: mask & channelPermissions(ctx, byChannel.get(channel.id) ?? []) });
   }
   return out;
 }

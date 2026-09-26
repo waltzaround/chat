@@ -7,6 +7,7 @@ import { ApiError } from "../lib/errors";
 import { parseBody } from "../lib/validate";
 import { iso, toUserSummary } from "../lib/serialize";
 import { checkRateLimit } from "../security/ratelimit";
+import { blockedEitherWay } from "../lib/blocks";
 import { newId, slugify } from "@shared/id";
 import { Permission } from "@shared/permissions";
 import { openDmSchema } from "@shared/schemas";
@@ -31,6 +32,7 @@ dmRoutes.get("/", async (c) => {
   const me = c.get("user").id;
   const pairs = await db.select().from(schema.dmPairs).where(or(eq(schema.dmPairs.userA, me), eq(schema.dmPairs.userB, me)));
   if (pairs.length === 0) return c.json([]);
+  const hidden = new Map((await db.select().from(schema.dmHidden).where(eq(schema.dmHidden.userId, me))).map((h) => [h.workspaceId, h.hiddenThroughSequence]));
 
   const peerIds = pairs.map((p) => (p.userA === me ? p.userB : p.userA));
   const channelIds = pairs.map((p) => p.channelId);
@@ -48,6 +50,9 @@ dmRoutes.get("/", async (c) => {
     const channel = channelBy.get(p.channelId);
     const peer = peerBy.get(p.userA === me ? p.userB : p.userA);
     if (!channel || !peer) continue;
+    // Closed conversations come back when someone writes in them again.
+    const hiddenThrough = hidden.get(p.workspaceId);
+    if (hiddenThrough !== undefined && channel.lastSequence <= hiddenThrough) continue;
     list.push({
       workspaceId: p.workspaceId,
       channelId: p.channelId,
@@ -77,6 +82,8 @@ dmRoutes.get("/people", async (c) => {
         ne(schema.users.id, me),
         isNull(schema.users.deletedAt),
         isNull(schema.users.suspendedAt),
+        // Nobody you've blocked, and nobody who has blocked you.
+        sql`${schema.users.id} NOT IN (SELECT blocked_user_id FROM user_blocks WHERE blocker_user_id = ${me} UNION SELECT blocker_user_id FROM user_blocks WHERE blocked_user_id = ${me})`,
         q ? or(like(schema.users.username, `%${q}%`), like(schema.users.displayName, `%${q}%`)) : undefined,
       ),
     )
@@ -98,9 +105,12 @@ dmRoutes.post("/", async (c) => {
   const key = pairKey(me, userId);
   const existing = await db.query.dmPairs.findFirst({ where: and(eq(schema.dmPairs.userA, key.userA), eq(schema.dmPairs.userB, key.userB)) });
   if (existing) {
+    // Opening a conversation you closed brings it back; blocked ones stay readable.
     await ensureMember(db, existing.workspaceId, me);
+    await db.delete(schema.dmHidden).where(and(eq(schema.dmHidden.userId, me), eq(schema.dmHidden.workspaceId, existing.workspaceId)));
     return c.json({ workspaceId: existing.workspaceId, channelId: existing.channelId });
   }
+  if (await blockedEitherWay(db, me, userId)) throw ApiError.forbidden("You can't message this person");
 
   if (!(await shareWorkspace(db, me, userId))) throw ApiError.forbidden("You can only message people you share a workspace with");
   checkRateLimit(`dm-create:${me}`, 20, 60 * 60 * 1000);
@@ -125,6 +135,21 @@ dmRoutes.post("/", async (c) => {
     return c.json({ workspaceId: winner.workspaceId, channelId: winner.channelId });
   }
   return c.json({ workspaceId, channelId }, 201);
+});
+
+/** Close a conversation: it leaves your list until a new message arrives. */
+dmRoutes.post("/:workspaceId/close", async (c) => {
+  const db = c.get("db");
+  const me = c.get("user").id;
+  const pair = await db.query.dmPairs.findFirst({ where: eq(schema.dmPairs.workspaceId, c.req.param("workspaceId")) });
+  if (!pair || (pair.userA !== me && pair.userB !== me)) throw ApiError.notFound("Conversation");
+  const channel = await db.query.channels.findFirst({ where: eq(schema.channels.id, pair.channelId) });
+  const through = channel?.lastSequence ?? 0;
+  await db
+    .insert(schema.dmHidden)
+    .values({ userId: me, workspaceId: pair.workspaceId, hiddenThroughSequence: through })
+    .onConflictDoUpdate({ target: [schema.dmHidden.userId, schema.dmHidden.workspaceId], set: { hiddenThroughSequence: through } });
+  return c.body(null, 204);
 });
 
 async function shareWorkspace(db: Db, a: string, b: string): Promise<boolean> {

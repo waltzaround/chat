@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { UserAvatar } from "@/components/common/UserAvatar";
 import { STATUS_LABEL } from "@/components/common/StatusDot";
-import { useMe, useMemberMutations, useOpenDm, useWorkspace } from "@/lib/queries";
+import { useBlockedIds, useMe, useMemberMutations, useOpenDm, useSetBlocked, useWorkspace } from "@/lib/queries";
 import { usePresence } from "@/realtime/hooks";
 import { Permission, can, canModerateMember, memberDisplayName } from "@/lib/permissions";
 import { errorMessage } from "@/lib/api";
@@ -26,6 +26,17 @@ export function MemberPopover({ member, workspaceId, children }: { member: Membe
   const canKick = canMod && can(ws.data, Permission.KICK_MEMBERS);
   const canBan = canMod && can(ws.data, Permission.BAN_MEMBERS);
   const openDm = useOpenDm();
+  const blockedIds = useBlockedIds();
+  const setBlocked = useSetBlocked();
+  const isBlocked = blockedIds.has(member.userId);
+  const toggleBlock = () =>
+    setBlocked.mutate(
+      { userId: member.userId, blocked: !isBlocked },
+      {
+        onSuccess: () => toast.success(isBlocked ? `Unblocked ${memberDisplayName(member)}` : `Blocked ${memberDisplayName(member)}. Their messages are hidden and they can't message you.`),
+        onError: (err) => toast.error(errorMessage(err)),
+      },
+    );
   const navigate = useNavigate();
   const message = () =>
     openDm.mutate(member.userId, {
@@ -82,10 +93,17 @@ export function MemberPopover({ member, workspaceId, children }: { member: Membe
               <p className="text-xs text-warning">Timed out until {new Date(member.timeoutUntil).toLocaleString()}</p>
             ) : null}
             <p className="text-[11px] text-muted-foreground">Member since {new Date(member.joinedAt).toLocaleDateString()}</p>
-            {!isMe && ws.data?.kind !== "dm" ? (
-              <Button size="sm" onClick={message} disabled={openDm.isPending}>
-                <MessageCircle className="size-3.5" aria-hidden /> Message
-              </Button>
+            {!isMe ? (
+              <div className="flex gap-2">
+                {ws.data?.kind !== "dm" && !isBlocked ? (
+                  <Button size="sm" className="flex-1" onClick={message} disabled={openDm.isPending}>
+                    <MessageCircle className="size-3.5" aria-hidden /> Message
+                  </Button>
+                ) : null}
+                <Button size="sm" variant="outline" className={isBlocked ? "flex-1" : undefined} onClick={toggleBlock} disabled={setBlocked.isPending}>
+                  {isBlocked ? "Unblock" : "Block"}
+                </Button>
+              </div>
             ) : null}
             {canKick || canBan ? (
               <div className="flex gap-2 border-t pt-3">
