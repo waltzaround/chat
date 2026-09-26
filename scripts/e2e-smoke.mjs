@@ -30,13 +30,14 @@ async function shot(page, name) {
   return file;
 }
 
-async function register(page, username, displayName) {
-  await page.goto(`${BASE}/register`);
-  await page.getByLabel("Display name").fill(displayName);
+/** Fills the sign-up form on the current page, or on /register when `path` is given. */
+async function register(page, username, displayName, path = "/register") {
+  if (path) await page.goto(`${BASE}${path}`);
+  await page.getByLabel("Your name").fill(displayName);
   await page.getByLabel("Username").fill(username);
   await page.getByLabel("Email").fill(`${username}@example.com`);
   await page.getByLabel("Password").fill("password123");
-  await page.getByRole("button", { name: "Create account" }).click();
+  await page.getByRole("button", { name: /^Create (owner )?account$/ }).click();
   await page.waitForURL((u) => !u.pathname.startsWith("/register"), { timeout: 20_000 });
 }
 
@@ -55,15 +56,24 @@ for (const [name, page] of [["A", A], ["B", B]]) {
   });
 }
 
+// A signs up without an invite, which only works on a fresh server or one with open sign-up.
+const authConfig = await fetch(`${BASE}/api/auth-config`).then((r) => r.json());
+if (!authConfig.firstRun && authConfig.registration === "invite") {
+  console.error("This server is invite-only. Open sign-up (User Settings → Server), or run against a fresh local database.");
+  process.exit(1);
+}
+
 try {
-  // 1. Register + create workspace
+  // 1. Register + create workspace (on a fresh server, A is the owner going through setup)
   await register(A, `alice${run}`, "Alice Example");
-  await A.getByRole("heading", { name: "Welcome to Chat" }).waitFor({ timeout: 20_000 });
+  await A.getByRole("heading", { name: /Name your community|Create your workspace/ }).waitFor({ timeout: 20_000 });
   check("A registers and lands in the app", true);
   await shot(A, "welcome");
-  await A.getByRole("button", { name: "Create a workspace" }).first().click();
   await A.getByLabel("Workspace name").fill(`Smoke ${run}`);
-  await A.getByRole("button", { name: "Create", exact: true }).click();
+  await A.getByRole("button", { name: "Create workspace" }).click();
+  await A.getByRole("heading", { name: "Invite people" }).waitFor({ timeout: 20_000 });
+  await shot(A, "setup-invite");
+  await A.getByRole("button", { name: /^Open #/ }).click();
   await A.waitForURL(/\/w\/[^/]+\/c\/[^/]+/, { timeout: 20_000 });
   check("Workspace created and #general opened", /\/c\//.test(A.url()));
   await A.getByRole("heading", { name: "general", exact: true }).waitFor();
@@ -84,9 +94,11 @@ try {
   await shot(A, "invite-dialog");
   await A.keyboard.press("Escape");
 
-  // 3. B registers and accepts invite
-  await register(B, `bob${run}`, "Bob Example");
+  // 3. B opens the invite, signs up from it (works on invite-only servers), and accepts
   await B.goto(inviteUrl.replace(/^https?:\/\/[^/]+/, BASE));
+  await B.getByRole("button", { name: "Create an account to join" }).click();
+  await B.waitForURL((u) => u.pathname.startsWith("/register"));
+  await register(B, `bob${run}`, "Bob Example", null);
   await B.getByRole("button", { name: "Accept invite" }).click();
   await B.waitForURL(/\/w\/[^/]+/, { timeout: 20_000 });
   await B.getByRole("heading", { name: "general", exact: true }).waitFor({ timeout: 20_000 });

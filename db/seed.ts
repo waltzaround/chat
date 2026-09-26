@@ -175,6 +175,10 @@ async function main() {
   lines.push(`INSERT OR IGNORE INTO audit_log (id, workspace_id, actor_user_id, action, target_type, target_id, details, created_at) VALUES (${esc(id("audt", 2))}, ${esc(ws.id)}, ${esc(ws.owner)}, 'role.created', 'role', ${esc(roles.moderator.id)}, '{"name":"Moderator"}', ${now - 18 * day});`);
   lines.push(`INSERT OR IGNORE INTO audit_log (id, workspace_id, actor_user_id, action, target_type, target_id, details, created_at) VALUES (${esc(id("audt", 3))}, ${esc(ws.id)}, ${esc(users[1]!.id)}, 'invite.created', 'invite', 'acmedemo', '{"expiresAt":null,"maxUses":null}', ${now - 10 * day});`);
 
+  // The demo owner owns the server too, and anyone can sign up to try it.
+  lines.push(`INSERT OR IGNORE INTO instance_settings (key, value) VALUES ('owner_user_id', ${esc(ws.owner)});`);
+  lines.push(`INSERT OR IGNORE INTO instance_settings (key, value) VALUES ('registration', 'open');`);
+
   writeFileSync(new URL("./seed.sql", import.meta.url), lines.join("\n") + "\n");
   console.log(`Wrote db/seed.sql (${lines.length} statements). Demo login: walter@example.com / ${PASSWORD}`);
 }

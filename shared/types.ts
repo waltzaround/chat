@@ -20,6 +20,8 @@ export interface CurrentUser extends UserSummary {
   bio: string | null;
   status: PreferredStatus;
   createdAt: string;
+  /** The account that set this server up. Only it can change server settings. */
+  isServerOwner: boolean;
 }
 
 export interface WorkspaceSummary {
@@ -228,4 +230,33 @@ export interface ApiErrorBody {
 export interface AuthConfig {
   providers: { github: boolean; google: boolean };
   turnstileSiteKey: string | null;
+  /** No owner yet: the next sign-up becomes the server owner. */
+  firstRun: boolean;
+  /** First run, and only the holder of the setup link may create the owner account. */
+  claimRequired: boolean;
+  registration: RegistrationPolicy;
+  /** "Forgot password?" can email a reset link (needs email set up, on the Workers Paid plan). */
+  passwordResetEmail: boolean;
+}
+
+/** "invite": only people with a working invite link can create an account. */
+export type RegistrationPolicy = "open" | "invite";
+
+export interface ServerSettings {
+  registration: RegistrationPolicy;
+  /** Email is set up, so members can reset their own password. */
+  emailEnabled: boolean;
+}
+
+/** An account as the server owner sees it in User Settings → Server. */
+export interface ServerUser extends UserSummary {
+  email: string;
+  createdAt: string;
+  isServerOwner: boolean;
+}
+
+/** A one-time link that lets the holder set a new password for one account. */
+export interface PasswordResetLink {
+  url: string;
+  expiresAt: string;
 }

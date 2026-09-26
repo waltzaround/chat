@@ -12,6 +12,7 @@ import { inviteRoutes } from "./api/invites";
 import { uploadRoutes, fileRoutes } from "./api/uploads";
 import { voiceRoutes } from "./api/voice";
 import { emojiRoutes } from "./api/emojis";
+import { serverRoutes } from "./api/server";
 import { loadMemberContext } from "./permissions/resolve";
 import { hubFor } from "./lib/hub";
 import { handleQueue } from "./queues/consumer";
@@ -52,6 +53,12 @@ app.on(["GET", "POST"], "/api/auth/*", async (c) => {
     if (attempts > 20) throw ApiError.rateLimited(3600);
   }
 
+  // Every request can send an email, so keep them rare per IP.
+  if (c.req.method === "POST" && path.endsWith("/request-password-reset")) {
+    const attempts = await bumpPersistentCounter(db, `reset:${ip}`, 60 * 60 * 1000);
+    if (attempts > 5) throw ApiError.rateLimited(3600);
+  }
+
   const isSignIn = c.req.method === "POST" && path.endsWith("/sign-in/email");
   if (isSignIn) {
     const fails = await bumpPersistentCounter(db, `signin:${ip}`, AUTH_FAIL_WINDOW_MS);
@@ -84,6 +91,7 @@ app.route("/api/invites", inviteRoutes);
 app.route("/api/uploads", uploadRoutes);
 app.route("/api/files", fileRoutes);
 app.route("/api/channels", voiceRoutes);
+app.route("/api/server", serverRoutes);
 
 app.get("/api/health", (c) => c.json({ ok: true, time: new Date().toISOString() }));
 

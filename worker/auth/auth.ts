@@ -6,24 +6,32 @@ import { newId } from "@shared/id";
 import { usernameSchema } from "@shared/schemas";
 import type { Env } from "../env";
 import type { Db } from "../db";
+import { assertMayRegister, claimOwnership, RegistrationError } from "../instance";
+import { emailEnabled, sendPasswordResetEmail } from "../email";
 
 export type Auth = ReturnType<typeof buildAuth>;
 
-const cache = new WeakMap<object, Auth>();
+const cache = new WeakMap<object, Map<string, Auth>>();
 
 /**
- * Better Auth instance bound to this Worker's D1 database. Cached per `env`
- * object so that a single isolate builds it once.
+ * Better Auth instance bound to this Worker's D1 database and public origin.
+ * Cached per `env` object and origin so that a single isolate builds it once
+ * per hostname it is served on.
  */
-export function createAuth(env: Env, db: Db): Auth {
-  const cached = cache.get(env);
+export function createAuth(env: Env, db: Db, origin: string, secret: string): Auth {
+  let byOrigin = cache.get(env);
+  if (!byOrigin) {
+    byOrigin = new Map();
+    cache.set(env, byOrigin);
+  }
+  const cached = byOrigin.get(origin);
   if (cached) return cached;
-  const auth = buildAuth(env, db);
-  cache.set(env, auth);
+  const auth = buildAuth(env, db, origin, secret);
+  byOrigin.set(origin, auth);
   return auth;
 }
 
-function buildAuth(env: Env, db: Db) {
+function buildAuth(env: Env, db: Db, origin: string, secret: string) {
   const socialProviders: Record<string, { clientId: string; clientSecret: string }> = {};
   if (env.GITHUB_CLIENT_ID && env.GITHUB_CLIENT_SECRET) {
     socialProviders.github = { clientId: env.GITHUB_CLIENT_ID, clientSecret: env.GITHUB_CLIENT_SECRET };
@@ -34,16 +42,26 @@ function buildAuth(env: Env, db: Db) {
 
   const auth = betterAuth({
     appName: "Chat",
-    baseURL: env.APP_URL,
+    baseURL: origin,
     basePath: "/api/auth",
-    secret: env.BETTER_AUTH_SECRET,
-    // Local development only: allow the Vite plugin's quick tunnel origin.
-    trustedOrigins: env.APP_URL.includes("localhost") ? [env.APP_URL, "https://*.trycloudflare.com"] : [env.APP_URL],
+    secret,
+    trustedOrigins: [origin],
     database: drizzleAdapter(db, { provider: "sqlite", schema, usePlural: true }),
     emailAndPassword: {
       enabled: true,
       minPasswordLength: 8,
       maxPasswordLength: 128,
+      // A new password signs the account out everywhere else.
+      revokeSessionsOnPasswordReset: true,
+      // "Forgot password?" by email only exists when email is set up (Workers Paid plan).
+      // Without it, the server owner hands out reset links instead (api/server.ts).
+      ...(emailEnabled(env)
+        ? {
+            sendResetPassword: async ({ user, token }: { user: { email: string; name: string }; token: string }) => {
+              await sendPasswordResetEmail(env, user, resetPasswordUrl(origin, token));
+            },
+          }
+        : {}),
     },
     socialProviders,
     user: {
@@ -68,7 +86,13 @@ function buildAuth(env: Env, db: Db) {
     databaseHooks: {
       user: {
         create: {
-          before: async (user) => {
+          before: async (user, context) => {
+            try {
+              await assertMayRegister(env, context?.headers ?? context?.request?.headers);
+            } catch (error) {
+              if (error instanceof RegistrationError) throw new APIError("FORBIDDEN", { message: error.message, code: error.reason });
+              throw error;
+            }
             const raw = (user as { username?: string }).username;
             let username: string;
             if (raw) {
@@ -87,12 +111,21 @@ function buildAuth(env: Env, db: Db) {
             }
             return { data: { ...user, username, name: user.name || username, status: "online" } };
           },
+          // The first account on a fresh server owns it.
+          after: async (user) => {
+            await claimOwnership(env.DB, user.id);
+          },
         },
       },
     },
   });
 
   return auth;
+}
+
+/** The app's own reset page; it posts the token to /api/auth/reset-password. */
+export function resetPasswordUrl(origin: string, token: string): string {
+  return `${origin}/reset-password?token=${encodeURIComponent(token)}`;
 }
 
 function suggestUsername(email: string, name?: string | null): string {

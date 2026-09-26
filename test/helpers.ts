@@ -12,19 +12,29 @@ export interface Session {
 let counter = 0;
 
 /** Registers a fresh user through Better Auth and returns its session cookie. */
-export async function signUp(username?: string): Promise<Session> {
-  counter += 1;
-  const name = username ?? `user${counter}_${Math.random().toString(36).slice(2, 6)}`;
-  // Each simulated user comes from its own IP so per-IP abuse limits behave as in production.
-  const res = await SELF.fetch(`${ORIGIN}/api/auth/sign-up/email`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Origin: ORIGIN, "CF-Connecting-IP": `10.0.${Math.floor(counter / 250)}.${counter % 250}` },
-    body: JSON.stringify({ email: `${name}@example.com`, password: "password123", name: name, username: name }),
-  });
+export async function signUp(username?: string, requestCookie?: string): Promise<Session> {
+  const res = await signUpRaw(username, requestCookie);
   expect(res.status, await res.clone().text()).toBe(200);
   const cookie = extractCookies(res.headers);
   const me = await api<CurrentUser>(cookie, "/api/me");
   return { cookie, user: me };
+}
+
+/** Sign-up request without assertions. `cookie` carries e.g. an invite or claim cookie. */
+export async function signUpRaw(username?: string, cookie?: string): Promise<Response> {
+  counter += 1;
+  const name = username ?? `user${counter}_${Math.random().toString(36).slice(2, 6)}`;
+  // Each simulated user comes from its own IP so per-IP abuse limits behave as in production.
+  return SELF.fetch(`${ORIGIN}/api/auth/sign-up/email`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Origin: ORIGIN,
+      "CF-Connecting-IP": `10.0.${Math.floor(counter / 250)}.${counter % 250}`,
+      ...(cookie ? { Cookie: cookie } : {}),
+    },
+    body: JSON.stringify({ email: `${name}@example.com`, password: "password123", name: name, username: name }),
+  });
 }
 
 export function extractCookies(headers: Headers): string {

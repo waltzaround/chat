@@ -1,8 +1,10 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useParams } from "react-router";
-import { LogOut, Monitor, Moon, Sun, User, Bell, Mic } from "lucide-react";
+import { LogOut, Monitor, Moon, Sun, User, Bell, Mic, Server } from "lucide-react";
 import { toast } from "sonner";
 import { SettingsLayout } from "./SettingsLayout";
+import { RegistrationPolicyPicker } from "@/components/onboarding/RegistrationPolicyPicker";
+import { EmailStatus, ServerAccounts } from "./ServerAccounts";
 import { ImagePicker } from "@/components/common/ImagePicker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,9 +27,14 @@ const TABS = [
   { id: "voice", label: "Voice & Video", icon: <Mic className="size-3.5" /> },
 ];
 
+/** Only the server owner sees this one. */
+const SERVER_TAB = { id: "server", label: "Server", icon: <Server className="size-3.5" /> };
+
 export function UserSettingsPage() {
   const { tab } = useParams<{ tab?: string }>();
-  const activeTab = TABS.find((t) => t.id === tab)?.id ?? "profile";
+  const isServerOwner = useMe().data?.isServerOwner ?? false;
+  const tabs = isServerOwner ? [...TABS, SERVER_TAB] : TABS;
+  const activeTab = tabs.find((t) => t.id === tab)?.id ?? "profile";
 
   const handleLogout = async () => {
     await authClient.signOut();
@@ -47,17 +54,23 @@ export function UserSettingsPage() {
 
   return (
     <SettingsLayout
-      tabs={TABS}
+      tabs={tabs}
       activeTab={activeTab}
       basePath="/settings"
       closePath="/"
       title="User Settings"
       bottomContent={bottomContent}
     >
-      {activeTab === "profile" && <ProfileTab />}
+      {activeTab === "profile" && (
+        <div className="grid gap-10">
+          <ProfileTab />
+          <ChangePassword />
+        </div>
+      )}
       {activeTab === "appearance" && <AppearanceTab />}
       {activeTab === "notifications" && <NotificationsTab />}
       {activeTab === "voice" && <VoiceTab />}
+      {activeTab === "server" && <ServerTab />}
     </SettingsLayout>
   );
 }
@@ -243,6 +256,76 @@ function AppearanceTab() {
         </div>
       </div>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Server tab (owner only)
+// ---------------------------------------------------------------------------
+
+function ServerTab() {
+  return (
+    <div className="grid max-w-lg gap-6">
+      <div className="space-y-1">
+        <h2 className="text-base font-semibold">Server</h2>
+        <p className="text-sm text-muted-foreground">You own this server, so these settings apply to everyone on it.</p>
+      </div>
+      <div className="grid gap-2">
+        <p className="text-sm font-medium">Who can create an account</p>
+        <RegistrationPolicyPicker />
+        <p className="text-xs text-muted-foreground">Invite links from any workspace let people sign up, whichever you choose.</p>
+      </div>
+      <div className="grid gap-2">
+        <p className="text-sm font-medium">Accounts and password resets</p>
+        <EmailStatus />
+        <ServerAccounts />
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Change password (Profile tab)
+// ---------------------------------------------------------------------------
+
+function ChangePassword() {
+  const [current, setCurrent] = useState("");
+  const [next, setNext] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    const res = await authClient.changePassword({ currentPassword: current, newPassword: next, revokeOtherSessions: true });
+    setBusy(false);
+    if (res.error) {
+      toast.error(res.error.code === "INVALID_PASSWORD" ? "Your current password is wrong" : (res.error.message ?? "Could not change your password"));
+      return;
+    }
+    setCurrent("");
+    setNext("");
+    toast.success("Password changed. Other devices are signed out.");
+  };
+
+  return (
+    <form onSubmit={submit} className="grid max-w-sm gap-3">
+      <Separator />
+      <h2 className="text-base font-semibold">Password</h2>
+      <div className="grid gap-1.5">
+        <Label htmlFor="current-password">Current password</Label>
+        <Input id="current-password" type="password" value={current} onChange={(e) => setCurrent(e.target.value)} autoComplete="current-password" required />
+      </div>
+      <div className="grid gap-1.5">
+        <Label htmlFor="new-password">New password</Label>
+        <Input id="new-password" type="password" value={next} onChange={(e) => setNext(e.target.value)} autoComplete="new-password" required minLength={8} />
+        <p className="text-xs text-muted-foreground">At least 8 characters. Changing it signs out your other devices.</p>
+      </div>
+      <div>
+        <Button type="submit" disabled={busy || !current || next.length < 8}>
+          {busy ? "Changing…" : "Change password"}
+        </Button>
+      </div>
+    </form>
   );
 }
 

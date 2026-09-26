@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import type { Env } from "../env";
 import { createDb, schema, type Db } from "../db";
 import { createAuth, type Auth } from "./auth";
+import { appOrigin, authSecret } from "../instance";
 import { ApiError } from "../lib/errors";
 
 export type UserRow = typeof schema.users.$inferSelect;
@@ -10,6 +11,8 @@ export type UserRow = typeof schema.users.$inferSelect;
 export type AppVariables = {
   db: Db;
   auth: Auth;
+  /** Public origin for links (APP_URL, or the origin this request came in on). */
+  origin: string;
   user: UserRow;
   sessionId: string;
 };
@@ -19,8 +22,10 @@ export type AppEnv = { Bindings: Env; Variables: AppVariables };
 /** Attaches db + auth to every request. */
 export const withServices: MiddlewareHandler<AppEnv> = async (c, next) => {
   const db = createDb(c.env.DB);
+  const origin = appOrigin(c.env, c.req.raw);
   c.set("db", db);
-  c.set("auth", createAuth(c.env, db));
+  c.set("origin", origin);
+  c.set("auth", createAuth(c.env, db, origin, await authSecret(c.env)));
   await next();
 };
 

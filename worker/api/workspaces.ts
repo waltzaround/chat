@@ -553,7 +553,7 @@ workspaceRoutes.get("/:workspaceId/invites", async (c) => {
   const creatorIds = [...new Set(rows.map((r) => r.createdBy))];
   const creators = creatorIds.length ? await db.select().from(schema.users).where(inArray(schema.users.id, creatorIds)) : [];
   const byId = new Map(creators.map((u) => [u.id, u]));
-  return c.json(rows.map((r) => toInvite(r, byId.get(r.createdBy), c.env.APP_URL)));
+  return c.json(rows.map((r) => toInvite(r, byId.get(r.createdBy), c.get("origin"))));
 });
 
 workspaceRoutes.post("/:workspaceId/invites", async (c) => {
@@ -575,7 +575,7 @@ workspaceRoutes.post("/:workspaceId/invites", async (c) => {
   };
   await db.insert(schema.invites).values(row);
   await audit(db, { workspaceId: ctx.workspaceId, actorUserId: ctx.userId, action: "invite.created", targetType: "invite", targetId: row.code, details: { expiresAt: iso(row.expiresAt), maxUses: row.maxUses } });
-  return c.json(toInvite(row, c.get("user"), c.env.APP_URL), 201);
+  return c.json(toInvite(row, c.get("user"), c.get("origin")), 201);
 });
 
 workspaceRoutes.delete("/:workspaceId/invites/:code", async (c) => {

@@ -124,6 +124,10 @@ export const banSchema = z.object({
   deleteRecentMessages: z.boolean().optional(),
 });
 
+export const updateServerSettingsSchema = z.object({
+  registration: z.enum(["open", "invite"]),
+});
+
 export const createInviteSchema = z.object({
   /** Seconds until expiry, or null for never. */
   expiresIn: z.number().int().min(60).max(60 * 60 * 24 * 30).nullable().optional(),
@@ -185,5 +189,6 @@ export const turnstileSchema = z.object({
 export type CreateWorkspaceInput = z.infer<typeof createWorkspaceSchema>;
 export type CreateChannelInput = z.infer<typeof createChannelSchema>;
 export type CreateRoleInput = z.infer<typeof createRoleSchema>;
+export type UpdateServerSettingsInput = z.infer<typeof updateServerSettingsSchema>;
 export type CreateInviteInput = z.infer<typeof createInviteSchema>;
 export type UploadAuthorizeInput = z.infer<typeof uploadAuthorizeSchema>;

@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useNavigate, useParams } from "react-router";
 import { Loader2, Users } from "lucide-react";
 import { useAcceptInvite, useInvitePreview, useMe } from "@/lib/queries";
@@ -6,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { UserAvatar } from "@/components/common/UserAvatar";
 import { WorkspaceIcon } from "@/components/workspace/WorkspaceIcon";
 import { toast } from "sonner";
+import { rememberInvite } from "@/lib/signup-cookies";
 
 export function InvitePage() {
   const { code } = useParams();
@@ -16,10 +18,15 @@ export function InvitePage() {
 
   const signedIn = me.isSuccess;
 
+  // Lets the holder create an account even when this server is invite-only.
+  useEffect(() => {
+    if (code && preview.isSuccess) rememberInvite(code);
+  }, [code, preview.isSuccess]);
+
   const join = async () => {
     if (!code) return;
     if (!signedIn) {
-      navigate(`/login?next=${encodeURIComponent(`/invite/${code}`)}`);
+      navigate(`/register?next=${encodeURIComponent(`/invite/${code}`)}`);
       return;
     }
     try {
@@ -68,8 +75,16 @@ export function InvitePage() {
             ) : null}
             <Button className="mt-6 w-full" onClick={join} disabled={accept.isPending || me.isPending}>
               {accept.isPending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
-              {preview.data.isMember ? "Open workspace" : signedIn ? "Accept invite" : "Sign in to accept"}
+              {preview.data.isMember ? "Open workspace" : signedIn ? "Accept invite" : "Create an account to join"}
             </Button>
+            {!signedIn && !me.isPending ? (
+              <p className="mt-3 text-xs text-muted-foreground">
+                Already have an account?{" "}
+                <button type="button" className="text-primary hover:underline" onClick={() => navigate(`/login?next=${encodeURIComponent(`/invite/${code}`)}`)}>
+                  Sign in
+                </button>
+              </p>
+            ) : null}
             {preview.data.expiresAt ? <p className="mt-3 text-[11px] text-muted-foreground">Expires {new Date(preview.data.expiresAt).toLocaleString()}</p> : null}
           </>
         )}

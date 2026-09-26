@@ -9,16 +9,24 @@ export interface Env {
   BACKGROUND_QUEUE: Queue<BackgroundJob>;
   ANALYTICS?: AnalyticsEngineDataset;
   ASSETS: Fetcher;
+  /** Optional send_email binding. Needs the Workers Paid plan; see worker/email.ts. */
+  EMAIL?: SendEmail;
 
   // Public vars
-  APP_URL: string;
+  /** Optional. Blank means "use the origin the request arrived on". */
+  APP_URL?: string;
   TURNSTILE_SITE_KEY?: string;
   R2_BUCKET_NAME?: string;
+  /** Sender for password-reset email, e.g. chat@example.com. Blank turns email off. */
+  EMAIL_FROM?: string;
   REALTIMEKIT_PRESET_FULL?: string;
   REALTIMEKIT_PRESET_LISTEN?: string;
 
   // Secrets
-  BETTER_AUTH_SECRET: string;
+  /** Optional. When unset the Worker generates one and keeps it in D1 (see instance.ts). */
+  BETTER_AUTH_SECRET?: string;
+  /** Optional. While no owner exists, only sign-ups carrying this token (from npm run setup's link) are accepted. */
+  OWNER_CLAIM_TOKEN?: string;
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
   GITHUB_CLIENT_ID?: string;

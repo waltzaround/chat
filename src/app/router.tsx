@@ -3,6 +3,7 @@ import { createBrowserRouter, Navigate, Outlet } from "react-router";
 import { RequireAuth } from "./RequireAuth";
 import { AuthPage } from "@/routes/AuthPage";
 import { InvitePage } from "@/routes/InvitePage";
+import { ForgotPasswordPage, ResetPasswordPage } from "@/routes/PasswordPages";
 import { RootRedirect } from "@/routes/RootRedirect";
 import { NotFoundPage } from "@/routes/NotFoundPage";
 import { WorkspaceLayout } from "@/app/WorkspaceLayout";
@@ -22,6 +23,8 @@ export const router = createBrowserRouter([
   { path: "/login", element: <AuthPage mode="login" /> },
   { path: "/register", element: <AuthPage mode="register" /> },
   { path: "/invite/:code", element: <InvitePage /> },
+  { path: "/forgot-password", element: <ForgotPasswordPage /> },
+  { path: "/reset-password", element: <ResetPasswordPage /> },
   {
     element: (
       <RequireAuth>

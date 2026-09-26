@@ -6,19 +6,26 @@ import { schema } from "../db";
 import { ApiError } from "../lib/errors";
 import { parseBody } from "../lib/validate";
 import { toCurrentUser, toWorkspaceSummary } from "../lib/serialize";
+import { registrationPolicy, serverOwnerId } from "../instance";
+import { emailEnabled } from "../email";
 import { updateMeSchema } from "@shared/schemas";
 import type { AuthConfig, WorkspaceSummary } from "@shared/types";
 
 export const meRoutes = new Hono<AppEnv>();
 
-/** Public: which auth providers are available and the Turnstile site key. */
-meRoutes.get("/auth-config", (c) => {
+/** Public: which auth providers are available, the Turnstile site key, and whether this is a fresh deployment. */
+meRoutes.get("/auth-config", async (c) => {
+  const [owner, registration] = await Promise.all([serverOwnerId(c.env.DB), registrationPolicy(c.env.DB)]);
   const body: AuthConfig = {
     providers: {
       github: !!(c.env.GITHUB_CLIENT_ID && c.env.GITHUB_CLIENT_SECRET),
       google: !!(c.env.GOOGLE_CLIENT_ID && c.env.GOOGLE_CLIENT_SECRET),
     },
     turnstileSiteKey: c.env.TURNSTILE_SECRET_KEY ? c.env.TURNSTILE_SITE_KEY ?? null : null,
+    firstRun: !owner,
+    claimRequired: !owner && !!c.env.OWNER_CLAIM_TOKEN?.trim(),
+    registration,
+    passwordResetEmail: emailEnabled(c.env),
   };
   return c.json(body);
 });
@@ -26,7 +33,7 @@ meRoutes.get("/auth-config", (c) => {
 meRoutes.use("/me", requireUser);
 meRoutes.use("/me/*", requireUser);
 
-meRoutes.get("/me", (c) => c.json(toCurrentUser(c.get("user"))));
+meRoutes.get("/me", async (c) => c.json(toCurrentUser(c.get("user"), await serverOwnerId(c.env.DB))));
 
 meRoutes.patch("/me", async (c) => {
   const db = c.get("db");
@@ -53,7 +60,7 @@ meRoutes.patch("/me", async (c) => {
     })
     .where(eq(schema.users.id, user.id))
     .returning();
-  return c.json(toCurrentUser(updated!));
+  return c.json(toCurrentUser(updated!, await serverOwnerId(c.env.DB)));
 });
 
 meRoutes.get("/me/workspaces", async (c) => {

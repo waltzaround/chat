@@ -1,0 +1,121 @@
+import { env } from "cloudflare:test";
+import { describe, expect, it } from "vitest";
+import type { AuthConfig, CurrentUser, PasswordResetLink, ServerSettings, ServerUser } from "../shared/types";
+import { appOrigin, assertMayRegister, authSecret, RegistrationError } from "../worker/instance";
+import { createAuth } from "../worker/auth/auth";
+import { createDb } from "../worker/db";
+import { api, apiRaw, createWorkspace, invite, signUp, signUpRaw } from "./helpers";
+
+// Tests in this file run in order against one database: a fresh server, then its owner.
+describe("zero-config deployment", () => {
+  it("generates one auth secret, keeps it in D1, and reuses it from any isolate", async () => {
+    const first = await authSecret({ ...env, BETTER_AUTH_SECRET: undefined });
+    const second = await authSecret({ ...env, BETTER_AUTH_SECRET: "change-me-to-a-long-random-string" });
+    expect(first).toHaveLength(44);
+    expect(second).toBe(first);
+    const row = await env.DB.prepare("SELECT value FROM instance_settings WHERE key = 'auth_secret'").first<{ value: string }>();
+    expect(row?.value).toBe(first);
+  });
+
+  it("prefers a configured auth secret", async () => {
+    expect(await authSecret({ ...env, BETTER_AUTH_SECRET: "configured-secret" })).toBe("configured-secret");
+  });
+
+  it("uses APP_URL when set and the request origin otherwise", () => {
+    const request = new Request("https://chat.acme.workers.dev/api/me");
+    expect(appOrigin({ ...env, APP_URL: "" }, request)).toBe("https://chat.acme.workers.dev");
+    expect(appOrigin({ ...env, APP_URL: undefined }, request)).toBe("https://chat.acme.workers.dev");
+    expect(appOrigin({ ...env, APP_URL: "https://chat.example.com/" }, request)).toBe("https://chat.example.com");
+  });
+});
+
+describe("server owner", () => {
+  it("requires the setup link's claim token before an owner exists, when one is configured", async () => {
+    const withToken = { ...env, OWNER_CLAIM_TOKEN: "claim-123" };
+    await expect(assertMayRegister(withToken, new Headers())).rejects.toBeInstanceOf(RegistrationError);
+    await expect(assertMayRegister(withToken, new Headers({ cookie: "chat_claim=wrong" }))).rejects.toThrow(/setup link/);
+    await expect(assertMayRegister(withToken, new Headers({ cookie: "chat_claim=claim-123" }))).resolves.toBeUndefined();
+    await expect(assertMayRegister(env, new Headers())).resolves.toBeUndefined();
+  });
+
+  it("makes the first account the owner and starts the server invite-only", async () => {
+    // Undo test/setup.ts, which opens sign-up for the other test files.
+    await env.DB.prepare("DELETE FROM instance_settings WHERE key = 'registration'").run();
+    const before = await api<AuthConfig>(null, "/api/auth-config");
+    expect(before).toMatchObject({ firstRun: true, claimRequired: false });
+
+    const owner = await signUp("owner");
+    expect(owner.user.isServerOwner).toBe(true);
+    expect(await api<AuthConfig>(null, "/api/auth-config")).toMatchObject({ firstRun: false, registration: "invite" });
+  });
+
+  it("only lets people with a working invite sign up to an invite-only server", async () => {
+    const owner = await signIn("owner");
+    const refused = await signUpRaw();
+    expect(refused.status).toBe(403);
+    expect(await refused.text()).toMatch(/invite-only/);
+
+    const ws = await createWorkspace(owner);
+    const link = await invite(owner, ws.id);
+    const guest = await signUp(undefined, `chat_invite=${link.code}`);
+    expect(guest.user.isServerOwner).toBe(false);
+
+    await api(owner.cookie, `/api/workspaces/${ws.id}/invites/${link.code}`, { method: "DELETE" });
+    expect((await signUpRaw(undefined, `chat_invite=${link.code}`)).status).toBe(403);
+  });
+
+  it("lets only the owner change who can sign up", async () => {
+    const owner = await signIn("owner");
+    const ws = await createWorkspace(owner);
+    const link = await invite(owner, ws.id);
+    const member = await signUp(undefined, `chat_invite=${link.code}`);
+
+    expect((await apiRaw(member.cookie, "/api/server", { method: "PATCH", json: { registration: "open" } })).status).toBe(403);
+    const updated = await api<ServerSettings>(owner.cookie, "/api/server", { method: "PATCH", json: { registration: "open" } });
+    expect(updated.registration).toBe("open");
+    expect((await signUpRaw()).status).toBe(200);
+  });
+});
+
+describe("password recovery", () => {
+  it("lets the owner find accounts and hand out a one-time reset link", async () => {
+    const owner = await signIn("owner");
+    const member = await signUp("forgetful");
+    const found = await api<ServerUser[]>(owner.cookie, "/api/server/users?q=forget");
+    expect(found.map((u) => u.username)).toEqual(["forgetful"]);
+    expect((await apiRaw(member.cookie, "/api/server/users")).status).toBe(403);
+    expect((await apiRaw(member.cookie, `/api/server/users/${member.user.id}/password-reset`, { method: "POST" })).status).toBe(403);
+
+    const link = await api<PasswordResetLink>(owner.cookie, `/api/server/users/${member.user.id}/password-reset`, { method: "POST" });
+    expect(link.url).toMatch(/^http:\/\/localhost\/reset-password\?token=/);
+    const token = new URL(link.url).searchParams.get("token")!;
+
+    const reset = await apiRaw(null, "/api/auth/reset-password", { method: "POST", json: { token, newPassword: "brand-new-password" } });
+    expect(reset.status).toBe(200);
+    // One-time, signs out existing sessions, and the new password works.
+    expect((await apiRaw(null, "/api/auth/reset-password", { method: "POST", json: { token, newPassword: "another-password" } })).status).toBe(400);
+    // Sessions are deleted; the 5-minute session cookie cache is dropped here to check that.
+    const sessionOnly = member.cookie.split("; ").filter((c) => !c.includes("session_data")).join("; ");
+    expect((await apiRaw(sessionOnly, "/api/me")).status).toBe(401);
+    expect((await signIn("forgetful", "brand-new-password")).user.id).toBe(member.user.id);
+  });
+
+  it("emails a reset link only when email is set up", async () => {
+    const sent: Array<{ to: string; text: string }> = [];
+    const EMAIL = { send: async (message: { to: string; text: string }) => void sent.push(message) } as unknown as SendEmail;
+    const secret = await authSecret(env);
+    const withEmail = createAuth({ ...env, EMAIL, EMAIL_FROM: "chat@example.com" }, createDb(env.DB), "https://chat.example.com", secret);
+    await withEmail.api.requestPasswordReset({ body: { email: "forgetful@example.com" } });
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!.to).toBe("forgetful@example.com");
+    expect(sent[0]!.text).toMatch(/https:\/\/chat\.example\.com\/reset-password\?token=/);
+    expect((await api<AuthConfig>(null, "/api/auth-config")).passwordResetEmail).toBe(false);
+  });
+});
+
+async function signIn(username: string, password = "password123"): Promise<{ cookie: string; user: CurrentUser }> {
+  const res = await apiRaw(null, "/api/auth/sign-in/email", { method: "POST", json: { email: `${username}@example.com`, password } });
+  expect(res.status).toBe(200);
+  const cookie = (res.headers.getSetCookie?.() ?? []).map((c) => c.split(";")[0]!).join("; ");
+  return { cookie, user: await api<CurrentUser>(cookie, "/api/me") };
+}

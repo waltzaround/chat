@@ -16,14 +16,19 @@ import type {
   PermissionOverwrite,
   Role,
   SearchResponse,
+  PasswordResetLink,
+  ServerSettings,
+  ServerUser,
   WorkspaceDetail,
   WorkspaceSummary,
 } from "@shared/types";
-import type { CreateChannelInput, CreateInviteInput, CreateRoleInput, CreateWorkspaceInput } from "@shared/schemas";
+import type { CreateChannelInput, CreateInviteInput, CreateRoleInput, CreateWorkspaceInput, UpdateServerSettingsInput } from "@shared/schemas";
 
 export const keys = {
   me: ["me"] as const,
   authConfig: ["auth-config"] as const,
+  serverSettings: ["server-settings"] as const,
+  serverUsers: (q: string) => ["server-users", q] as const,
   workspaces: ["workspaces"] as const,
   workspace: (id: string) => ["workspace", id] as const,
   members: (id: string) => ["members", id] as const,
@@ -43,6 +48,33 @@ export function useAuthConfig() {
 
 export function useMe() {
   return useQuery({ queryKey: keys.me, queryFn: () => apiGet<CurrentUser>("/api/me"), retry: false, staleTime: 60_000 });
+}
+
+export function useServerSettings(enabled = true) {
+  return useQuery({ queryKey: keys.serverSettings, queryFn: () => apiGet<ServerSettings>("/api/server"), enabled });
+}
+
+export function useUpdateServerSettings() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: UpdateServerSettingsInput) => apiPatch<ServerSettings>("/api/server", input),
+    onSuccess: (settings) => {
+      qc.setQueryData(keys.serverSettings, settings);
+      void qc.invalidateQueries({ queryKey: keys.authConfig });
+    },
+  });
+}
+
+export function useServerUsers(q: string) {
+  return useQuery({
+    queryKey: keys.serverUsers(q),
+    queryFn: () => apiGet<ServerUser[]>(`/api/server/users?q=${encodeURIComponent(q)}`),
+    placeholderData: (previous) => previous,
+  });
+}
+
+export function useCreatePasswordResetLink() {
+  return useMutation({ mutationFn: (userId: string) => apiPost<PasswordResetLink>(`/api/server/users/${userId}/password-reset`, {}) });
 }
 
 export function useWorkspaces() {

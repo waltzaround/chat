@@ -1,14 +1,25 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router";
+import { Link, Navigate, useNavigate, useSearchParams } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
+import { KeyRound, Loader2, Lock } from "lucide-react";
 import { authClient, type SocialProvider } from "@/lib/auth-client";
 import { useAuthConfig, keys } from "@/lib/queries";
 import { apiGet } from "@/lib/api";
+import { hasClaimToken, hasInvite, rememberClaimToken } from "@/lib/signup-cookies";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Turnstile } from "@/components/auth/Turnstile";
+import { SetupSteps } from "@/components/onboarding/SetupSteps";
+
+/** "Walter Lim" → "walterlim": a starting username people can still change. */
+function usernameFrom(name: string): string {
+  return name
+    .normalize("NFKD")
+    .toLowerCase()
+    .replace(/[^a-z0-9_.]+/g, "")
+    .slice(0, 32);
+}
 
 export function AuthPage({ mode }: { mode: "login" | "register" }) {
   const navigate = useNavigate();
@@ -17,10 +28,19 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
   const config = useAuthConfig();
   const next = params.get("next") && params.get("next")!.startsWith("/") ? params.get("next")! : "/";
 
+  // The setup link from `npm run setup` is /register?claim=…; keep the token for the sign-up request.
+  const [hasClaim] = useState(() => {
+    const claim = params.get("claim");
+    if (claim) rememberClaimToken(claim);
+    return hasClaimToken();
+  });
+  const [invited] = useState(hasInvite);
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [username, setUsername] = useState("");
+  const [usernameEdited, setUsernameEdited] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
@@ -38,7 +58,7 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
   const showTurnstile = !!siteKey && challengeRequired;
 
   const finish = async () => {
-    await qc.invalidateQueries({ queryKey: keys.me });
+    await Promise.all([qc.invalidateQueries({ queryKey: keys.me }), qc.invalidateQueries({ queryKey: keys.authConfig })]);
     navigate(next, { replace: true });
   };
 
@@ -85,90 +105,159 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
     }
   };
 
+  const onDisplayName = (value: string) => {
+    setDisplayName(value);
+    if (!usernameEdited) setUsername(usernameFrom(value));
+  };
+
   const providers = config.data?.providers;
+  const firstRun = config.data?.firstRun ?? false;
+  const nextQuery = params.get("next") ? `?next=${encodeURIComponent(next)}` : "";
+  // Invite-only servers accept new accounts only from people who opened an invite link.
+  const canRegister = firstRun || config.data?.registration !== "invite" || invited;
+
+  // A brand-new deployment has nobody to sign in as: go straight to creating the owner account.
+  if (firstRun && mode === "login") return <Navigate to={`/register${nextQuery}`} replace />;
+
+  const blocked =
+    mode !== "register" ? null : firstRun && config.data?.claimRequired && !hasClaim ? "claim" : !canRegister ? "invite" : null;
+  const owner = mode === "register" && firstRun && !blocked;
+  const title = mode === "login" ? "Welcome back" : owner ? "Create your owner account" : blocked ? "Welcome" : "Create your account";
+  const subtitle = owner ? "You are setting up this server. You can change its settings any time." : "Community chat on Cloudflare";
 
   return (
-    <main className="flex min-h-dvh items-center justify-center bg-rail p-4">
+    <main className="flex min-h-dvh flex-col items-center justify-center gap-4 bg-rail p-4">
+      {owner ? <SetupSteps current={0} /> : null}
       <div className="w-full max-w-sm rounded-lg border bg-card p-6 shadow-sm">
         <div className="mb-6 flex items-center gap-2.5">
           <img src="/favicon.svg" alt="" className="size-8 rounded-md" />
           <div>
-            <h1 className="text-lg font-semibold leading-tight">{mode === "login" ? "Welcome back" : "Create your account"}</h1>
-            <p className="text-xs text-muted-foreground">Community chat on Cloudflare</p>
+            <h1 className="text-lg font-semibold leading-tight">{title}</h1>
+            <p className="text-xs text-muted-foreground">{subtitle}</p>
           </div>
         </div>
 
-        {providers && (providers.github || providers.google) ? (
-          <div className="mb-4 grid gap-2">
-            {providers.github ? (
-              <Button type="button" variant="outline" onClick={() => social("github")} disabled={busy}>
-                Continue with GitHub
-              </Button>
+        {blocked ? (
+          <SignUpClosed reason={blocked} />
+        ) : (
+          <>
+            {providers && (providers.github || providers.google) ? (
+              <div className="mb-4 grid gap-2">
+                {providers.github ? (
+                  <Button type="button" variant="outline" onClick={() => social("github")} disabled={busy}>
+                    Continue with GitHub
+                  </Button>
+                ) : null}
+                {providers.google ? (
+                  <Button type="button" variant="outline" onClick={() => social("google")} disabled={busy}>
+                    Continue with Google
+                  </Button>
+                ) : null}
+                <div className="relative my-1 text-center text-[11px] uppercase tracking-wide text-muted-foreground">
+                  <span className="relative z-10 bg-card px-2">or</span>
+                  <span className="absolute inset-x-0 top-1/2 -z-0 border-t" aria-hidden />
+                </div>
+              </div>
             ) : null}
-            {providers.google ? (
-              <Button type="button" variant="outline" onClick={() => social("google")} disabled={busy}>
-                Continue with Google
-              </Button>
-            ) : null}
-            <div className="relative my-1 text-center text-[11px] uppercase tracking-wide text-muted-foreground">
-              <span className="relative z-10 bg-card px-2">or</span>
-              <span className="absolute inset-x-0 top-1/2 -z-0 border-t" aria-hidden />
-            </div>
-          </div>
-        ) : null}
 
-        <form onSubmit={onSubmit} className="grid gap-3" noValidate>
-          {mode === "register" ? (
-            <>
+            <form onSubmit={onSubmit} className="grid gap-3" noValidate>
+              {mode === "register" ? (
+                <>
+                  <div className="grid gap-1.5">
+                    <Label htmlFor="displayName">Your name</Label>
+                    <Input id="displayName" value={displayName} onChange={(e) => onDisplayName(e.target.value)} autoComplete="name" maxLength={48} placeholder="Walter" autoFocus />
+                  </div>
+                  <div className="grid gap-1.5">
+                    <Label htmlFor="username">Username</Label>
+                    <Input
+                      id="username"
+                      value={username}
+                      onChange={(e) => {
+                        setUsername(e.target.value);
+                        setUsernameEdited(true);
+                      }}
+                      autoComplete="username"
+                      required
+                      minLength={2}
+                      maxLength={32}
+                      placeholder="walter"
+                      pattern="[a-z0-9_.]+"
+                    />
+                    <p className="text-[11px] text-muted-foreground">People mention you as @{username || "username"}. Lowercase letters, numbers, dots and underscores.</p>
+                  </div>
+                </>
+              ) : null}
               <div className="grid gap-1.5">
-                <Label htmlFor="displayName">Display name</Label>
-                <Input id="displayName" value={displayName} onChange={(e) => setDisplayName(e.target.value)} autoComplete="name" maxLength={48} placeholder="Walter" />
+                <Label htmlFor="email">Email</Label>
+                <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" required autoFocus={mode === "login"} />
               </div>
               <div className="grid gap-1.5">
-                <Label htmlFor="username">Username</Label>
-                <Input id="username" value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" required minLength={2} maxLength={32} placeholder="walter" pattern="[a-z0-9_.]+" />
-                <p className="text-[11px] text-muted-foreground">Lowercase letters, numbers, dots and underscores.</p>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="password">Password</Label>
+                  {mode === "login" ? (
+                    <Link to="/forgot-password" className="text-[11px] text-muted-foreground hover:text-foreground hover:underline">
+                      Forgot password?
+                    </Link>
+                  ) : null}
+                </div>
+                <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete={mode === "login" ? "current-password" : "new-password"} required minLength={8} />
+                {mode === "register" ? <p className="text-[11px] text-muted-foreground">At least 8 characters.</p> : null}
               </div>
-            </>
-          ) : null}
-          <div className="grid gap-1.5">
-            <Label htmlFor="email">Email</Label>
-            <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" required />
-          </div>
-          <div className="grid gap-1.5">
-            <Label htmlFor="password">Password</Label>
-            <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete={mode === "login" ? "current-password" : "new-password"} required minLength={8} />
-          </div>
-          {showTurnstile && siteKey ? <Turnstile siteKey={siteKey} onToken={onToken} className="mt-1" /> : null}
-          {error ? (
-            <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive" role="alert">
-              {error}
-            </p>
-          ) : null}
-          <Button type="submit" disabled={busy} className="mt-1">
-            {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
-            {mode === "login" ? "Sign in" : "Create account"}
-          </Button>
-        </form>
+              {showTurnstile && siteKey ? <Turnstile siteKey={siteKey} onToken={onToken} className="mt-1" /> : null}
+              {error ? (
+                <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive" role="alert">
+                  {error}
+                </p>
+              ) : null}
+              <Button type="submit" disabled={busy} className="mt-1">
+                {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
+                {mode === "login" ? "Sign in" : owner ? "Create owner account" : "Create account"}
+              </Button>
+            </form>
+          </>
+        )}
 
-        <p className="mt-4 text-center text-xs text-muted-foreground">
-          {mode === "login" ? (
-            <>
-              New here?{" "}
-              <Link className="text-primary hover:underline" to={`/register${params.get("next") ? `?next=${encodeURIComponent(next)}` : ""}`}>
-                Create an account
-              </Link>
-            </>
-          ) : (
-            <>
-              Already have an account?{" "}
-              <Link className="text-primary hover:underline" to={`/login${params.get("next") ? `?next=${encodeURIComponent(next)}` : ""}`}>
-                Sign in
-              </Link>
-            </>
-          )}
-        </p>
+        {owner ? null : (
+          <p className="mt-4 text-center text-xs text-muted-foreground">
+            {mode === "login" ? (
+              canRegister ? (
+                <>
+                  New here?{" "}
+                  <Link className="text-primary hover:underline" to={`/register${nextQuery}`}>
+                    Create an account
+                  </Link>
+                </>
+              ) : (
+                "New here? This server is invite-only: open an invite link from a member to join."
+              )
+            ) : (
+              <>
+                Already have an account?{" "}
+                <Link className="text-primary hover:underline" to={`/login${nextQuery}`}>
+                  Sign in
+                </Link>
+              </>
+            )}
+          </p>
+        )}
       </div>
     </main>
+  );
+}
+
+function SignUpClosed({ reason }: { reason: "claim" | "invite" }) {
+  const Icon = reason === "claim" ? KeyRound : Lock;
+  return (
+    <div className="grid gap-3 text-sm">
+      <div className="flex items-center gap-2 font-medium">
+        <Icon className="size-4 text-muted-foreground" aria-hidden />
+        {reason === "claim" ? "This server is still being set up" : "This server is invite-only"}
+      </div>
+      <p className="text-muted-foreground">
+        {reason === "claim"
+          ? "The owner account is created from the setup link that npm run setup printed. If you set up this server, open that link."
+          : "Ask a member for an invite link, then open it to create your account."}
+      </p>
+    </div>
   );
 }
