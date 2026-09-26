@@ -3,6 +3,9 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
   assertBucketName,
+  assertEmailAddress,
+  enableEmail,
+  assertWorkerName,
   extractJson,
   isPlaceholderAuthSecret,
   normalizeAppUrl,
@@ -11,6 +14,7 @@ import {
   publicHostname,
   readWranglerProject,
   secretsForUpload,
+  suggestSubdomain,
   workersDevUrl,
 } from "./onboard-config.ts";
 
@@ -23,7 +27,7 @@ test("reads the committed wrangler project", () => {
   assert.equal(project.databaseId, "");
   assert.equal(project.bucketName, "chat-uploads");
   assert.equal(project.queueName, "chat-background");
-  assert.equal(project.appUrl, "http://localhost:5173");
+  assert.equal(project.appUrl, "");
   assert.equal(publicHostname(project.appUrl), null);
 });
 
@@ -64,6 +68,25 @@ test("normalizes public URLs and hostnames", () => {
   assert.equal(workersDevUrl("Chat", "acme"), "https://chat.acme.workers.dev");
   assert.throws(() => normalizeAppUrl("chat.example.com"), /absolute http/);
   assert.throws(() => assertBucketName("Chat"), /lowercase/);
+  assert.throws(() => assertWorkerName("my_chat"), /lowercase/);
+  assertWorkerName("chat");
+});
+
+test("turns on email with a sender var and a send_email binding", () => {
+  const enabled = enableEmail(source, "chat@example.com");
+  assert.match(enabled, /"EMAIL_FROM": "chat@example.com"/);
+  assert.match(enabled, /"send_email": \[\{ "name": "EMAIL" \}\],\n\s*"analytics_engine_datasets"/);
+  assert.equal(enableEmail(enabled, "hi@example.com").match(/"send_email"/g)?.length, 1);
+  const legacy = source.replace(/\s*\/\/ Optional\. Sender[^\n]*\n[^\n]*\n[^\n]*\n\s*"EMAIL_FROM": "",/, "");
+  assert.doesNotMatch(legacy, /EMAIL_FROM/);
+  assert.match(enableEmail(legacy, "chat@example.com"), /"vars": \{\n    "EMAIL_FROM": "chat@example.com",/);
+  assert.throws(() => assertEmailAddress("chat"), /not an email/);
+});
+
+test("suggests a workers.dev subdomain", () => {
+  assert.equal(suggestSubdomain("Walter Lim's Account", undefined), "walter-lim");
+  assert.equal(suggestSubdomain(undefined, "Jo.Smith@example.com"), "jo-smith");
+  assert.equal(suggestSubdomain("!!!", undefined), "my-chat");
 });
 
 test("builds a secret payload and rejects half-set pairs", () => {
@@ -82,9 +105,10 @@ test("builds a secret payload and rejects half-set pairs", () => {
     "GITHUB_CLIENT_SECRET",
     "TURNSTILE_SECRET_KEY",
   ]);
-  assert.equal(secretsForUpload({ keepAuthSecret: true, accountId: "acct" }).BETTER_AUTH_SECRET, undefined);
+  // No secret supplied: the Worker generates its own, so nothing is uploaded.
+  assert.equal(secretsForUpload({ accountId: "acct" }).BETTER_AUTH_SECRET, undefined);
+  assert.equal(secretsForUpload({ betterAuthSecret: "change-me-to-a-long-random-string" }).BETTER_AUTH_SECRET, undefined);
   assert.throws(() => secretsForUpload({ betterAuthSecret: "x", googleId: "only-id" }), /GOOGLE_CLIENT_SECRET/);
-  assert.throws(() => secretsForUpload({ keepAuthSecret: false }), /BETTER_AUTH_SECRET/);
 });
 
 test("parses env files and wrangler JSON with leading noise", () => {

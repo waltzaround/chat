@@ -55,6 +55,26 @@ export function patchWranglerProject(source: string, patch: WranglerPatch): stri
   return next;
 }
 
+/**
+ * Turns on password-reset email: sets vars.EMAIL_FROM and adds the send_email
+ * binding. Older configs without an EMAIL_FROM var get one.
+ */
+export function enableEmail(source: string, from: string): string {
+  let next = fieldPattern("EMAIL_FROM").test(source)
+    ? replaceStringField(source, "EMAIL_FROM", from, "all")
+    : source.replace(/("vars"\s*:\s*\{)/, `$1\n    "EMAIL_FROM": ${JSON.stringify(from)},`);
+  if (!/"send_email"\s*:/.test(next)) {
+    const binding = `  // Password-reset email (Workers Paid plan). Added by npm run setup.\n  "send_email": [{ "name": "EMAIL" }],\n`;
+    next = next.replace(/(\n)(\s*"analytics_engine_datasets"\s*:)/, `$1${binding}$2`);
+    if (!/"send_email"\s*:/.test(next)) throw new Error("Could not add the send_email binding to wrangler.jsonc.");
+  }
+  return next;
+}
+
+export function assertEmailAddress(value: string): void {
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) throw new Error(`"${value}" is not an email address.`);
+}
+
 export function normalizeAppUrl(input: string): string {
   let url: URL;
   try {
@@ -70,6 +90,7 @@ export function normalizeAppUrl(input: string): string {
 
 /** Hostname Turnstile and browsers can use. Local origins are omitted. */
 export function publicHostname(appUrl: string): string | null {
+  if (!appUrl) return null;
   const url = new URL(appUrl);
   const host = url.hostname;
   if (host === "localhost" || host === "127.0.0.1" || host === "::1" || host.endsWith(".local")) return null;
@@ -86,9 +107,27 @@ export function isPlaceholderAuthSecret(value: string | undefined): boolean {
   return value === undefined || AUTH_SECRET_PLACEHOLDERS.has(value.trim());
 }
 
+export function assertWorkerName(name: string): void {
+  if (!/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(name)) {
+    throw new Error(`Worker name "${name}" must be 1–63 characters: lowercase letters, numbers, and hyphens, and must not start or end with a hyphen.`);
+  }
+}
+
+/** A workers.dev subdomain guess from the account name or login email. */
+export function suggestSubdomain(accountName: string | undefined, email: string | undefined): string {
+  const base = (accountName ?? "").replace(/'s account$/i, "") || email?.split("@")[0] || "";
+  const slug = base
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40)
+    .replace(/-+$/, "");
+  return slug || "my-chat";
+}
+
 export interface SecretSources {
+  /** Only uploaded when set. Without it the Worker generates and stores its own. */
   betterAuthSecret?: string;
-  keepAuthSecret?: boolean;
   accountId?: string;
   turnstileSecret?: string;
   googleId?: string;
@@ -103,12 +142,7 @@ export interface SecretSources {
 
 export function secretsForUpload(input: SecretSources): Record<string, string> {
   const secrets: Record<string, string> = {};
-  if (!input.keepAuthSecret) {
-    if (isPlaceholderAuthSecret(input.betterAuthSecret)) {
-      throw new Error("BETTER_AUTH_SECRET is missing. Generate one, or pass --keep-auth-secret to leave the current Worker secret in place.");
-    }
-    secrets.BETTER_AUTH_SECRET = input.betterAuthSecret!.trim();
-  }
+  if (!isPlaceholderAuthSecret(input.betterAuthSecret)) secrets.BETTER_AUTH_SECRET = input.betterAuthSecret!.trim();
   if (input.accountId) secrets.CLOUDFLARE_ACCOUNT_ID = input.accountId;
   if (input.turnstileSecret) secrets.TURNSTILE_SECRET_KEY = input.turnstileSecret;
   addPair(secrets, "GOOGLE_CLIENT_ID", input.googleId, "GOOGLE_CLIENT_SECRET", input.googleSecret);

@@ -15,9 +15,15 @@
   "triggers": { "crons": ["17 * * * *"] },
   "vars": {
     // Public, non-secret configuration. Secrets live in .dev.vars / `wrangler secret put`.
-    "APP_URL": "http://localhost:5173",
+    // Optional. Blank uses whatever origin the request arrived on (localhost in dev,
+    // your workers.dev URL or custom domain in production). Set it to pin one origin.
+    "APP_URL": "",
     "TURNSTILE_SITE_KEY": "1x00000000000000000000AA",
     "R2_BUCKET_NAME": "chat-uploads",
+    // Optional. Sender for password-reset email, e.g. "chat@example.com". Email needs the
+    // Workers Paid plan, a domain on Cloudflare DNS, and the send_email binding that
+    // `npm run setup` adds when you choose it. Blank keeps email off.
+    "EMAIL_FROM": "",
     "REALTIMEKIT_PRESET_FULL": "chat_full",
     "REALTIMEKIT_PRESET_LISTEN": "chat_listen"
   },

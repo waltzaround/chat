@@ -1,8 +1,14 @@
-# Copy to .dev.vars for local development. Never commit .dev.vars.
+# Optional: copy to .dev.vars for local development. Everything here can stay blank.
+# Never commit .dev.vars.
 # In production set each of these with `wrangler secret put <NAME>`.
 
-# Better Auth — generate with `openssl rand -base64 32`
-BETTER_AUTH_SECRET=change-me-to-a-long-random-string
+# Optional. Leave blank and the Worker generates one on first run and keeps it in D1.
+# To manage it yourself: `openssl rand -base64 32`. Changing it signs everyone out.
+BETTER_AUTH_SECRET=
+
+# Optional. While nobody has signed up, only /register?claim=<this value> can create the
+# owner account. `npm run setup` sets one and prints the link. Leave blank locally.
+OWNER_CLAIM_TOKEN=
 
 # OAuth providers (optional locally; the buttons are hidden when unset)
 GOOGLE_CLIENT_ID=

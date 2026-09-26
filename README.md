@@ -4,9 +4,64 @@ Repository: https://github.com/waltzaround/beacon
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/waltzaround/beacon)
 
-A Discord-style community chat application built entirely on Cloudflare: Workers, Durable Objects (WebSocket Hibernation), D1, R2, Queues, RealtimeKit, Turnstile and Workers Analytics Engine — with a Vite + React front end served from Workers Static Assets.
+A Discord-style community chat application you can run yourself, built entirely on Cloudflare: Workers, Durable Objects (WebSocket Hibernation), D1, R2, Queues, RealtimeKit, Turnstile and Workers Analytics Engine — with a Vite + React front end served from Workers Static Assets.
 
 Workspaces contain categories, text channels, voice channels (with their own chat), members, roles with a permission bitfield, channel permission overwrites, invites, bans and an audit log. Text chat is realtime over one WebSocket per workspace; voice, video and screen sharing run on Cloudflare RealtimeKit with a fully custom media UI.
+
+## Run your own server
+
+You need a Cloudflare account (the free plan is enough). If you don't have one, both options below let you sign up along the way. There is nothing to configure: the app generates its own auth secret and works on whatever URL it is deployed to.
+
+### Option 1: Deploy button (nothing to install)
+
+1. Click [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/waltzaround/beacon). Log in, or choose **Sign up**.
+2. Connect GitHub or GitLab. Cloudflare copies this repo into your account there and creates the database, storage bucket, and queue in your Cloudflare account.
+3. Leave every setting blank except `OWNER_CLAIM_TOKEN`: put any long random phrase there. Click **Deploy**.
+4. Open `https://….workers.dev/register?claim=<your phrase>`. Create your owner account, name your workspace, and share the invite link it gives you.
+
+The first account on a server becomes its **owner**. With `OWNER_CLAIM_TOKEN` set, only your claim link can create that account. If you leave it blank, whoever signs up first becomes the owner, so open the URL straight away.
+
+If the deploy stops with an R2 error, open **R2** in the Cloudflare dashboard once to enable it (the free tier is enough, but Cloudflare asks for a payment method), then retry.
+
+### Option 2: From your terminal
+
+Needs Node.js 22 or newer and git.
+
+```bash
+git clone https://github.com/waltzaround/beacon.git && cd beacon
+npm install
+npm run setup
+```
+
+`setup` opens a browser to log in (or sign up) to Cloudflare, asks for a Worker name, and shows a plan before it does anything. Then it creates the database, bucket, and queue, creates a Turnstile widget that protects sign-up, deploys, and prints a one-time link for creating your owner account. Nobody else can create the first account. If the account is new, it also registers a `workers.dev` subdomain and walks you through enabling R2.
+
+Running it again is safe. Existing resources are kept, and it is how you add the extras below. `npm run setup -- --yes` accepts every default without prompting, and `--help` lists the flags.
+
+### Add extras later
+
+None of these are needed for chat. Run `npm run setup` again and answer **yes** to extras. You can also put the values in the environment or pass `--env-file`, then run `npm run setup -- --yes`.
+
+| Extra | What you need |
+| --- | --- |
+| Voice, video, and screen sharing | A RealtimeKit app (dashboard → Realtime → RealtimeKit): its app id and an API token with Realtime permissions. Setup creates the two presets. Until then, voice rooms show "Voice is not configured on this deployment". |
+| Google or GitHub sign-in | An OAuth client id and secret. Callback URLs are `https://YOUR-URL/api/auth/callback/google` and `/api/auth/callback/github`. |
+| Direct-to-R2 uploads | An R2 API token (Object Read & Write): `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY`. Without it, the Worker proxies uploads. Setup configures bucket CORS for you. |
+| Password-reset email | **Needs the Workers Paid plan ($5/month); not available on the free plan.** You also need your own domain on Cloudflare DNS, set up under Email → Email Sending in the dashboard. Setup asks for a sender address such as `chat@yourdomain.com` and adds the `send_email` binding. Without email, use the recovery options below. |
+| Custom domain | Add it to the Worker in the dashboard (Settings → Domains & Routes), then run `npm run setup -- --app-url https://chat.example.com` so Turnstile and upload CORS allow it too. |
+
+If you used the deploy button, set the same values as Worker secrets in the dashboard (Settings → Variables and Secrets). For voice, also run `npm run realtimekit:presets` once from a clone. For email, set the `EMAIL_FROM` variable and add `"send_email": [{ "name": "EMAIL" }]` to `wrangler.jsonc` in your copy of the repo.
+
+### Forgotten passwords
+
+Every server can recover accounts, with or without email:
+
+| Who | How |
+| --- | --- |
+| A member | The owner opens User Settings → Server, finds the account, and clicks **Reset link**. They send that one-time link privately; it works once and expires in 24 hours. |
+| The owner | From the folder you ran setup in, run `npm run recover` (add `--email someone@example.com` for any other account). It uses your Cloudflare login and prints a reset link. |
+| Anyone, by email | "Forgot password?" on the sign-in page sends a reset link. This needs email set up, which needs the **Workers Paid plan**. On the free plan, the page tells people to ask the owner. |
+
+Setting a new password signs that account out on its other devices. Sessions are cached in a cookie for up to 5 minutes, so an old device can stay signed in that long.
 
 ## Stack
 
@@ -38,7 +93,6 @@ public/         Static assets and `_headers` (CSP for the SPA)
 ```bash
 git clone https://github.com/waltzaround/beacon.git && cd beacon
 npm install
-cp .dev.vars.example .dev.vars      # set BETTER_AUTH_SECRET at minimum
 npm run db:migrate                  # applies db/migrations to the local D1
 npm run db:seed                     # optional demo data (see below)
 npm run dev                         # http://localhost:5173
@@ -54,7 +108,8 @@ Other commands:
 | `npm run db:migrate` / `db:migrate:remote` | Apply migrations locally / to the deployed D1 |
 | `npm run db:seed` | Generate `db/seed.sql` and load it into local D1 |
 | `npm run realtimekit:presets` | Create the two RealtimeKit presets the app expects |
-| `npm run setup` | Provision D1, R2, a queue, secrets, and an optional deploy with Wrangler |
+| `npm run setup` | Create the Cloudflare resources and deploy (see [Run your own server](#run-your-own-server)) |
+| `npm run recover` | Print a one-time password-reset link for the owner (or `--email` any account); `--local` for the dev database |
 | `npm run deploy` | `vite build`, apply remote D1 migrations, then `wrangler deploy` |
 | `node scripts/e2e-smoke.mjs` | Browser smoke test against a running dev server (needs `npx playwright install chromium`) |
 
@@ -66,76 +121,30 @@ Demo logins (password `password123`): `walter@example.com` (owner), `sarah@examp
 
 The production app has no dependency on seed data.
 
+No `.dev.vars` is needed. To add optional secrets locally (OAuth, voice), copy `.dev.vars.example` to `.dev.vars` and fill in what you need.
+
 ### What works locally without Cloudflare credentials
 
 Everything except voice/video: auth (email/password), workspaces, channels, realtime chat, presence, typing, reactions, uploads (proxied through the Worker into the local R2 emulator), search and administration all run locally through the Cloudflare Vite plugin (Miniflare). Turnstile is skipped when `TURNSTILE_SECRET_KEY` is empty and a warning is logged once.
 
 Voice needs a RealtimeKit app (see below). Until the three RealtimeKit secrets are set, joining a voice room shows an explicit "Voice is not configured on this deployment" message rather than failing silently.
 
-## Deploying to Cloudflare
+### Owner setup and who can join
 
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/waltzaround/beacon)
+Your first sign-up is a three-step setup: create your account, name your workspace, and invite people. The last step gives you a permanent invite link and asks who can create accounts:
 
-The button deploys Beacon into the Cloudflare account of whoever clicks it. Cloudflare clones this repo into their GitHub or GitLab account (the repo must be public), creates the D1 database, R2 bucket, and queue there, and binds them to the Worker. Durable Objects and the Analytics Engine dataset are created on that deploy. Nothing is created in the template author's account.
+- **Invite only** (the default for new servers). People need an invite link from any workspace to sign up. This covers Google/GitHub sign-up too.
+- **Anyone with the URL.** Open sign-up, protected by Turnstile and rate limits.
 
-`database_id` in `wrangler.jsonc` is empty on purpose. The button fills it in on the deployer's clone. Do not commit a real database id.
+The owner can change this later under User Settings → Server. Servers that already had accounts before this feature treat their earliest account as the owner and stay open.
 
-On the setup screen:
+## Deployment notes
 
-- Set `BETTER_AUTH_SECRET` to the output of `openssl rand -base64 32`.
-- Set `APP_URL` once you know the hostname. The committed value is `http://localhost:5173`, which is wrong for a public deploy. After the first deploy, set it to `https://<worker>.<subdomain>.workers.dev` (or your custom domain) and redeploy. Invite links and auth both use it.
-- Leave the other secrets blank. Email/password chat, realtime, search, and uploads work without them. Uploads are proxied through the Worker until R2 credentials are set.
-
-The repo's `build` and `deploy` scripts are what Workers Builds runs: `vite build`, then `wrangler d1 migrations apply DB --remote`, then `wrangler deploy`. The migration command uses the `DB` binding name so it still works if the database is renamed on the setup screen.
-
-### From the command line
-
-`npm run setup` provisions the same resources from a clone. It logs in with Wrangler, creates the D1 database, R2 bucket, and queue, writes the database id into `wrangler.jsonc`, sets `APP_URL`, uploads secrets, and can build and deploy.
-
-```bash
-npm run setup
-```
-
-Non-interactive (a `BETTER_AUTH_SECRET` is generated when the environment does not provide one):
-
-```bash
-npm run setup -- --yes --app-url https://chat.example.com --deploy
-```
-
-Running it again keeps resources that already exist. The database id written into `wrangler.jsonc` has to stay uncommitted. `npm run setup -- --help` lists every flag. With `--yes`, voice, OAuth, Turnstile, and direct-to-R2 uploads are configured when the matching variables are in the environment or an `--env-file`.
-
-### Optional follow-ups
-
-These are not required for chat.
-
-**Voice.** Create a RealtimeKit app in the Cloudflare dashboard (Realtime → RealtimeKit), then:
-
-```bash
-CLOUDFLARE_ACCOUNT_ID=... REALTIMEKIT_APP_ID=... CLOUDFLARE_REALTIME_API_TOKEN=... npm run realtimekit:presets
-```
-
-Set those three values as secrets (`wrangler secret put NAME`, or the Worker's secret settings). Until they are set, joining a voice room shows "Voice is not configured on this deployment".
-
-**Turnstile.** Create a widget for your domain. Put the site key in `vars.TURNSTILE_SITE_KEY` and the secret in `TURNSTILE_SECRET_KEY`. The committed site key and the `.dev.vars.example` secret are Cloudflare's always-pass test pair. With no secret, the check is skipped.
-
-**OAuth.** Optional Google and GitHub client ids and secrets. Callback URLs are `https://YOUR-APP-DOMAIN/api/auth/callback/google` and `/api/auth/callback/github`.
-
-**Direct-to-R2 uploads.** By default the Worker proxies uploads. To let browsers PUT straight to the bucket, create an R2 API token (Object Read & Write) for `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` and set CORS:
-
-```bash
-cat > cors.json <<'EOF'
-{"rules":[{"allowed":{"origins":["https://YOUR-APP-DOMAIN"],"methods":["PUT"],"headers":["Content-Type"]},"maxAgeSeconds":3600}]}
-EOF
-npx wrangler r2 bucket cors set chat-uploads --file cors.json --force
-```
-
-### Updating a deployment from your machine
-
-`npm run setup` writes this deployment's database id into `wrangler.jsonc`. Leave that change uncommitted. An empty `database_id` makes `wrangler deploy` create a new database in whichever account you are logged into.
-
-```bash
-npm run deploy
-```
+- **Configuration.** Everything is optional. `APP_URL` is blank by default, so auth and invite links use the origin each request arrives on. Set it only to pin one origin. `BETTER_AUTH_SECRET` is generated on first run and stored in the `instance_settings` D1 table, unless you set it as a secret. Changing it signs everyone out.
+- **Database id.** `database_id` in `wrangler.jsonc` is empty on purpose. The deploy button fills it in on the deployer's clone, and `npm run setup` writes it locally. Leave that change uncommitted: a committed id would point every deploy at one database, and an empty one makes `wrangler deploy` create a new database in whichever account you are logged into.
+- **Build pipeline.** `npm run deploy` (which Workers Builds runs too) is `vite build`, then `wrangler d1 migrations apply DB --remote`, then `wrangler deploy`. The migration uses the `DB` binding name, so it still works if the database was renamed.
+- **Updating.** Pull the latest code and run `npm run deploy` from the clone you ran setup in. Deploy-button installs redeploy on every push to the copied repo.
+- **Turnstile.** The committed site key and the `.dev.vars.example` secret are Cloudflare's always-pass test pair. With no secret, the check is skipped. `npm run setup` creates a real widget for your `workers.dev` hostname and any `--app-url`.
 
 ## Architecture notes
 

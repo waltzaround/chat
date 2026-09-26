@@ -16,6 +16,7 @@
     "db:seed": "tsx db/seed.ts && wrangler d1 execute DB --local --file=db/seed.sql",
     "deploy": "npm run build && npm run db:migrate:remote && wrangler deploy",
     "setup": "tsx scripts/onboard.ts",
+    "recover": "tsx scripts/recover.ts",
     "cf-typegen": "wrangler types worker/env.d.ts",
     "realtimekit:presets": "tsx scripts/realtimekit-presets.ts"
   },
@@ -51,10 +52,16 @@
   "cloudflare": {
     "bindings": {
       "APP_URL": {
-        "description": "Public origin of this deployment, with no trailing slash. Invite links and auth use it. After the first deploy, set it to your `https://<worker>.<subdomain>.workers.dev` URL (or custom domain) and redeploy. `http://localhost:5173` is only for local dev."
+        "description": "Optional. Leave blank: the app uses whatever URL it is served on. Set it (no trailing slash) only to pin one origin, for example when the Worker is reachable on both workers.dev and a custom domain."
       },
       "BETTER_AUTH_SECRET": {
-        "description": "Required. Session signing secret. Generate one with `openssl rand -base64 32`."
+        "description": "Optional. Leave blank and a secret is generated on first run and stored in D1. To manage it yourself, use `openssl rand -base64 32`. Changing it signs everyone out."
+      },
+      "OWNER_CLAIM_TOKEN": {
+        "description": "Optional but recommended. Any long random phrase. The first account on a new server becomes its owner; with this set, only `https://YOUR-URL/register?claim=<phrase>` can create it, so a stranger cannot get there first."
+      },
+      "EMAIL_FROM": {
+        "description": "Optional, and needs the Workers Paid plan ($5/month). Sender for password-reset email, like `chat@yourdomain.com`, on a domain in Cloudflare DNS set up under Email → Email Sending. Also add `\"send_email\": [{ \"name\": \"EMAIL\" }]` to wrangler.jsonc. Leave blank on the free plan: the server owner makes reset links instead."
       },
       "TURNSTILE_SITE_KEY": {
         "description": "Optional. Public Turnstile site key. The default is Cloudflare's always-pass test key. Replace it together with `TURNSTILE_SECRET_KEY` when you create a real widget."
