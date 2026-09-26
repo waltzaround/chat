@@ -205,7 +205,7 @@ export const MessageItem = memo(function MessageItem({
           </div>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction className="bg-destructive text-white hover:bg-destructive/90" onClick={() => rt.send({ type: "message.delete", messageId: message.id })}>
+            <AlertDialogAction variant="destructive" onClick={() => rt.send({ type: "message.delete", messageId: message.id })}>
               Delete
             </AlertDialogAction>
           </AlertDialogFooter>

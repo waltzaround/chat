@@ -145,7 +145,7 @@ export function ChannelItem({
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction className="bg-destructive text-white hover:bg-destructive/90" onClick={() => void confirmDelete()}>
+            <AlertDialogAction variant="destructive" onClick={() => void confirmDelete()}>
               Delete channel
             </AlertDialogAction>
           </AlertDialogFooter>

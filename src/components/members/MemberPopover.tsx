@@ -103,7 +103,7 @@ export function MemberPopover({ member, workspaceId, children }: { member: Membe
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction className="bg-destructive text-white hover:bg-destructive/90" onClick={() => void run()}>
+            <AlertDialogAction variant="destructive" onClick={() => void run()}>
               {confirm === "ban" ? "Ban member" : "Kick member"}
             </AlertDialogAction>
           </AlertDialogFooter>
