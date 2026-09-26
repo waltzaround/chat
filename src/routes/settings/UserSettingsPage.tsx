@@ -18,6 +18,7 @@ import { Separator } from "@/components/ui/separator";
 import { useAuthConfig, useBlocks, useMe, useServerSettings, useSetBlocked, useUpdateMe, useUpdateServerSettings, useWorkspaces } from "@/lib/queries";
 import { UserAvatar } from "@/components/common/UserAvatar";
 import { browserNotificationsSupported, useNotificationPrefs } from "@/lib/notifications";
+import { disablePush, enablePush, isPushEnabled, needsHomeScreen, pushSupported, syncPushPrefs } from "@/lib/push";
 import { useTheme, type Theme } from "@/lib/theme";
 import { authClient } from "@/lib/auth-client";
 import { errorMessage } from "@/lib/api";
@@ -452,6 +453,29 @@ function NotificationsTab() {
   const toggleMuted = (id: string, muted: boolean) =>
     setPrefs((p) => ({ ...p, mutedWorkspaces: muted ? [...p.mutedWorkspaces, id] : p.mutedWorkspaces.filter((w) => w !== id) }));
 
+  // Push: notifications even when every tab is closed.
+  const [push, setPush] = useState<boolean | null>(null);
+  const [pushBusy, setPushBusy] = useState(false);
+  useEffect(() => {
+    if (pushSupported()) void isPushEnabled().then(setPush);
+  }, []);
+  useEffect(() => {
+    if (push) void syncPushPrefs({ mutedWorkspaces: prefs.mutedWorkspaces, hideText: !prefs.showText });
+  }, [push, prefs.mutedWorkspaces, prefs.showText]);
+  const setPushOn = async (on: boolean) => {
+    setPushBusy(true);
+    try {
+      if (on) await enablePush({ mutedWorkspaces: prefs.mutedWorkspaces, hideText: !prefs.showText });
+      else await disablePush();
+      setPush(on);
+      if (on) setPermission("granted");
+    } catch (err) {
+      toast.error(errorMessage(err));
+    } finally {
+      setPushBusy(false);
+    }
+  };
+
   return (
     <div className="grid max-w-lg gap-6">
       <div className="space-y-1">
@@ -471,6 +495,19 @@ function NotificationsTab() {
             </p>
           </div>
           <Switch checked={prefs.desktop && permission === "granted"} onCheckedChange={(v) => void setDesktop(v)} disabled={!supported || permission === "denied"} aria-label="Desktop notifications" />
+        </div>
+        <div className="flex items-center justify-between gap-4 rounded-md border px-4 py-3">
+          <div>
+            <p className="text-sm font-medium">Push notifications on this device</p>
+            <p className="text-xs text-muted-foreground">
+              {!pushSupported()
+                ? "This browser doesn't support push notifications."
+                : needsHomeScreen()
+                  ? "On iPhone and iPad, add this app to your Home Screen first (Share → Add to Home Screen), then turn this on there."
+                  : "Get notified even when every tab is closed."}
+            </p>
+          </div>
+          <Switch checked={!!push} onCheckedChange={(v) => void setPushOn(v)} disabled={!pushSupported() || needsHomeScreen() || pushBusy || push === null} aria-label="Push notifications on this device" />
         </div>
         <div className="flex items-center justify-between gap-4 rounded-md border px-4 py-3">
           <div>

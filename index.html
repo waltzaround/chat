@@ -6,15 +6,11 @@
     <meta name="color-scheme" content="dark light" />
     <title>Chat</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <script>
-      // Apply the saved theme before first paint to avoid a flash.
-      try {
-        var t = localStorage.getItem("chat.theme");
-        if (t === "light") document.documentElement.classList.remove("dark");
-        else if (t === "system" && window.matchMedia("(prefers-color-scheme: light)").matches)
-          document.documentElement.classList.remove("dark");
-      } catch (e) {}
-    </script>
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="theme-color" content="#09090b" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <script src="/theme-init.js"></script>
   </head>
   <body>
     <div id="root"></div>

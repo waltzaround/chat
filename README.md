@@ -186,7 +186,7 @@ Both are Zod-validated discriminated unions in `shared/events.ts`.
 
 ## Not yet done
 
-- Web Push and mobile push notifications (browser notifications work while the app is open in a tab).
+- Native mobile apps (the web app installs to a phone's Home Screen and gets push notifications).
 - Group direct messages (DMs are one-to-one), and blocking people.
 - Passkeys (Better Auth plugin can be added without schema changes to the app tables).
 - Link unfurling and automated moderation (queue job types are typed but not implemented).

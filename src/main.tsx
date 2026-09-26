@@ -7,6 +7,9 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { router } from "@/app/router";
 import { isApiError } from "@/lib/api";
 import "@/styles/globals.css";
+import { registerServiceWorker } from "@/lib/push";
+
+registerServiceWorker();
 
 const queryClient = new QueryClient({
   defaultOptions: {

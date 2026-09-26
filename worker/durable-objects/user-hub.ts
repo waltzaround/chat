@@ -5,8 +5,13 @@
  * Stateless beyond its hibernating sockets; later the place to add Web Push.
  */
 import { DurableObject } from "cloudflare:workers";
-import type { UserEvent } from "@shared/events";
+import type { NotificationPayload, UserEvent } from "@shared/events";
 import type { Env } from "../env";
+import { pushToUser } from "../lib/push";
+
+/** How long a notification stays available to the service worker after a push. */
+const RECENT_MS = 10 * 60 * 1000;
+const RECENT_MAX = 20;
 
 export class UserHub extends DurableObject<Env> {
   override async fetch(request: Request): Promise<Response> {
@@ -16,15 +21,32 @@ export class UserHub extends DurableObject<Env> {
     return new Response(null, { status: 101, webSocket: pair[0] });
   }
 
-  async notify(event: UserEvent): Promise<void> {
+  /**
+   * Deliver to open tabs; with none open, send a Web Push so the device shows it.
+   * Recent notifications are kept for the service worker to fetch after a push.
+   */
+  async notify(event: UserEvent, userId: string): Promise<void> {
     const payload = JSON.stringify(event);
-    for (const ws of this.ctx.getWebSockets()) {
+    const sockets = this.ctx.getWebSockets();
+    for (const ws of sockets) {
       try {
         ws.send(payload);
       } catch {
         /* closing */
       }
     }
+    if (event.type !== "notification") return;
+    const now = Date.now();
+    const recent = ((await this.ctx.storage.get<Array<{ at: number; n: NotificationPayload }>>("recent")) ?? []).filter((r) => now - r.at < RECENT_MS);
+    recent.push({ at: now, n: event.notification });
+    await this.ctx.storage.put("recent", recent.slice(-RECENT_MAX));
+    if (sockets.length === 0) this.ctx.waitUntil(pushToUser(this.env, userId, event.notification).catch((err) => console.error("push failed", err)));
+  }
+
+  /** Notifications from the last few minutes, newest last. */
+  async recent(): Promise<NotificationPayload[]> {
+    const now = Date.now();
+    return ((await this.ctx.storage.get<Array<{ at: number; n: NotificationPayload }>>("recent")) ?? []).filter((r) => now - r.at < RECENT_MS).map((r) => r.n);
   }
 
   /** Suspension or deletion: close every connection so the client signs out. */

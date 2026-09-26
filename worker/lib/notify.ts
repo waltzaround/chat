@@ -20,5 +20,5 @@ export async function notifyUsers(env: Env, userIds: string[], notification: Not
 }
 
 export async function deliver(env: Env, userIds: string[], notification: NotificationPayload): Promise<void> {
-  await Promise.all(userIds.map((id) => userHub(env, id).notify({ type: "notification", notification }).catch((err) => console.error("notify failed", err))));
+  await Promise.all(userIds.map((id) => userHub(env, id).notify({ type: "notification", notification }, id).catch((err) => console.error("notify failed", err))));
 }

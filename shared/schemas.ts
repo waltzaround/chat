@@ -140,6 +140,14 @@ export const deleteServerUserSchema = z.object({
   deleteMessages: z.boolean().default(false),
 });
 
+export const pushSubscriptionSchema = z.object({
+  endpoint: z.string().url().max(1000),
+  /** Workspaces this device doesn't want pushes from. */
+  mutedWorkspaces: z.array(z.string().max(64)).max(500).default([]),
+  /** Show only who sent it, not the message text. */
+  hideText: z.boolean().default(false),
+});
+
 export const openDmSchema = z.object({
   userId: z.string().min(1),
 });
