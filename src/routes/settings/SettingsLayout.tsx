@@ -26,7 +26,9 @@ export function SettingsLayout({ tabs, activeTab, basePath, closePath, title, bo
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") void navigate(closePath);
+      // Escape in an open dialog closes just the dialog, not the settings page behind it.
+      if (e.key !== "Escape" || e.defaultPrevented || document.querySelector('[role="dialog"], [role="alertdialog"]')) return;
+      void navigate(closePath);
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
