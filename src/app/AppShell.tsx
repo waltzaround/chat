@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { useParams } from "react-router";
+import { useParams, useSearchParams } from "react-router";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { WorkspaceRail } from "@/components/workspace/WorkspaceRail";
 import { ChannelSidebar } from "@/components/channels/ChannelSidebar";
@@ -17,6 +17,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   const isMobile = viewport === "mobile";
   // A direct message conversation shows your conversations instead of channels, and no member list.
   const isDm = useWorkspace(workspaceId).data?.kind === "dm";
+  // An open thread takes the member list's place.
+  const threadOpen = useSearchParams()[0].has("thread");
   const sidebar = (onNavigate?: () => void) =>
     isDm ? <DirectMessagesSidebar activeWorkspaceId={workspaceId} onNavigate={onNavigate} /> : <ChannelSidebar onNavigate={onNavigate} />;
 
@@ -43,7 +45,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           {children}
         </main>
 
-        {membersOpen && workspaceId && !isDm ? (
+        {membersOpen && workspaceId && !isDm && !threadOpen ? (
           viewport === "desktop" ? (
             <MemberList workspaceId={workspaceId} />
           ) : (

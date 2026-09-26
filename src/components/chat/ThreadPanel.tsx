@@ -31,7 +31,8 @@ export function ThreadPanel({ channel, workspace, rootId, onClose }: { channel: 
   }, [replies.length, pending.length]);
 
   return (
-    <aside className="flex w-[380px] shrink-0 flex-col border-l bg-background max-md:absolute max-md:inset-0 max-md:z-20 max-md:w-full" aria-label="Thread">
+    // Beside the channel on wide screens; over it when there isn't room for both.
+    <aside className="flex w-[380px] shrink-0 flex-col border-l bg-background max-lg:absolute max-lg:inset-y-0 max-lg:right-0 max-lg:z-20 max-lg:w-full max-lg:max-w-md max-lg:shadow-xl" aria-label="Thread">
       <header className="flex h-12 shrink-0 items-center gap-2 border-b px-3">
         <MessagesSquare className="size-4 text-muted-foreground" aria-hidden />
         <h2 className="text-sm font-semibold">Thread</h2>
