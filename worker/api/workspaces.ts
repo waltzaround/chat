@@ -37,6 +37,7 @@ import {
   reorderSchema,
   searchQuerySchema,
   setMemberRolesSchema,
+  transferOwnershipSchema,
   updateCategorySchema,
   updateMemberSchema,
   updateRoleSchema,
@@ -212,6 +213,22 @@ workspaceRoutes.delete("/:workspaceId", async (c) => {
   await db.delete(schema.workspaces).where(eq(schema.workspaces.id, ctx.workspaceId));
   await c.env.BACKGROUND_QUEUE.send({ type: "workspace.deleted", workspaceId: ctx.workspaceId, r2Prefix: `attachments/${ctx.workspaceId}/` });
   await notifyWorkspace(c.env, ctx.workspaceId, { type: "workspace.updated", reason: "workspace" });
+  return c.body(null, 204);
+});
+
+/** The owner hands the workspace to another member, e.g. before leaving or deleting their account. */
+workspaceRoutes.post("/:workspaceId/owner", async (c) => {
+  const db = c.get("db");
+  const ctx = await requireMember(db, c.req.param("workspaceId"), c.get("user").id);
+  if (!ctx.isOwner) throw ApiError.forbidden("Only the owner can transfer the workspace");
+  const { userId } = await parseBody(c, transferOwnershipSchema);
+  if (userId === ctx.userId) throw ApiError.validation(undefined, "You already own this workspace");
+  const target = await loadMemberContext(db, ctx.workspaceId, userId);
+  const account = target ? await db.query.users.findFirst({ where: eq(schema.users.id, userId) }) : null;
+  if (!target || !account || account.suspendedAt || account.deletedAt) throw ApiError.validation(undefined, "The new owner must be an active member");
+  await db.update(schema.workspaces).set({ ownerUserId: userId, updatedAt: new Date() }).where(eq(schema.workspaces.id, ctx.workspaceId));
+  await audit(db, { workspaceId: ctx.workspaceId, actorUserId: ctx.userId, action: "workspace.owner_transferred", targetType: "user", targetId: userId });
+  await notifyWorkspace(c.env, ctx.workspaceId, { type: "workspace.updated", reason: "members" });
   return c.body(null, 204);
 });
 

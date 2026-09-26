@@ -24,6 +24,8 @@ export const users = sqliteTable(
     status: text("status").notNull().default("online"),
     /** Set by the server owner. A suspended account cannot sign in. */
     suspendedAt: timestamp("suspended_at"),
+    /** The account was deleted: its profile is scrubbed and it can no longer sign in. */
+    deletedAt: timestamp("deleted_at"),
     createdAt: timestamp("created_at").notNull(),
     updatedAt: timestamp("updated_at").notNull(),
   },
@@ -203,6 +205,7 @@ export const messages = sqliteTable(
     uniqueIndex("messages_channel_sequence_idx").on(t.channelId, t.channelSequence),
     uniqueIndex("messages_client_id_idx").on(t.channelId, t.authorUserId, t.clientMessageId),
     index("messages_workspace_idx").on(t.workspaceId),
+    index("messages_author_idx").on(t.authorUserId, t.createdAt),
   ],
 );
 

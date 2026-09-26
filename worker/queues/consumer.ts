@@ -1,6 +1,7 @@
 import { and, eq, isNull, lt, sql } from "drizzle-orm";
 import type { BackgroundJob, Env } from "../env";
 import { createDb, schema } from "../db";
+import { deleteUserMessagesBatch } from "../lib/accounts";
 
 /**
  * Background work that must not delay the request path. Every job is
@@ -51,6 +52,10 @@ async function handleJob(job: BackgroundJob, env: Env, db: ReturnType<typeof cre
     }
     case "message.deleted": {
       if (job.attachmentKeys.length) await env.UPLOADS.delete(job.attachmentKeys);
+      return;
+    }
+    case "user.messages.delete": {
+      await deleteUserMessagesBatch(env, db, job.userId);
       return;
     }
     case "workspace.deleted": {

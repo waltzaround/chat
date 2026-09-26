@@ -34,7 +34,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { UserAvatar } from "@/components/common/UserAvatar";
-import { useMembers, useMemberMutations, useRoleMutations } from "@/lib/queries";
+import { useMembers, useMemberMutations, useRoleMutations, useTransferOwnership } from "@/lib/queries";
 import { can, canModerateMember, memberDisplayName, Permission } from "@/lib/permissions";
 import { errorMessage } from "@/lib/api";
 import { formatFull } from "@/lib/format";
@@ -68,6 +68,9 @@ export function MembersTable({ ws, meId }: MembersTableProps) {
   const [search, setSearch] = useState("");
   const [dialog, setDialog] = useState<DialogState>(null);
   const [kickTarget, setKickTarget] = useState<Member | null>(null);
+  const [newOwner, setNewOwner] = useState<Member | null>(null);
+  const transfer = useTransferOwnership(ws.id);
+  const iAmOwner = ws.ownerUserId === meId;
 
   const myRoleIds = ws.myRoleIds;
   const canManageRoles = can(ws, Permission.MANAGE_ROLES);
@@ -192,6 +195,12 @@ export function MembersTable({ ws, meId }: MembersTableProps) {
                               Ban
                             </DropdownMenuItem>
                           )}
+                          {iAmOwner && (
+                            <>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem onClick={() => setNewOwner(member)}>Transfer ownership</DropdownMenuItem>
+                            </>
+                          )}
                         </DropdownMenuContent>
                       </DropdownMenu>
                     )}
@@ -241,6 +250,37 @@ export function MembersTable({ ws, meId }: MembersTableProps) {
           onClose={() => setDialog(null)}
           ban={memberMuts.ban}
         />
+      )}
+
+      {/* Transfer ownership confirm */}
+      {newOwner && (
+        <AlertDialog open onOpenChange={(o) => !o && setNewOwner(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Make {memberDisplayName(newOwner)} the owner?</AlertDialogTitle>
+              <AlertDialogDescription>
+                They get full control of {ws.name}, including deleting it. You stay a member with your current roles, and only they can give ownership back.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => setNewOwner(null)}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                variant="destructive"
+                onClick={async () => {
+                  try {
+                    await transfer.mutateAsync(newOwner.userId);
+                    toast.success(`${memberDisplayName(newOwner)} now owns ${ws.name}`);
+                    setNewOwner(null);
+                  } catch (err) {
+                    toast.error(errorMessage(err));
+                  }
+                }}
+              >
+                Transfer ownership
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       )}
 
       {/* Kick confirm */}

@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { SettingsLayout } from "./SettingsLayout";
 import { RegistrationPolicyPicker, WorkspaceCreationPicker } from "@/components/onboarding/RegistrationPolicyPicker";
 import { EmailStatus, ServerAccounts } from "./ServerAccounts";
+import { AccountSection } from "./AccountSection";
 import { ImagePicker } from "@/components/common/ImagePicker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,7 +33,8 @@ const SERVER_TAB = { id: "server", label: "Server", icon: <Server className="siz
 
 export function UserSettingsPage() {
   const { tab } = useParams<{ tab?: string }>();
-  const isServerOwner = useMe().data?.isServerOwner ?? false;
+  const me = useMe().data;
+  const isServerOwner = me?.isServerOwner ?? false;
   const tabs = isServerOwner ? [...TABS, SERVER_TAB] : TABS;
   const activeTab = tabs.find((t) => t.id === tab)?.id ?? "profile";
 
@@ -64,7 +66,8 @@ export function UserSettingsPage() {
       {activeTab === "profile" && (
         <div className="grid gap-10">
           <ProfileTab />
-          <ChangePassword />
+          {me?.hasPassword ? <ChangePassword /> : null}
+          <AccountSection />
         </div>
       )}
       {activeTab === "appearance" && <AppearanceTab />}

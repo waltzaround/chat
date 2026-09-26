@@ -8,7 +8,9 @@ import { parseBody } from "../lib/validate";
 import { toCurrentUser, toWorkspaceSummary } from "../lib/serialize";
 import { canCreateWorkspace, registrationPolicy, serverOwnerId } from "../instance";
 import { emailEnabled } from "../email";
-import { updateMeSchema } from "@shared/schemas";
+import { deleteAccountSchema, updateMeSchema } from "@shared/schemas";
+import { deleteAccount, exportAccount } from "../lib/accounts";
+import { checkRateLimit } from "../security/ratelimit";
 import type { AuthConfig, WorkspaceSummary } from "@shared/types";
 
 export const meRoutes = new Hono<AppEnv>();
@@ -35,9 +37,43 @@ meRoutes.use("/me/*", requireUser);
 
 /** Server-wide facts about the signed-in account. */
 async function serverContext(db: D1Database, userId: string) {
-  const [ownerId, canCreate] = await Promise.all([serverOwnerId(db), canCreateWorkspace(db, userId)]);
-  return { ownerId, canCreateWorkspace: canCreate };
+  const [ownerId, canCreate, password] = await Promise.all([serverOwnerId(db), canCreateWorkspace(db, userId), credentialAccount(db, userId)]);
+  return { ownerId, canCreateWorkspace: canCreate, hasPassword: !!password };
 }
+
+function credentialAccount(db: D1Database, userId: string) {
+  return db.prepare("SELECT password FROM accounts WHERE user_id = ? AND provider_id = 'credential' AND password IS NOT NULL").bind(userId).first<{ password: string }>();
+}
+
+/** Delete your own account. Asks for your username, and your password if you have one. */
+meRoutes.delete("/me", async (c) => {
+  const user = c.get("user");
+  const input = await parseBody(c, deleteAccountSchema);
+  if (input.confirmUsername.toLowerCase() !== user.username.toLowerCase()) throw ApiError.validation(undefined, "Type your username to confirm");
+  const credential = await credentialAccount(c.env.DB, user.id);
+  if (credential) {
+    const ctx = await c.get("auth").$context;
+    if (!input.password || !(await ctx.password.verify({ hash: credential.password, password: input.password }))) {
+      throw ApiError.validation(undefined, "That password is wrong");
+    }
+  }
+  await deleteAccount(c.env, c.get("db"), user.id, { deleteMessages: input.deleteMessages });
+  return c.body(null, 204);
+});
+
+/** Download everything the server holds about you, as JSON. */
+meRoutes.get("/me/export", (c) => {
+  const user = c.get("user");
+  checkRateLimit(`export:${user.id}`, 3, 60 * 60 * 1000);
+  const date = new Date().toISOString().slice(0, 10);
+  return new Response(exportAccount(c.get("db"), user.id), {
+    headers: {
+      "Content-Type": "application/json; charset=utf-8",
+      "Content-Disposition": `attachment; filename="chat-export-${user.username}-${date}.json"`,
+      "Cache-Control": "no-store",
+    },
+  });
+});
 
 meRoutes.get("/me", async (c) => c.json(toCurrentUser(c.get("user"), await serverContext(c.env.DB, c.get("user").id))));
 

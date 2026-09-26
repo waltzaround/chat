@@ -23,7 +23,7 @@ import type {
   WorkspaceDetail,
   WorkspaceSummary,
 } from "@shared/types";
-import type { CreateChannelInput, CreateInviteInput, CreateRoleInput, CreateWorkspaceInput, UpdateServerSettingsInput, ReportMessageInput } from "@shared/schemas";
+import type { CreateChannelInput, CreateInviteInput, CreateRoleInput, CreateWorkspaceInput, UpdateServerSettingsInput, ReportMessageInput, DeleteAccountInput } from "@shared/schemas";
 
 export const keys = {
   me: ["me"] as const,
@@ -73,6 +73,29 @@ export function useServerUsers(q: string) {
     queryKey: keys.serverUsers(q),
     queryFn: () => apiGet<ServerUser[]>(`/api/server/users?q=${encodeURIComponent(q)}`),
     placeholderData: (previous) => previous,
+  });
+}
+
+export function useDeleteServerUser() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ userId, deleteMessages }: { userId: string; deleteMessages: boolean }) => api<void>(`/api/server/users/${userId}`, { method: "DELETE", json: { deleteMessages } }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["server-users"] }),
+  });
+}
+
+export function useDeleteMe() {
+  return useMutation({ mutationFn: (input: DeleteAccountInput) => api<void>("/api/me", { method: "DELETE", json: input }) });
+}
+
+export function useTransferOwnership(workspaceId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (userId: string) => apiPost<void>(`/api/workspaces/${workspaceId}/owner`, { userId }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: keys.workspace(workspaceId) });
+      void qc.invalidateQueries({ queryKey: keys.members(workspaceId) });
+    },
   });
 }
 

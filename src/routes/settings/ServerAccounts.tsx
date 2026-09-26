@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Ban, Check, Copy, KeyRound, Loader2, Mail, MoreHorizontal, RotateCcw, Search } from "lucide-react";
+import { Ban, Check, Copy, KeyRound, Loader2, Mail, MoreHorizontal, RotateCcw, Search, Trash2 } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,9 +16,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { UserAvatar } from "@/components/common/UserAvatar";
-import { useCreatePasswordResetLink, useServerSettings, useServerUsers, useSetSuspended } from "@/lib/queries";
+import { useCreatePasswordResetLink, useDeleteServerUser, useServerSettings, useServerUsers, useSetSuspended } from "@/lib/queries";
 import { errorMessage } from "@/lib/api";
 import type { PasswordResetLink, ServerUser } from "@shared/types";
 
@@ -29,6 +30,9 @@ export function ServerAccounts() {
   const createLink = useCreatePasswordResetLink();
   const [issued, setIssued] = useState<{ user: ServerUser; link: PasswordResetLink } | null>(null);
   const [confirmSuspend, setConfirmSuspend] = useState<ServerUser | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<ServerUser | null>(null);
+  const [deleteMessages, setDeleteMessages] = useState(false);
+  const deleteUser = useDeleteServerUser();
   const setSuspended = useSetSuspended();
 
   const changeSuspension = (user: ServerUser, suspended: boolean) => {
@@ -98,6 +102,16 @@ export function ServerAccounts() {
                         <Ban className="size-3.5" aria-hidden /> Suspend account
                       </DropdownMenuItem>
                     )}
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      variant="destructive"
+                      onSelect={() => {
+                        setDeleteMessages(false);
+                        setConfirmDelete(user);
+                      }}
+                    >
+                      <Trash2 className="size-3.5" aria-hidden /> Delete account
+                    </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
               )}
@@ -108,6 +122,43 @@ export function ServerAccounts() {
         )}
       </ul>
       <ResetLinkDialog issued={issued} onClose={() => setIssued(null)} />
+      <AlertDialog open={!!confirmDelete} onOpenChange={(open) => !open && setConfirmDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {confirmDelete?.displayName}'s account?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Their profile is erased and they leave every workspace. They can sign up again with the same email. This can't be undone. If they own a workspace, it must be transferred first.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <label className="flex items-start gap-2.5 text-sm">
+            <Checkbox checked={deleteMessages} onCheckedChange={(v) => setDeleteMessages(v === true)} className="mt-0.5" />
+            <span>
+              Also delete all their messages
+              <span className="block text-xs text-muted-foreground">Otherwise they stay, shown as from "Deleted user".</span>
+            </span>
+          </label>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={() => {
+                const target = confirmDelete;
+                if (!target) return;
+                deleteUser.mutate(
+                  { userId: target.id, deleteMessages },
+                  {
+                    onSuccess: () => toast.success(`${target.displayName}'s account was deleted`),
+                    onError: (err) => toast.error(errorMessage(err)),
+                  },
+                );
+                setConfirmDelete(null);
+              }}
+            >
+              Delete account
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <AlertDialog open={!!confirmSuspend} onOpenChange={(open) => !open && setConfirmSuspend(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>

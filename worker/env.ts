@@ -47,4 +47,6 @@ export type BackgroundJob =
   | { type: "attachment.cleanup"; olderThanMs: number }
   | { type: "invites.expire" }
   | { type: "workspace.deleted"; workspaceId: string; r2Prefix: string }
-  | { type: "message.deleted"; attachmentKeys: string[] };
+  | { type: "message.deleted"; attachmentKeys: string[] }
+  /** A deleted account asked for its messages to go too. Processed in batches. */
+  | { type: "user.messages.delete"; userId: string };

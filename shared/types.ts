@@ -24,6 +24,8 @@ export interface CurrentUser extends UserSummary {
   isServerOwner: boolean;
   /** False when the owner limits workspace creation to themselves. */
   canCreateWorkspace: boolean;
+  /** Signs in with a password (not only Google/GitHub). Deleting the account asks for it. */
+  hasPassword: boolean;
 }
 
 export interface WorkspaceSummary {

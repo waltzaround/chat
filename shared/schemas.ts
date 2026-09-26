@@ -124,6 +124,22 @@ export const banSchema = z.object({
   deleteRecentMessages: z.boolean().optional(),
 });
 
+export const deleteAccountSchema = z.object({
+  /** Typed by the person as confirmation. */
+  confirmUsername: z.string().trim().min(1),
+  /** Required when the account has a password. */
+  password: z.string().max(128).optional(),
+  deleteMessages: z.boolean().default(false),
+});
+
+export const deleteServerUserSchema = z.object({
+  deleteMessages: z.boolean().default(false),
+});
+
+export const transferOwnershipSchema = z.object({
+  userId: z.string().min(1),
+});
+
 export const reportMessageSchema = z.object({
   reason: z.enum(["spam", "harassment", "inappropriate", "other"]),
   note: z.string().trim().max(500).optional(),
@@ -202,6 +218,7 @@ export const turnstileSchema = z.object({
 export type CreateWorkspaceInput = z.infer<typeof createWorkspaceSchema>;
 export type CreateChannelInput = z.infer<typeof createChannelSchema>;
 export type CreateRoleInput = z.infer<typeof createRoleSchema>;
+export type DeleteAccountInput = z.infer<typeof deleteAccountSchema>;
 export type ReportMessageInput = z.infer<typeof reportMessageSchema>;
 export type UpdateServerSettingsInput = z.infer<typeof updateServerSettingsSchema>;
 export type CreateInviteInput = z.infer<typeof createInviteSchema>;

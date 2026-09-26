@@ -26,7 +26,8 @@ export type AuditAction =
   | "emoji.created"
   | "emoji.deleted"
   | "report.removed"
-  | "report.dismissed";
+  | "report.dismissed"
+  | "workspace.owner_transferred";
 
 export async function audit(
   db: Db,

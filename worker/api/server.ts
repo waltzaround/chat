@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { and, desc, eq, like, or } from "drizzle-orm";
+import { and, desc, eq, isNull, like, or } from "drizzle-orm";
 import type { AppEnv } from "../auth/middleware";
 import { requireUser } from "../auth/middleware";
 import { ApiError } from "../lib/errors";
@@ -10,7 +10,8 @@ import { emailEnabled } from "../email";
 import { parseBody } from "../lib/validate";
 import { registrationPolicy, serverOwnerId, setRegistrationPolicy, setWorkspaceCreationPolicy, workspaceCreationPolicy } from "../instance";
 import { hubFor } from "../lib/hub";
-import { updateServerSettingsSchema } from "@shared/schemas";
+import { deleteServerUserSchema, updateServerSettingsSchema } from "@shared/schemas";
+import { deleteAccount } from "../lib/accounts";
 import type { PasswordResetLink, ServerSettings, ServerUser } from "@shared/types";
 
 /** Owner-issued links last longer than emailed ones: they travel by chat or text message. */
@@ -47,7 +48,7 @@ serverRoutes.get("/users", async (c) => {
   const rows = await db
     .select()
     .from(schema.users)
-    .where(q ? or(like(schema.users.username, pattern), like(schema.users.displayName, pattern), like(schema.users.email, pattern)) : undefined)
+    .where(and(isNull(schema.users.deletedAt), q ? or(like(schema.users.username, pattern), like(schema.users.displayName, pattern), like(schema.users.email, pattern)) : undefined))
     .orderBy(desc(schema.users.createdAt))
     .limit(25);
   const ownerId = await serverOwnerId(c.env.DB);
@@ -101,6 +102,17 @@ serverRoutes.delete("/users/:userId/suspension", async (c) => {
   const db = c.get("db");
   const [updated] = await db.update(schema.users).set({ suspendedAt: null }).where(eq(schema.users.id, c.req.param("userId"))).returning({ id: schema.users.id });
   if (!updated) throw ApiError.notFound("User");
+  return c.body(null, 204);
+});
+
+/** Delete another account, optionally with all its messages. */
+serverRoutes.delete("/users/:userId", async (c) => {
+  const userId = c.req.param("userId");
+  if (userId === c.get("user").id) throw ApiError.validation(undefined, "Delete your own account from your profile settings");
+  const target = await c.get("db").query.users.findFirst({ where: eq(schema.users.id, userId) });
+  if (!target || target.deletedAt) throw ApiError.notFound("User");
+  const input = await parseBody(c, deleteServerUserSchema);
+  await deleteAccount(c.env, c.get("db"), userId, { deleteMessages: input.deleteMessages });
   return c.body(null, 204);
 });
 
