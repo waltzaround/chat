@@ -36,8 +36,10 @@ const basePermissions = {
   can_accept_production_requests: false,
   can_change_participant_permissions: false,
   can_edit_display_name: false,
+  can_livestream: false,
   can_record: false,
   can_spotlight: false,
+  recorder_type: "NONE",
   kick_participant: false,
   pin_participant: true,
   disable_participant_audio: false,
@@ -45,10 +47,31 @@ const basePermissions = {
   disable_participant_screensharing: false,
   hidden_participant: false,
   show_participant_list: true,
-  waiting_room_type: "NONE",
+  waiting_room_type: "SKIP",
   chat: { public: { can_send: false, text: false, files: false }, private: { can_send: false, can_receive: false, text: false, files: false } },
   polls: { can_create: false, can_vote: false, can_view: false },
-  plugins: { can_start: false, can_close: false },
+  plugins: { can_start: false, can_close: false, can_edit_config: false, config: {} },
+  connected_meetings: { can_alter_connected_meetings: false, can_switch_connected_meetings: false, can_switch_to_parent_meeting: false },
+};
+
+// The Core SDK draws its own UI. These tokens only satisfy the preset schema.
+const ui = {
+  design_tokens: {
+    border_radius: "rounded",
+    border_width: "thin",
+    spacing_base: 4,
+    theme: "dark",
+    colors: {
+      background: { "1000": "#09090b", "900": "#18181b", "800": "#27272a", "700": "#3f3f46", "600": "#52525b" },
+      brand: { "700": "#6d28d9", "600": "#7c3aed", "500": "#8b5cf6", "400": "#a78bfa", "300": "#c4b5fd" },
+      danger: "#ef4444",
+      success: "#22c55e",
+      text: "#fafafa",
+      text_on_brand: "#fafafa",
+      video_bg: "#09090b",
+      warning: "#f59e0b",
+    },
+  },
 };
 
 const presets = [
@@ -56,11 +79,13 @@ const presets = [
     name: process.env.REALTIMEKIT_PRESET_FULL ?? "chat_full",
     ...common,
     permissions: { ...basePermissions, media: { video: { can_produce: "ALLOWED" }, audio: { can_produce: "ALLOWED" }, screenshare: { can_produce: "ALLOWED" } } },
+    ui,
   },
   {
     name: process.env.REALTIMEKIT_PRESET_LISTEN ?? "chat_listen",
     ...common,
     permissions: { ...basePermissions, pin_participant: false, media: { video: { can_produce: "NOT_ALLOWED" }, audio: { can_produce: "NOT_ALLOWED" }, screenshare: { can_produce: "NOT_ALLOWED" } } },
+    ui,
   },
 ];
 
