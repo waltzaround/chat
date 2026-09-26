@@ -241,6 +241,22 @@ export interface AuthConfig {
   passwordResetEmail: boolean;
 }
 
+export type ReportReason = "spam" | "harassment" | "inappropriate" | "other";
+
+/** One reported message in a workspace's moderation queue, with everyone who reported it. */
+export interface ReportedMessage {
+  messageId: string;
+  channelId: string;
+  channelName: string;
+  author: UserSummary | null;
+  /** Text when first reported. */
+  content: string;
+  /** Already deleted (by its author or a moderator). */
+  messageDeleted: boolean;
+  firstReportedAt: string;
+  reports: Array<{ reporter: UserSummary | null; reason: ReportReason; note: string | null; createdAt: string }>;
+}
+
 /** "invite": only people with a working invite link can create an account. */
 export type RegistrationPolicy = "open" | "invite";
 

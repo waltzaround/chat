@@ -1,5 +1,5 @@
 import { memo, useState } from "react";
-import { AlertCircle, CornerUpLeft, Loader2, MoreHorizontal, Pencil, Reply, SmilePlus, Trash2, Copy, Link2 } from "lucide-react";
+import { AlertCircle, CornerUpLeft, Flag, Loader2, MoreHorizontal, Pencil, Reply, SmilePlus, Trash2, Copy, Link2 } from "lucide-react";
 import { toast } from "sonner";
 import { useRealtime } from "@/realtime/RealtimeProvider";
 import type { PendingMessage } from "@/realtime/RealtimeProvider";
@@ -16,6 +16,7 @@ import { Markdown } from "./Markdown";
 import { ReactionBar } from "./ReactionBar";
 import { EmojiPicker } from "./EmojiPicker";
 import { AttachmentView } from "./AttachmentView";
+import { ReportMessageDialog } from "./ReportMessageDialog";
 import type { Channel, CurrentUser, Message, WorkspaceDetail } from "@shared/types";
 
 export const MessageItem = memo(function MessageItem({
@@ -42,6 +43,7 @@ export const MessageItem = memo(function MessageItem({
   const customEmojis = useEmojis(workspace.id).data ?? [];
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
   const canReact = hasPermission(channel.permissions, Permission.ADD_REACTIONS);
   const canDelete = isMine || hasPermission(channel.permissions, Permission.MANAGE_MESSAGES);
   const name = message.author.nickname ?? message.author.displayName;
@@ -182,6 +184,11 @@ export const MessageItem = memo(function MessageItem({
             <DropdownMenuItem onSelect={() => void copyLink()}>
               <Link2 /> Copy link
             </DropdownMenuItem>
+            {isMine ? null : (
+              <DropdownMenuItem onSelect={() => setReportOpen(true)}>
+                <Flag /> Report
+              </DropdownMenuItem>
+            )}
             {canDelete ? (
               <>
                 <DropdownMenuSeparator />
@@ -194,6 +201,7 @@ export const MessageItem = memo(function MessageItem({
         </DropdownMenu>
       </div>
 
+      {isMine ? null : <ReportMessageDialog message={message} channelId={channel.id} open={reportOpen} onOpenChange={setReportOpen} />}
       <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>

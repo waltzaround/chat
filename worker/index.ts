@@ -13,6 +13,7 @@ import { uploadRoutes, fileRoutes } from "./api/uploads";
 import { voiceRoutes } from "./api/voice";
 import { emojiRoutes } from "./api/emojis";
 import { serverRoutes } from "./api/server";
+import { reportQueueRoutes, reportRoutes } from "./api/reports";
 import { loadMemberContext } from "./permissions/resolve";
 import { hubFor } from "./lib/hub";
 import { handleQueue } from "./queues/consumer";
@@ -92,6 +93,8 @@ app.route("/api/uploads", uploadRoutes);
 app.route("/api/files", fileRoutes);
 app.route("/api/channels", voiceRoutes);
 app.route("/api/server", serverRoutes);
+app.route("/api/channels", reportRoutes);
+app.route("/api/workspaces", reportQueueRoutes);
 
 app.get("/api/health", (c) => c.json({ ok: true, time: new Date().toISOString() }));
 

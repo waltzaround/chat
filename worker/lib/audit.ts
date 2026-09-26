@@ -24,7 +24,9 @@ export type AuditAction =
   | "invite.created"
   | "invite.revoked"
   | "emoji.created"
-  | "emoji.deleted";
+  | "emoji.deleted"
+  | "report.removed"
+  | "report.dismissed";
 
 export async function audit(
   db: Db,

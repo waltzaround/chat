@@ -303,6 +303,30 @@ export const customEmojis = sqliteTable(
   (t) => [uniqueIndex("custom_emojis_workspace_name_idx").on(t.workspaceId, t.name)],
 );
 
+/** A member flagged a message for moderators. One per reporter per message. */
+export const messageReports = sqliteTable(
+  "message_reports",
+  {
+    id: text("id").primaryKey(),
+    workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+    channelId: text("channel_id").notNull().references(() => channels.id, { onDelete: "cascade" }),
+    messageId: text("message_id").notNull().references(() => messages.id, { onDelete: "cascade" }),
+    authorUserId: text("author_user_id").notNull(),
+    reporterUserId: text("reporter_user_id").notNull().references(() => users.id),
+    /** spam | harassment | inappropriate | other */
+    reason: text("reason").notNull(),
+    note: text("note"),
+    /** The message text when it was reported. */
+    contentSnapshot: text("content_snapshot").notNull(),
+    /** open | dismissed | removed */
+    status: text("status").notNull().default("open"),
+    resolvedBy: text("resolved_by"),
+    resolvedAt: timestamp("resolved_at"),
+    createdAt: timestamp("created_at").notNull(),
+  },
+  (t) => [uniqueIndex("message_reports_once_idx").on(t.messageId, t.reporterUserId), index("message_reports_queue_idx").on(t.workspaceId, t.status, t.createdAt)],
+);
+
 export const auditLog = sqliteTable(
   "audit_log",
   {
@@ -345,6 +369,7 @@ export const schema = {
   bans,
   voiceChannelMeetings,
   customEmojis,
+  messageReports,
   auditLog,
   rateLimits,
 };

@@ -17,12 +17,13 @@ import type {
   Role,
   SearchResponse,
   PasswordResetLink,
+  ReportedMessage,
   ServerSettings,
   ServerUser,
   WorkspaceDetail,
   WorkspaceSummary,
 } from "@shared/types";
-import type { CreateChannelInput, CreateInviteInput, CreateRoleInput, CreateWorkspaceInput, UpdateServerSettingsInput } from "@shared/schemas";
+import type { CreateChannelInput, CreateInviteInput, CreateRoleInput, CreateWorkspaceInput, UpdateServerSettingsInput, ReportMessageInput } from "@shared/schemas";
 
 export const keys = {
   me: ["me"] as const,
@@ -37,6 +38,7 @@ export const keys = {
   invite: (code: string) => ["invite", code] as const,
   bans: (id: string) => ["bans", id] as const,
   audit: (id: string) => ["audit", id] as const,
+  reports: (id: string) => ["reports", id] as const,
   overwrites: (channelId: string) => ["overwrites", channelId] as const,
   emojis: (id: string) => ["emojis", id] as const,
   search: (id: string, q: string, channelId?: string, authorId?: string) => ["search", id, q, channelId ?? "", authorId ?? ""] as const,
@@ -381,6 +383,25 @@ export function useBans(workspaceId: string, enabled = true) {
 
 export function useAuditLog(workspaceId: string, enabled = true) {
   return useQuery({ queryKey: keys.audit(workspaceId), queryFn: () => apiGet<AuditEntry[]>(`/api/workspaces/${workspaceId}/audit-log`), enabled });
+}
+
+export function useReports(workspaceId: string, enabled = true) {
+  return useQuery({ queryKey: keys.reports(workspaceId), queryFn: () => apiGet<ReportedMessage[]>(`/api/workspaces/${workspaceId}/reports`), enabled });
+}
+
+export function useReportMessage(channelId: string) {
+  return useMutation({
+    mutationFn: ({ messageId, ...input }: { messageId: string } & ReportMessageInput) => apiPost<void>(`/api/channels/${channelId}/messages/${messageId}/report`, input),
+  });
+}
+
+export function useResolveReport(workspaceId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ messageId, action }: { messageId: string; action: "remove" | "dismiss" }) =>
+      apiPost<void>(`/api/workspaces/${workspaceId}/reports/${messageId}/resolve`, { action }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: keys.reports(workspaceId) }),
+  });
 }
 
 export function useOverwrites(channelId: string | undefined) {

@@ -124,6 +124,16 @@ export const banSchema = z.object({
   deleteRecentMessages: z.boolean().optional(),
 });
 
+export const reportMessageSchema = z.object({
+  reason: z.enum(["spam", "harassment", "inappropriate", "other"]),
+  note: z.string().trim().max(500).optional(),
+});
+
+export const resolveReportSchema = z.object({
+  /** "remove" deletes the message; "dismiss" keeps it. Both close every open report on it. */
+  action: z.enum(["remove", "dismiss"]),
+});
+
 export const updateServerSettingsSchema = z
   .object({
     registration: z.enum(["open", "invite"]).optional(),
@@ -192,6 +202,7 @@ export const turnstileSchema = z.object({
 export type CreateWorkspaceInput = z.infer<typeof createWorkspaceSchema>;
 export type CreateChannelInput = z.infer<typeof createChannelSchema>;
 export type CreateRoleInput = z.infer<typeof createRoleSchema>;
+export type ReportMessageInput = z.infer<typeof reportMessageSchema>;
 export type UpdateServerSettingsInput = z.infer<typeof updateServerSettingsSchema>;
 export type CreateInviteInput = z.infer<typeof createInviteSchema>;
 export type UploadAuthorizeInput = z.infer<typeof uploadAuthorizeSchema>;

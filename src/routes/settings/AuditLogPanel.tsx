@@ -30,6 +30,8 @@ function formatAction(entry: AuditEntry): string {
     case "workspace.updated": return `updated workspace settings`;
     case "invite.created": return `created an invite`;
     case "invite.revoked": return `revoked an invite`;
+    case "report.removed": return `removed a reported message`;
+    case "report.dismissed": return `dismissed a report`;
     default: return entry.action.replace(/\./g, " ");
   }
 }
