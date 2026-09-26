@@ -40,7 +40,7 @@ describe("web push", () => {
       expect((init.headers as Record<string, string>).Authorization).toMatch(/^vapid t=/);
       return new Response(null, { status: url.endsWith("/old") ? 410 : 201 });
     }) as unknown as typeof fetch;
-    const notification = { kind: "mention" as const, workspaceId: "w1", workspaceName: "W", channelId: "c1", channelName: "general", messageId: "m1", sequence: 1, author: { id: "u", username: "u", displayName: "U", avatarUrl: null }, preview: "hi", createdAt: new Date().toISOString() };
+    const notification = { kind: "mention" as const, workspaceId: "w1", workspaceName: "W", channelId: "c1", channelName: "general", messageId: "m1", sequence: 1, threadRootId: null, author: { id: "u", username: "u", displayName: "U", avatarUrl: null }, preview: "hi", createdAt: new Date().toISOString() };
     expect(await pushToUser(env, me.user.id, notification, fetcher)).toBe(1);
     expect(calls.sort()).toEqual(["https://fcm.googleapis.com/fcm/send/old", "https://fcm.googleapis.com/fcm/send/phone"]);
     const left = await env.DB.prepare("SELECT endpoint FROM push_subscriptions WHERE user_id = ?").bind(me.user.id).all<{ endpoint: string }>();

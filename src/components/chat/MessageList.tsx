@@ -37,7 +37,9 @@ export function MessageList({
   editingId: string | null;
 }) {
   const history = useMessageHistory(channel.id);
-  const pending = usePendingMessages(channel.id);
+  // Replies being sent into a thread show in the thread panel, not here.
+  const allPending = usePendingMessages(channel.id);
+  const pending = useMemo(() => allPending.filter((p) => !p.threadRootId), [allPending]);
   const syncVersion = useSyncVersion();
   const me = useMe();
   const rt = useRealtime();
@@ -158,17 +160,20 @@ export function MessageList({
 
   // Read state: when at the bottom and the tab is visible, mark the newest message read.
   const newest = messages.length ? messages[messages.length - 1]!.sequence : 0;
+  // Thread replies advance the channel's sequence without showing here; reading the
+  // bottom of the channel counts them as read too.
+  const readUpTo = Math.max(newest, channel.lastSequence);
   useEffect(() => {
     if (!atBottom || newest === 0 || document.visibilityState !== "visible") return;
-    rt.markRead(channel.id, newest);
-  }, [atBottom, newest, channel.id, rt]);
+    rt.markRead(channel.id, readUpTo);
+  }, [atBottom, newest, readUpTo, channel.id, rt]);
   useEffect(() => {
     const onVis = () => {
-      if (document.visibilityState === "visible" && atBottom && newest) rt.markRead(channel.id, newest);
+      if (document.visibilityState === "visible" && atBottom && newest) rt.markRead(channel.id, readUpTo);
     };
     document.addEventListener("visibilitychange", onVis);
     return () => document.removeEventListener("visibilitychange", onVis);
-  }, [atBottom, newest, channel.id, rt]);
+  }, [atBottom, newest, readUpTo, channel.id, rt]);
 
   // "N new messages" bar: shown while the New line is above the view (or not loaded yet).
   const unreadIndex = rows.findIndex((r) => r.kind === "unread");

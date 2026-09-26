@@ -207,6 +207,11 @@ export const messages = sqliteTable(
     deletedAt: timestamp("deleted_at"),
     pinnedAt: timestamp("pinned_at"),
     pinnedBy: text("pinned_by"),
+    /** Set on thread replies: the message that started the thread. */
+    threadRootId: text("thread_root_id"),
+    /** On a thread's root: how many replies, and when the latest was sent. */
+    threadReplyCount: integer("thread_reply_count").notNull().default(0),
+    threadLastReplyAt: timestamp("thread_last_reply_at"),
     createdAt: timestamp("created_at").notNull(),
   },
   (t) => [

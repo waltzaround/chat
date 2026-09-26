@@ -44,6 +44,8 @@ export interface CreateMessageInput {
   clientMessageId: string;
   attachmentIds: string[];
   replyTo: string | null;
+  /** Posting into this message's thread. */
+  threadRootId?: string | null;
   /** Set when the request originated from a socket so the ack can be routed. */
   originSessionId?: string;
 }
@@ -207,6 +209,7 @@ export class WorkspaceHub extends DurableObject<Env> {
           clientMessageId: event.clientMessageId,
           attachmentIds: event.attachmentIds ?? [],
           replyTo: event.replyTo ?? null,
+          threadRootId: event.threadRootId ?? null,
           originSessionId: att.sessionId,
         });
         if (!result.ok) {
@@ -373,6 +376,15 @@ export class WorkspaceHub extends DurableObject<Env> {
     const moderationError = await this.checkModeration(access, input.userId, content, true);
     if (moderationError) return moderationError;
 
+    // A thread reply goes under a live, top-level message in the same channel.
+    const threadRootId = input.threadRootId ?? null;
+    if (threadRootId) {
+      const root = await this.db.query.messages.findFirst({ where: and(eq(schema.messages.id, threadRootId), eq(schema.messages.channelId, input.channelId)) });
+      if (!root || root.deletedAt) return { ok: false, status: 400, code: "validation_failed", message: "That thread no longer exists" };
+      if (root.threadRootId) return { ok: false, status: 400, code: "validation_failed", message: "Threads can't have threads of their own" };
+      input.replyTo = null;
+    }
+
     if (input.replyTo) {
       const target = await this.db.query.messages.findFirst({ where: and(eq(schema.messages.id, input.replyTo), eq(schema.messages.channelId, input.channelId)) });
       if (!target) return { ok: false, status: 400, code: "validation_failed", message: "The message you are replying to no longer exists" };
@@ -399,10 +411,19 @@ export class WorkspaceHub extends DurableObject<Env> {
         content,
         replyToMessageId: input.replyTo,
         clientMessageId: input.clientMessageId,
+        threadRootId,
         createdAt: now,
       }),
       this.db.update(schema.channels).set({ lastSequence: sequence, lastMessageAt: now }).where(eq(schema.channels.id, input.channelId)),
     ];
+    if (threadRootId) {
+      statements.push(
+        this.db
+          .update(schema.messages)
+          .set({ threadReplyCount: sql`${schema.messages.threadReplyCount} + 1`, threadLastReplyAt: now })
+          .where(eq(schema.messages.id, threadRootId)),
+      );
+    }
     if (attachmentRows.length) {
       statements.push(this.db.update(schema.messageAttachments).set({ messageId: id }).where(sql`${schema.messageAttachments.id} in ${input.attachmentIds}`));
     }
@@ -422,12 +443,17 @@ export class WorkspaceHub extends DurableObject<Env> {
 
     // Keep the cached channel row's lastSequence fresh for subsequent syncs.
     access.channel.lastSequence = sequence;
-    const row = { id, workspaceId: access.channel.workspaceId, channelId: input.channelId, channelSequence: sequence, authorUserId: input.userId, content, replyToMessageId: input.replyTo, clientMessageId: input.clientMessageId, editedAt: null, deletedAt: null, pinnedAt: null, pinnedBy: null, createdAt: now };
+    const row = { id, workspaceId: access.channel.workspaceId, channelId: input.channelId, channelSequence: sequence, authorUserId: input.userId, content, replyToMessageId: input.replyTo, clientMessageId: input.clientMessageId, editedAt: null, deletedAt: null, pinnedAt: null, pinnedBy: null, threadRootId, threadReplyCount: 0, threadLastReplyAt: null, createdAt: now };
     const [message] = await hydrateMessages(this.db, [row], input.userId);
     if (!message) throw new Error("Failed to hydrate message");
 
     this.clearTyping(input.channelId, input.userId);
     this.broadcastToChannel(input.channelId, { type: "message.created", message, clientMessageId: input.clientMessageId });
+    // The root's "N replies" line changed.
+    if (threadRootId) {
+      const root = await loadMessage(this.db, threadRootId, input.userId);
+      if (root) this.broadcastToChannel(input.channelId, { type: "message.updated", message: root });
+    }
     this.broadcastActivity(input.channelId, sequence, input.userId);
     // A direct message notifies the other person; in a community, whoever is mentioned.
     const isDm = access.ctx.workspace.kind === "dm";
@@ -446,6 +472,7 @@ export class WorkspaceHub extends DurableObject<Env> {
           channelName: access.channel.name,
           messageId: id,
           sequence,
+          threadRootId,
           author: message.author,
           preview: content.slice(0, 140),
           createdAt: now.toISOString(),

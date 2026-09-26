@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "react-router";
+import { ThreadPanel } from "./ThreadPanel";
 import { useRealtime } from "@/realtime/RealtimeProvider";
 import { Permission, hasPermission } from "@/lib/permissions";
 import { ChannelHeader } from "./ChannelHeader";
@@ -32,8 +34,17 @@ export function TextChannelView({ channel, workspace, embedded }: { channel: Cha
   const canSend = hasPermission(channel.permissions, Permission.SEND_MESSAGES);
   const blocked = useBlockedIds();
 
+  const [params, setParams] = useSearchParams();
+  const threadId = params.get("thread");
+  const closeThread = () =>
+    setParams((p) => {
+      p.delete("thread");
+      return p;
+    });
+
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="relative flex h-full min-h-0">
+    <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
       {!embedded ? (
         <ChannelHeader
           channel={channel}
@@ -69,6 +80,8 @@ export function TextChannelView({ channel, workspace, embedded }: { channel: Cha
         ) : null}
         <TypingIndicator channelId={channel.id} workspaceId={workspace.id} />
       </div>
+    </div>
+    {threadId && !embedded ? <ThreadPanel key={threadId} channel={channel} workspace={workspace} rootId={threadId} onClose={closeThread} /> : null}
     </div>
   );
 }

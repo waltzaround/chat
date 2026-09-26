@@ -689,25 +689,17 @@ workspaceRoutes.get("/:workspaceId/search", async (c) => {
   const [countRes, rowsRes] = await c.env.DB.batch([countStmt, rowsStmt]);
   const total = Number((countRes.results[0] as { total: number } | undefined)?.total ?? 0);
   const raw = rowsRes.results as Array<Record<string, unknown>>;
-  const rows = raw.map((r) => ({
-    id: r.id as string,
-    workspaceId: r.workspace_id as string,
-    channelId: r.channel_id as string,
-    channelSequence: Number(r.channel_sequence),
-    authorUserId: r.author_user_id as string,
-    content: r.content as string,
-    replyToMessageId: (r.reply_to_message_id as string | null) ?? null,
-    clientMessageId: (r.client_message_id as string | null) ?? null,
-    editedAt: r.edited_at ? new Date(Number(r.edited_at)) : null,
-    deletedAt: null,
-    pinnedAt: r.pinned_at ? new Date(Number(r.pinned_at)) : null,
-    pinnedBy: (r.pinned_by as string | null) ?? null,
-    createdAt: new Date(Number(r.created_at)),
-  }));
+  // Load the full rows by id (keeps up with new columns), in the search's order.
+  const found = await chunked(raw.map((r) => r.id as string), (ids) => db.select().from(schema.messages).where(inArray(schema.messages.id, ids)));
+  const byId = new Map(found.map((r) => [r.id, r]));
+  const rows = raw.map((r) => byId.get(r.id as string)).filter((r): r is NonNullable<typeof r> => !!r);
   const messages = await hydrateMessages(db, rows, ctx.userId);
   const body: SearchResponse = {
     total,
-    results: messages.map((m, i) => ({ message: m, channelName: raw[i]!.channel_name as string, snippet: raw[i]!.snippet as string })),
+    results: messages.map((m) => {
+      const hit = raw.find((r) => r.id === m.id)!;
+      return { message: m, channelName: hit.channel_name as string, snippet: hit.snippet as string };
+    }),
   };
   return c.json(body);
 });

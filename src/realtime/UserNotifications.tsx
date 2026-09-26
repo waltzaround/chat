@@ -8,7 +8,13 @@ import { WorkspaceSocket } from "./socket";
 
 /** Are you looking at this channel right now? Then it's not news. */
 function isReading(n: NotificationPayload): boolean {
-  return document.visibilityState === "visible" && window.location.pathname === `/w/${n.workspaceId}/c/${n.channelId}`;
+  if (document.visibilityState !== "visible" || window.location.pathname !== `/w/${n.workspaceId}/c/${n.channelId}`) return false;
+  // A thread reply is only "seen" if that thread is open.
+  return !n.threadRootId || new URLSearchParams(window.location.search).get("thread") === n.threadRootId;
+}
+
+function pathFor(n: NotificationPayload): string {
+  return `/w/${n.workspaceId}/c/${n.channelId}${n.threadRootId ? `?thread=${n.threadRootId}` : ""}`;
 }
 
 /**
@@ -49,7 +55,7 @@ function show(n: NotificationPayload, open: (path: string) => void) {
   const notification = new Notification(title, { body, tag: n.channelId, icon: n.author.avatarUrl ?? "/favicon.svg" });
   notification.onclick = () => {
     window.focus();
-    open(`/w/${n.workspaceId}/c/${n.channelId}`);
+    open(pathFor(n));
     notification.close();
   };
 }

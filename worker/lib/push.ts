@@ -81,7 +81,7 @@ export function toPushItem(n: NotificationPayload, hideText = false) {
     body: hideText ? (n.kind === "dm" ? "Sent you a message" : `Mentioned you in ${n.workspaceName}`) : n.preview || "Sent an attachment",
     channelId: n.channelId,
     icon: n.author.avatarUrl,
-    url: `/w/${n.workspaceId}/c/${n.channelId}?m=${n.sequence}`,
+    url: n.threadRootId ? `/w/${n.workspaceId}/c/${n.channelId}?thread=${n.threadRootId}` : `/w/${n.workspaceId}/c/${n.channelId}?m=${n.sequence}`,
     createdAt: n.createdAt,
   };
 }

@@ -41,6 +41,8 @@ export function MessageComposer({
   disabled,
   placeholderName,
   disabledReason,
+  threadRootId,
+  placeholderText,
 }: {
   channel: Channel;
   reply: ComposerReply | null;
@@ -52,10 +54,15 @@ export function MessageComposer({
   placeholderName?: string;
   /** Why sending is off, shown instead of the generic permission message. */
   disabledReason?: string;
+  /** Send into this thread; the draft is kept separately from the channel's. */
+  threadRootId?: string;
+  /** Replaces the whole "Message #channel" placeholder. */
+  placeholderText?: string;
 }) {
+  const draftId = threadRootId ? `${channel.id}:${threadRootId}` : channel.id;
   const rt = useRealtime();
   const customEmojis = useEmojis(channel.workspaceId).data ?? [];
-  const [value, setValue] = useState(() => (editing ? editing.content : localStorage.getItem(draftKey(channel.id)) ?? ""));
+  const [value, setValue] = useState(() => (editing ? editing.content : localStorage.getItem(draftKey(draftId)) ?? ""));
   const [uploads, setUploads] = useState<Upload[]>([]);
   const [dragging, setDragging] = useState(false);
   const [emojiOpen, setEmojiOpen] = useState(false);
@@ -85,20 +92,20 @@ export function MessageComposer({
         }
       });
     } else {
-      setValue(localStorage.getItem(draftKey(channel.id)) ?? "");
+      setValue(localStorage.getItem(draftKey(draftId)) ?? "");
     }
     setMatch(null);
-  }, [editing, channel.id]);
+  }, [editing, draftId]);
 
   // Persist drafts (not while editing).
   useEffect(() => {
     if (editing) return;
     const t = setTimeout(() => {
-      if (value.trim()) localStorage.setItem(draftKey(channel.id), value);
-      else localStorage.removeItem(draftKey(channel.id));
+      if (value.trim()) localStorage.setItem(draftKey(draftId), value);
+      else localStorage.removeItem(draftKey(draftId));
     }, 300);
     return () => clearTimeout(t);
-  }, [value, channel.id, editing]);
+  }, [value, draftId, editing]);
 
   useEffect(() => {
     if (reply) textareaRef.current?.focus();
@@ -221,12 +228,12 @@ export function MessageComposer({
       toast.error(`Messages are limited to ${MESSAGE_MAX_LENGTH.toLocaleString()} characters`);
       return;
     }
-    rt.sendMessage({ channelId: channel.id, content, attachments, replyTo: reply });
+    rt.sendMessage({ channelId: channel.id, content, attachments, replyTo: reply, threadRootId: threadRootId ?? null });
     rt.stopTyping(channel.id);
     setValue("");
     setMatch(null);
     setMention(null);
-    localStorage.removeItem(draftKey(channel.id));
+    localStorage.removeItem(draftKey(draftId));
     for (const u of uploads) if (u.previewUrl) URL.revokeObjectURL(u.previewUrl);
     setUploads([]);
     onClearReply();
@@ -311,7 +318,7 @@ export function MessageComposer({
     ? (disabledReason ?? "You do not have permission to send messages here")
     : editing
       ? "Edit your message"
-      : `Message ${placeholderName ?? `${channel.kind === "text" ? "#" : ""}${channel.name}`}`;
+      : (placeholderText ?? `Message ${placeholderName ?? `${channel.kind === "text" ? "#" : ""}${channel.name}`}`);
   const remaining = MESSAGE_MAX_LENGTH - value.length;
 
   return (

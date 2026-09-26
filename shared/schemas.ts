@@ -185,6 +185,7 @@ export const createMessageSchema = z.object({
   clientMessageId: z.string().min(1).max(64),
   attachmentIds: z.array(idSchema).max(MAX_ATTACHMENTS_PER_MESSAGE).optional(),
   replyTo: idSchema.optional(),
+  threadRootId: idSchema.optional(),
 });
 
 export const editMessageSchema = z.object({
@@ -208,6 +209,8 @@ export const messagesQuerySchema = z.object({
   after: z.coerce.number().int().min(0).optional(),
   around: z.coerce.number().int().min(1).optional(),
   limit: z.coerce.number().int().min(1).max(100).default(50),
+  /** A thread's replies instead of the channel's messages. */
+  thread: idSchema.optional(),
 });
 
 export const uploadAuthorizeSchema = z.object({

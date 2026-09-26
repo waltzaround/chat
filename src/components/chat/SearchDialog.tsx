@@ -44,9 +44,10 @@ export function SearchDialog({ workspaceId }: { workspaceId: string }) {
   const results = everywhere ? all : here;
   const textChannels = useMemo(() => (ws.data?.channels ?? []).filter((c) => c.kind === "text"), [ws.data]);
 
-  const open = (workspace: string, channel: string, sequence: number) => {
+  const open = (message: { workspaceId: string; channelId: string; sequence: number; threadRootId: string | null }) => {
     setSearchOpen(false);
-    navigate(`/w/${workspace}/c/${channel}?m=${sequence}`);
+    // A thread reply isn't in the channel list: open its thread instead.
+    navigate(`/w/${message.workspaceId}/c/${message.channelId}?${message.threadRootId ? `thread=${message.threadRootId}` : `m=${message.sequence}`}`);
   };
 
   return (
@@ -119,7 +120,7 @@ export function SearchDialog({ workspaceId }: { workspaceId: string }) {
               <ul className="space-y-1">
                 {results.data.results.map((r) => (
                   <li key={r.message.id}>
-                    <button type="button" onClick={() => open(r.message.workspaceId, r.message.channelId, r.message.sequence)} className="w-full rounded-md border bg-card px-3 py-2 text-left transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none">
+                    <button type="button" onClick={() => open(r.message)} className="w-full rounded-md border bg-card px-3 py-2 text-left transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none">
                       <div className="mb-1 flex items-center gap-2 text-xs text-muted-foreground">
                         {r.workspace?.kind === "dm" ? (
                           <span>Direct message with {r.workspace.dmPeerName ?? "Deleted user"}</span>

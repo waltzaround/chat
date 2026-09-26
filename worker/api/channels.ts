@@ -120,8 +120,18 @@ channelRoutes.get("/:channelId/messages", async (c) => {
   const user = c.get("user");
   const { channel } = await requireChannelAccess(db, c.req.param("channelId"), user.id);
   const q = parseQuery(c, messagesQuerySchema);
-  const page: MessagePage = await loadMessagePage(db, { channelId: channel.id, before: q.before, after: q.after, around: q.around, limit: q.limit }, user.id);
+  const page: MessagePage = await loadMessagePage(db, { channelId: channel.id, before: q.before, after: q.after, around: q.around, limit: q.limit, thread: q.thread }, user.id);
   return c.json(page);
+});
+
+/** One message, e.g. a thread's root when the thread is opened from a link. */
+channelRoutes.get("/:channelId/messages/:messageId", async (c) => {
+  const db = c.get("db");
+  const user = c.get("user");
+  const { channel } = await requireChannelAccess(db, c.req.param("channelId"), user.id);
+  const message = await loadMessage(db, c.req.param("messageId"), user.id);
+  if (!message || message.channelId !== channel.id) throw ApiError.notFound("Message");
+  return c.json(message);
 });
 
 /** REST fallback for sending. The hub owns sequence allocation so we delegate to it. */
@@ -138,6 +148,7 @@ channelRoutes.post("/:channelId/messages", async (c) => {
     clientMessageId: input.clientMessageId,
     attachmentIds: input.attachmentIds ?? [],
     replyTo: input.replyTo ?? null,
+    threadRootId: input.threadRootId ?? null,
   });
   if (!result.ok) throw new ApiError(result.status, result.code, result.message);
   return c.json(result.message, 201);

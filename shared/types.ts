@@ -173,6 +173,10 @@ export interface Message {
   editedAt: string | null;
   /** Set while the message is pinned to its channel. */
   pinnedAt: string | null;
+  /** On a thread reply: the message that started the thread. */
+  threadRootId: string | null;
+  /** On a message with thread replies. */
+  thread: { replyCount: number; lastReplyAt: string | null } | null;
   createdAt: string;
 }
 

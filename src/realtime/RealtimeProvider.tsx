@@ -11,6 +11,8 @@ export interface PendingMessage {
   channelId: string;
   content: string;
   replyTo: ReplyContext | null;
+  /** Posting into this thread rather than the channel. */
+  threadRootId: string | null;
   attachments: Attachment[];
   createdAt: string;
   status: "sending" | "failed";
@@ -35,6 +37,7 @@ export interface SendMessageInput {
   content: string;
   attachments?: Attachment[];
   replyTo?: ReplyContext | null;
+  threadRootId?: string | null;
 }
 
 export interface RealtimeApi {
@@ -257,6 +260,7 @@ export function RealtimeProvider({ workspaceId, userId, children }: { workspaceI
           channelId: input.channelId,
           content: input.content,
           replyTo: input.replyTo ?? null,
+          threadRootId: input.threadRootId ?? null,
           attachments: input.attachments ?? [],
           createdAt: new Date().toISOString(),
           status: "sending",
@@ -270,6 +274,7 @@ export function RealtimeProvider({ workspaceId, userId, children }: { workspaceI
           content: input.content,
           attachmentIds: pending.attachments.length ? pending.attachments.map((a) => a.id) : undefined,
           replyTo: input.replyTo?.id,
+          threadRootId: input.threadRootId ?? undefined,
         });
         return clientMessageId;
       },
@@ -278,7 +283,7 @@ export function RealtimeProvider({ workspaceId, userId, children }: { workspaceI
         const p = all.find((m) => m.clientMessageId === clientMessageId);
         if (!p) return;
         store.set((s) => ({ ...s, pending: { ...s.pending, [p.channelId]: s.pending[p.channelId]!.map((m) => (m.clientMessageId === clientMessageId ? { ...m, status: "sending", error: undefined } : m)) } }));
-        send({ type: "message.create", channelId: p.channelId, clientMessageId, content: p.content, attachmentIds: p.attachments.length ? p.attachments.map((a) => a.id) : undefined, replyTo: p.replyTo?.id });
+        send({ type: "message.create", channelId: p.channelId, clientMessageId, content: p.content, attachmentIds: p.attachments.length ? p.attachments.map((a) => a.id) : undefined, replyTo: p.replyTo?.id, threadRootId: p.threadRootId ?? undefined });
       },
       discardMessage: (clientMessageId) => {
         store.set((s) => ({ ...s, pending: Object.fromEntries(Object.entries(s.pending).map(([k, list]) => [k, list.filter((m) => m.clientMessageId !== clientMessageId)])) }));

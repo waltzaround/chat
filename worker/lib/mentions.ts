@@ -130,13 +130,15 @@ export async function unreadMentionCounts(db: Db, userId: string, by: "channel" 
  */
 export async function recordMentions(
   db: Db,
-  row: { id: string; workspaceId: string; channelId: string; channelSequence: number; authorUserId: string; content: string; replyToMessageId: string | null },
+  row: { id: string; workspaceId: string; channelId: string; channelSequence: number; authorUserId: string; content: string; replyToMessageId: string | null; threadRootId?: string | null },
   authorPermissions: PermissionBits,
   onlineUserIds: () => string[],
 ): Promise<string[]> {
+  // A reply notifies whoever it answers; a thread reply, whoever started the thread.
   let replyToAuthorId: string | null = null;
-  if (row.replyToMessageId) {
-    const target = await db.query.messages.findFirst({ where: eq(schema.messages.id, row.replyToMessageId), columns: { authorUserId: true } });
+  const answering = row.replyToMessageId ?? row.threadRootId ?? null;
+  if (answering) {
+    const target = await db.query.messages.findFirst({ where: eq(schema.messages.id, answering), columns: { authorUserId: true } });
     replyToAuthorId = target?.authorUserId ?? null;
   }
   const recipients = await mentionRecipients(db, {

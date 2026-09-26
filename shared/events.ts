@@ -25,6 +25,7 @@ export const clientEventSchema = z.discriminatedUnion("type", [
     content: messageContentSchema,
     attachmentIds: z.array(idSchema).max(10).optional(),
     replyTo: idSchema.optional(),
+    threadRootId: idSchema.optional(),
   }),
   z.object({ type: z.literal("message.edit"), messageId: idSchema, content: messageContentSchema.min(1) }),
   z.object({ type: z.literal("message.delete"), messageId: idSchema }),
@@ -118,6 +119,8 @@ export interface NotificationPayload {
   channelName: string;
   messageId: string;
   sequence: number;
+  /** Set when the message is a thread reply: open this thread to see it. */
+  threadRootId: string | null;
   author: UserSummary;
   /** Start of the message text, for the notification body. */
   preview: string;

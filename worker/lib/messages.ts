@@ -18,10 +18,17 @@ export interface MessageQuery {
   after?: number;
   around?: number;
   limit: number;
+  /** Load this thread's replies. */
+  thread?: string;
 }
 
 export async function loadMessagePage(db: Db, q: MessageQuery, viewerUserId: string) {
-  const conditions = [eq(schema.messages.channelId, q.channelId), isNull(schema.messages.deletedAt)];
+  // The channel's own messages, or one thread's replies. Replies never show in the channel list.
+  const conditions = [
+    eq(schema.messages.channelId, q.channelId),
+    isNull(schema.messages.deletedAt),
+    q.thread ? eq(schema.messages.threadRootId, q.thread) : isNull(schema.messages.threadRootId),
+  ];
   let rows: MessageRow[];
   let hasMore = false;
 
@@ -133,6 +140,8 @@ export async function hydrateMessages(db: Db, rows: MessageRow[], viewerUserId: 
       reactions: reactionsByMessage.get(row.id) ?? [],
       editedAt: iso(row.editedAt),
       pinnedAt: iso(row.pinnedAt),
+      threadRootId: row.threadRootId,
+      thread: row.threadReplyCount > 0 ? { replyCount: row.threadReplyCount, lastReplyAt: iso(row.threadLastReplyAt) } : null,
       createdAt: isoRequired(row.createdAt),
     } satisfies Message;
   });
@@ -170,6 +179,17 @@ export async function reactionSummary(db: Db, messageId: string, viewerUserId: s
 /** Soft-deletes a message and returns the R2 keys of its attachments for cleanup. */
 export async function softDeleteMessage(db: Db, messageId: string): Promise<string[]> {
   const attachments = await db.select({ key: schema.messageAttachments.r2Key }).from(schema.messageAttachments).where(eq(schema.messageAttachments.messageId, messageId));
-  await db.update(schema.messages).set({ deletedAt: new Date(), content: "" }).where(eq(schema.messages.id, messageId));
+  const [deleted] = await db
+    .update(schema.messages)
+    .set({ deletedAt: new Date(), content: "" })
+    .where(and(eq(schema.messages.id, messageId), isNull(schema.messages.deletedAt)))
+    .returning({ threadRootId: schema.messages.threadRootId });
+  // A deleted reply no longer counts toward its thread.
+  if (deleted?.threadRootId) {
+    await db
+      .update(schema.messages)
+      .set({ threadReplyCount: sql`max(${schema.messages.threadReplyCount} - 1, 0)` })
+      .where(eq(schema.messages.id, deleted.threadRootId));
+  }
   return attachments.map((a) => a.key);
 }

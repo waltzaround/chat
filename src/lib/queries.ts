@@ -35,6 +35,8 @@ export const keys = {
   dms: ["dms"] as const,
   blocks: ["blocks"] as const,
   pins: (channelId: string) => ["pins", channelId] as const,
+  thread: (rootId: string) => ["thread", rootId] as const,
+  message: (messageId: string) => ["message", messageId] as const,
   dmPeople: (q: string) => ["dm-people", q] as const,
   workspaces: ["workspaces"] as const,
   workspace: (id: string) => ["workspace", id] as const,
@@ -213,9 +215,39 @@ export function useMessageHistory(channelId: string | undefined) {
 
 export type MessageHistoryData = { pages: MessagePage[]; pageParams: (number | undefined)[] };
 
-/** Cache helpers used by the realtime layer. */
+/** A thread's replies (the latest 100), oldest first. */
+export function useThread(channelId: string, rootId: string) {
+  return useQuery({
+    queryKey: keys.thread(rootId),
+    queryFn: () => apiGet<MessagePage>(`/api/channels/${channelId}/messages?thread=${rootId}&limit=100`),
+    staleTime: Infinity,
+  });
+}
+
+/** One message, when it isn't already in the channel's loaded history. */
+export function useMessage(channelId: string, messageId: string, initial?: Message) {
+  return useQuery({
+    queryKey: keys.message(messageId),
+    queryFn: () => apiGet<Message>(`/api/channels/${channelId}/messages/${messageId}`),
+    initialData: initial,
+    staleTime: 30_000,
+  });
+}
+
+/** Apply `fn` to the message lists of every loaded thread. */
+function eachThread(qc: QueryClient, fn: (messages: Message[]) => Message[]) {
+  qc.setQueriesData<MessagePage>({ queryKey: ["thread"] }, (page) => (page ? { ...page, messages: fn(page.messages) } : page));
+}
+
+/** Cache helpers used by the realtime layer. Thread replies go to their thread's cache, never the channel's. */
 export const messageCache = {
   upsert(qc: QueryClient, message: Message) {
+    if (message.threadRootId) {
+      qc.setQueryData<MessagePage>(keys.thread(message.threadRootId), (page) =>
+        page ? { ...page, messages: [...page.messages.filter((m) => m.id !== message.id), message].sort((a, b) => a.sequence - b.sequence) } : page,
+      );
+      return;
+    }
     qc.setQueryData<MessageHistoryData>(keys.messages(message.channelId), (data) => {
       if (!data) return data;
       const pages = data.pages.map((p) => ({ ...p, messages: p.messages.filter((m) => m.id !== message.id) }));
@@ -226,12 +258,18 @@ export const messageCache = {
     });
   },
   update(qc: QueryClient, message: Message) {
+    if (message.threadRootId) {
+      eachThread(qc, (list) => list.map((m) => (m.id === message.id ? message : m)));
+      return;
+    }
+    if (qc.getQueryData(keys.message(message.id))) qc.setQueryData(keys.message(message.id), message);
     qc.setQueryData<MessageHistoryData>(keys.messages(message.channelId), (data) => {
       if (!data) return data;
       return { ...data, pages: data.pages.map((p) => ({ ...p, messages: p.messages.map((m) => (m.id === message.id ? message : m)) })) };
     });
   },
   remove(qc: QueryClient, channelId: string, messageId: string) {
+    eachThread(qc, (list) => list.filter((m) => m.id !== messageId));
     qc.setQueryData<MessageHistoryData>(keys.messages(channelId), (data) => {
       if (!data) return data;
       return {
@@ -247,12 +285,15 @@ export const messageCache = {
   },
   setReactions(qc: QueryClient, channelId: string, messageId: string, reactions: Message["reactions"], myUserId: string) {
     const withMe = reactions.map((r) => ({ ...r, me: r.userIds.includes(myUserId) }));
+    eachThread(qc, (list) => list.map((m) => (m.id === messageId ? { ...m, reactions: withMe } : m)));
     qc.setQueryData<MessageHistoryData>(keys.messages(channelId), (data) => {
       if (!data) return data;
       return { ...data, pages: data.pages.map((p) => ({ ...p, messages: p.messages.map((m) => (m.id === messageId ? { ...m, reactions: withMe } : m)) })) };
     });
   },
-  mergeSync(qc: QueryClient, channelId: string, messages: Message[]) {
+  mergeSync(qc: QueryClient, channelId: string, incoming: Message[]) {
+    for (const reply of incoming.filter((m) => m.threadRootId)) messageCache.upsert(qc, reply);
+    const messages = incoming.filter((m) => !m.threadRootId);
     if (messages.length === 0) return;
     qc.setQueryData<MessageHistoryData>(keys.messages(channelId), (data) => {
       if (!data) return data;

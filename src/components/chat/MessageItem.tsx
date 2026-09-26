@@ -1,5 +1,6 @@
 import { memo, useMemo, useState } from "react";
-import { AlertCircle, CornerUpLeft, Flag, Loader2, MoreHorizontal, Pencil, Pin, PinOff, Reply, SmilePlus, Trash2, Copy, Link2 } from "lucide-react";
+import { AlertCircle, CornerUpLeft, Flag, Loader2, MessagesSquare, MoreHorizontal, Pencil, Pin, PinOff, Reply, SmilePlus, Trash2, Copy, Link2 } from "lucide-react";
+import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { useRealtime } from "@/realtime/RealtimeProvider";
 import type { PendingMessage } from "@/realtime/RealtimeProvider";
@@ -30,6 +31,7 @@ export const MessageItem = memo(function MessageItem({
   onReply,
   onEdit,
   isEditing,
+  inThread = false,
 }: {
   message: Message;
   compact: boolean;
@@ -39,6 +41,8 @@ export const MessageItem = memo(function MessageItem({
   onReply: (m: Message) => void;
   onEdit: (m: Message) => void;
   isEditing: boolean;
+  /** Shown inside a thread panel: no nested threads or inline replies. */
+  inThread?: boolean;
 }) {
   const rt = useRealtime();
   const emojis = useEmojiMap(workspace.id);
@@ -63,6 +67,14 @@ export const MessageItem = memo(function MessageItem({
     [me, members],
   );
   const blocked = useBlockedIds();
+  const [, setParams] = useSearchParams();
+  const canThread = !inThread && !message.threadRootId;
+  const openThread = () =>
+    setParams((p) => {
+      p.set("thread", message.id);
+      p.delete("m");
+      return p;
+    });
   const [revealed, setRevealed] = useState(false);
   // Highlight messages that call for your attention, like other chat apps do.
   const mentionsMe = !isMine && !!me && (mentionsUser(message.content, me.username) || message.replyTo?.author?.id === me.id);
@@ -170,6 +182,13 @@ export const MessageItem = memo(function MessageItem({
               ))}
             </div>
           ) : null}
+          {message.thread && !inThread ? (
+            <button type="button" onClick={openThread} className="mt-1 flex items-center gap-1.5 rounded px-1 py-0.5 text-xs font-medium text-primary hover:bg-accent">
+              <MessagesSquare className="size-3.5" aria-hidden />
+              {message.thread.replyCount} {message.thread.replyCount === 1 ? "reply" : "replies"}
+              {message.thread.lastReplyAt ? <span className="font-normal text-muted-foreground">· last {formatMessageTimestamp(message.thread.lastReplyAt)}</span> : null}
+            </button>
+          ) : null}
           {message.reactions.length ? <ReactionBar reactions={message.reactions} onToggle={react} canReact={canReact} onAdd={canReact ? () => setEmojiOpen(true) : undefined} emojis={emojis} /> : null}
         </div>
       </div>
@@ -195,9 +214,16 @@ export const MessageItem = memo(function MessageItem({
             </PopoverContent>
           </Popover>
         ) : null}
-        <ToolbarButton label="Reply" onClick={() => onReply(message)}>
-          <Reply className="size-4" aria-hidden />
-        </ToolbarButton>
+        {inThread ? null : (
+          <ToolbarButton label="Reply" onClick={() => onReply(message)}>
+            <Reply className="size-4" aria-hidden />
+          </ToolbarButton>
+        )}
+        {canThread ? (
+          <ToolbarButton label="Reply in thread" onClick={openThread}>
+            <MessagesSquare className="size-4" aria-hidden />
+          </ToolbarButton>
+        ) : null}
         {isMine ? (
           <ToolbarButton label="Edit message" onClick={() => onEdit(message)}>
             <Pencil className="size-4" aria-hidden />
@@ -210,9 +236,16 @@ export const MessageItem = memo(function MessageItem({
             </ToolbarButton>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-44">
-            <DropdownMenuItem onSelect={() => onReply(message)}>
-              <Reply /> Reply
-            </DropdownMenuItem>
+            {inThread ? null : (
+              <DropdownMenuItem onSelect={() => onReply(message)}>
+                <Reply /> Reply
+              </DropdownMenuItem>
+            )}
+            {canThread ? (
+              <DropdownMenuItem onSelect={openThread}>
+                <MessagesSquare /> Reply in thread
+              </DropdownMenuItem>
+            ) : null}
             {isMine ? (
               <DropdownMenuItem onSelect={() => onEdit(message)}>
                 <Pencil /> Edit
