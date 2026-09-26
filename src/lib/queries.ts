@@ -34,6 +34,7 @@ export const keys = {
   serverUsers: (q: string) => ["server-users", q] as const,
   dms: ["dms"] as const,
   blocks: ["blocks"] as const,
+  pins: (channelId: string) => ["pins", channelId] as const,
   dmPeople: (q: string) => ["dm-people", q] as const,
   workspaces: ["workspaces"] as const,
   workspace: (id: string) => ["workspace", id] as const,
@@ -115,6 +116,21 @@ export function useSetSuspended() {
 
 export function useCreatePasswordResetLink() {
   return useMutation({ mutationFn: (userId: string) => apiPost<PasswordResetLink>(`/api/server/users/${userId}/password-reset`, {}) });
+}
+
+export function usePins(channelId: string, enabled: boolean) {
+  return useQuery({ queryKey: keys.pins(channelId), queryFn: () => apiGet<Message[]>(`/api/channels/${channelId}/pins`), enabled, staleTime: 0 });
+}
+
+export function useSetPinned(channelId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ messageId, pinned }: { messageId: string; pinned: boolean }) => api<Message>(`/api/channels/${channelId}/messages/${messageId}/pin`, { method: pinned ? "PUT" : "DELETE" }),
+    onSuccess: (message) => {
+      messageCache.update(qc, message);
+      void qc.invalidateQueries({ queryKey: keys.pins(channelId) });
+    },
+  });
 }
 
 export function useBlocks() {

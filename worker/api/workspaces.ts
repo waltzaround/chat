@@ -689,6 +689,8 @@ workspaceRoutes.get("/:workspaceId/search", async (c) => {
     clientMessageId: (r.client_message_id as string | null) ?? null,
     editedAt: r.edited_at ? new Date(Number(r.edited_at)) : null,
     deletedAt: null,
+    pinnedAt: r.pinned_at ? new Date(Number(r.pinned_at)) : null,
+    pinnedBy: (r.pinned_by as string | null) ?? null,
     createdAt: new Date(Number(r.created_at)),
   }));
   const messages = await hydrateMessages(db, rows, ctx.userId);

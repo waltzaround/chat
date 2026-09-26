@@ -1,10 +1,11 @@
 import { memo, useMemo, useState } from "react";
-import { AlertCircle, CornerUpLeft, Flag, Loader2, MoreHorizontal, Pencil, Reply, SmilePlus, Trash2, Copy, Link2 } from "lucide-react";
+import { AlertCircle, CornerUpLeft, Flag, Loader2, MoreHorizontal, Pencil, Pin, PinOff, Reply, SmilePlus, Trash2, Copy, Link2 } from "lucide-react";
 import { toast } from "sonner";
 import { useRealtime } from "@/realtime/RealtimeProvider";
 import type { PendingMessage } from "@/realtime/RealtimeProvider";
 import { Permission, hasPermission } from "@/lib/permissions";
-import { useBlockedIds, useEmojiMap, useEmojis, useMe, useMembers } from "@/lib/queries";
+import { useBlockedIds, useEmojiMap, useEmojis, useMe, useMembers, useSetPinned } from "@/lib/queries";
+import { errorMessage } from "@/lib/api";
 import { mentionsUser, type MentionContext } from "@/lib/mentions";
 import { formatFull, formatMessageTimestamp, formatTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -47,6 +48,13 @@ export const MessageItem = memo(function MessageItem({
   const [reportOpen, setReportOpen] = useState(false);
   const canReact = hasPermission(channel.permissions, Permission.ADD_REACTIONS);
   const canDelete = isMine || hasPermission(channel.permissions, Permission.MANAGE_MESSAGES);
+  const canPin = workspace.kind === "dm" || hasPermission(channel.permissions, Permission.MANAGE_MESSAGES);
+  const setPinned = useSetPinned(channel.id);
+  const togglePin = () =>
+    setPinned.mutate(
+      { messageId: message.id, pinned: !message.pinnedAt },
+      { onSuccess: () => toast.success(message.pinnedAt ? "Unpinned" : "Pinned to the channel"), onError: (err) => toast.error(errorMessage(err)) },
+    );
   const name = message.author.nickname ?? message.author.displayName;
   const me = useMe().data;
   const members = useMembers(workspace.id).data;
@@ -135,6 +143,11 @@ export const MessageItem = memo(function MessageItem({
                 </TooltipTrigger>
                 <TooltipContent>{formatFull(message.createdAt)}</TooltipContent>
               </Tooltip>
+              {message.pinnedAt ? (
+                <span className="flex items-center gap-0.5 text-[11px] text-muted-foreground">
+                  <Pin className="size-3" aria-hidden /> Pinned
+                </span>
+              ) : null}
             </div>
           ) : null}
           {message.content ? (
@@ -211,6 +224,11 @@ export const MessageItem = memo(function MessageItem({
             <DropdownMenuItem onSelect={() => void copyLink()}>
               <Link2 /> Copy link
             </DropdownMenuItem>
+            {canPin ? (
+              <DropdownMenuItem onSelect={togglePin}>
+                {message.pinnedAt ? <PinOff /> : <Pin />} {message.pinnedAt ? "Unpin" : "Pin"}
+              </DropdownMenuItem>
+            ) : null}
             {isMine ? null : (
               <DropdownMenuItem onSelect={() => setReportOpen(true)}>
                 <Flag /> Report

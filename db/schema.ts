@@ -201,6 +201,8 @@ export const messages = sqliteTable(
     clientMessageId: text("client_message_id"),
     editedAt: timestamp("edited_at"),
     deletedAt: timestamp("deleted_at"),
+    pinnedAt: timestamp("pinned_at"),
+    pinnedBy: text("pinned_by"),
     createdAt: timestamp("created_at").notNull(),
   },
   (t) => [

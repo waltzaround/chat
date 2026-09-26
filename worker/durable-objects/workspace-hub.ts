@@ -415,7 +415,7 @@ export class WorkspaceHub extends DurableObject<Env> {
 
     // Keep the cached channel row's lastSequence fresh for subsequent syncs.
     access.channel.lastSequence = sequence;
-    const row = { id, workspaceId: access.channel.workspaceId, channelId: input.channelId, channelSequence: sequence, authorUserId: input.userId, content, replyToMessageId: input.replyTo, clientMessageId: input.clientMessageId, editedAt: null, deletedAt: null, createdAt: now };
+    const row = { id, workspaceId: access.channel.workspaceId, channelId: input.channelId, channelSequence: sequence, authorUserId: input.userId, content, replyToMessageId: input.replyTo, clientMessageId: input.clientMessageId, editedAt: null, deletedAt: null, pinnedAt: null, pinnedBy: null, createdAt: now };
     const [message] = await hydrateMessages(this.db, [row], input.userId);
     if (!message) throw new Error("Failed to hydrate message");
 

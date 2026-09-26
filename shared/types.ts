@@ -166,6 +166,8 @@ export interface Message {
   attachments: Attachment[];
   reactions: ReactionSummary[];
   editedAt: string | null;
+  /** Set while the message is pinned to its channel. */
+  pinnedAt: string | null;
   createdAt: string;
 }
 

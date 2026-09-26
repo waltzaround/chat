@@ -131,6 +131,7 @@ export async function hydrateMessages(db: Db, rows: MessageRow[], viewerUserId: 
       attachments: attachmentsByMessage.get(row.id) ?? [],
       reactions: reactionsByMessage.get(row.id) ?? [],
       editedAt: iso(row.editedAt),
+      pinnedAt: iso(row.pinnedAt),
       createdAt: isoRequired(row.createdAt),
     } satisfies Message;
   });

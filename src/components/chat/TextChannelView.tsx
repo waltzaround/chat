@@ -6,6 +6,7 @@ import { MessageList } from "./MessageList";
 import { MessageComposer, type ComposerReply } from "./MessageComposer";
 import { TypingIndicator } from "./TypingIndicator";
 import { DmHeaderMenu } from "@/components/dms/DmHeaderMenu";
+import { PinnedMessagesButton } from "./PinnedMessages";
 import { useBlockedIds } from "@/lib/queries";
 import type { Channel, Message, WorkspaceDetail } from "@shared/types";
 
@@ -36,7 +37,12 @@ export function TextChannelView({ channel, workspace, embedded }: { channel: Cha
         <ChannelHeader
           channel={channel}
           dmPeer={workspace.kind === "dm" ? workspace.dmPeer : undefined}
-          actions={workspace.kind === "dm" ? <DmHeaderMenu workspaceId={workspace.id} peer={workspace.dmPeer} /> : undefined}
+          actions={
+            <>
+              <PinnedMessagesButton channelId={channel.id} />
+              {workspace.kind === "dm" ? <DmHeaderMenu workspaceId={workspace.id} peer={workspace.dmPeer} /> : null}
+            </>
+          }
         />
       ) : null}
       <MessageList key={channel.id} channel={channel} workspace={workspace} onReply={onReply} onEdit={onEdit} editingId={editing?.id ?? null} />

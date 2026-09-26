@@ -1,5 +1,6 @@
 import { Hono } from "hono";
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq, isNotNull, isNull, sql } from "drizzle-orm";
+import type { Context } from "hono";
 import type { AppEnv } from "../auth/middleware";
 import { requireUser } from "../auth/middleware";
 import { schema } from "../db";
@@ -7,7 +8,7 @@ import { ApiError } from "../lib/errors";
 import { parseBody, parseQuery } from "../lib/validate";
 import { audit } from "../lib/audit";
 import { hubFor, notifyWorkspace } from "../lib/hub";
-import { loadMessage, loadMessagePage, reactionSummary, softDeleteMessage } from "../lib/messages";
+import { hydrateMessages, loadMessage, loadMessagePage, reactionSummary, softDeleteMessage } from "../lib/messages";
 import { recordMentions } from "../lib/mentions";
 import { checkRateLimit } from "../security/ratelimit";
 import { Permission, hasPermission, requireChannelAccess } from "../permissions/resolve";
@@ -170,6 +171,52 @@ channelRoutes.delete("/:channelId/messages/:messageId", async (c) => {
   await notifyWorkspace(c.env, channel.workspaceId, { type: "message.deleted", channelId: channel.id, messageId: row.id, sequence: row.channelSequence }, channel.id);
   return c.body(null, 204);
 });
+
+// ---------------------------------------------------------------------------
+// Pins
+// ---------------------------------------------------------------------------
+
+const MAX_PINS = 50;
+
+/** Moderators pin in channels; in a DM, both people can. */
+function canPin(access: { permissions: number; ctx: { workspace: { kind: string } } }): boolean {
+  return access.ctx.workspace.kind === "dm" || hasPermission(access.permissions, Permission.MANAGE_MESSAGES);
+}
+
+channelRoutes.get("/:channelId/pins", async (c) => {
+  const db = c.get("db");
+  const user = c.get("user");
+  const { channel } = await requireChannelAccess(db, c.req.param("channelId"), user.id);
+  const rows = await db.query.messages.findMany({
+    where: and(eq(schema.messages.channelId, channel.id), isNull(schema.messages.deletedAt), isNotNull(schema.messages.pinnedAt)),
+    orderBy: desc(schema.messages.pinnedAt),
+    limit: MAX_PINS,
+  });
+  return c.json(await hydrateMessages(db, rows, user.id));
+});
+
+channelRoutes.put("/:channelId/messages/:messageId/pin", async (c) => setPinned(c, true));
+channelRoutes.delete("/:channelId/messages/:messageId/pin", async (c) => setPinned(c, false));
+
+async function setPinned(c: Context<AppEnv>, pinned: boolean) {
+  const db = c.get("db");
+  const user = c.get("user");
+  const access = await requireChannelAccess(db, c.req.param("channelId")!, user.id);
+  if (!canPin(access)) throw ApiError.forbidden("You need the Manage messages permission to pin");
+  const row = await db.query.messages.findFirst({ where: and(eq(schema.messages.id, c.req.param("messageId")!), eq(schema.messages.channelId, access.channel.id)) });
+  if (!row || row.deletedAt) throw ApiError.notFound("Message");
+  if (pinned && !row.pinnedAt) {
+    const [count] = await db.select({ n: sql<number>`count(*)` }).from(schema.messages).where(and(eq(schema.messages.channelId, access.channel.id), isNotNull(schema.messages.pinnedAt), isNull(schema.messages.deletedAt)));
+    if (Number(count?.n ?? 0) >= MAX_PINS) throw ApiError.conflict(`A channel can have up to ${MAX_PINS} pinned messages. Unpin one first.`);
+  }
+  await db
+    .update(schema.messages)
+    .set(pinned ? { pinnedAt: row.pinnedAt ?? new Date(), pinnedBy: row.pinnedBy ?? user.id } : { pinnedAt: null, pinnedBy: null })
+    .where(eq(schema.messages.id, row.id));
+  const message = (await loadMessage(db, row.id, user.id))!;
+  await notifyWorkspace(c.env, access.channel.workspaceId, { type: "message.updated", message }, access.channel.id);
+  return c.json(message);
+}
 
 // ---------------------------------------------------------------------------
 // Reactions
