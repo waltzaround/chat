@@ -19,6 +19,7 @@ import { useAuthConfig, useBlocks, useMe, useServerSettings, useSetBlocked, useU
 import { UserAvatar } from "@/components/common/UserAvatar";
 import { browserNotificationsSupported, useNotificationPrefs } from "@/lib/notifications";
 import { disablePush, enablePush, isPushEnabled, needsHomeScreen, pushSupported, syncPushPrefs } from "@/lib/push";
+import { changeDesktopServer, desktopNotificationsAllowed, isDesktopApp, requestDesktopNotifications } from "@/lib/desktop";
 import { useTheme, type Theme } from "@/lib/theme";
 import { authClient } from "@/lib/auth-client";
 import { errorMessage } from "@/lib/api";
@@ -49,6 +50,17 @@ export function UserSettingsPage() {
   };
 
   const bottomContent = (
+    <>
+    {isDesktopApp() ? (
+      <button
+        type="button"
+        onClick={changeDesktopServer}
+        className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+      >
+        <Server className="size-3.5" aria-hidden />
+        Change server
+      </button>
+    ) : null}
     <button
       type="button"
       onClick={() => void handleLogout()}
@@ -57,6 +69,7 @@ export function UserSettingsPage() {
       <LogOut className="size-3.5" aria-hidden />
       Log out
     </button>
+    </>
   );
 
   return (
@@ -435,15 +448,20 @@ function PrivacyTab() {
 function NotificationsTab() {
   const [prefs, setPrefs] = useNotificationPrefs();
   const workspaces = useWorkspaces().data ?? [];
-  const supported = browserNotificationsSupported();
-  const [permission, setPermission] = useState<NotificationPermission | "unsupported">(supported ? Notification.permission : "unsupported");
+  // The desktop app asks the operating system; a browser asks for the site.
+  const desktopApp = isDesktopApp();
+  const supported = desktopApp || browserNotificationsSupported();
+  const [permission, setPermission] = useState<NotificationPermission | "unsupported">(desktopApp ? "default" : supported ? Notification.permission : "unsupported");
+  useEffect(() => {
+    if (desktopApp) void desktopNotificationsAllowed().then((ok) => setPermission(ok ? "granted" : "default"));
+  }, [desktopApp]);
 
   const setDesktop = async (on: boolean) => {
     if (on && permission !== "granted") {
-      const result = await Notification.requestPermission();
-      setPermission(result);
-      if (result !== "granted") {
-        toast.error("Your browser blocked notifications. Allow them for this site in the browser's settings, then try again.");
+      const granted = desktopApp ? await requestDesktopNotifications() : (await Notification.requestPermission()) === "granted";
+      setPermission(granted ? "granted" : "denied");
+      if (!granted) {
+        toast.error(desktopApp ? "Notifications are turned off for Chat. Allow them in your system's notification settings." : "Your browser blocked notifications. Allow them for this site in the browser's settings, then try again.");
         return;
       }
     }
@@ -491,11 +509,14 @@ function NotificationsTab() {
                 ? "This browser doesn't support notifications."
                 : permission === "denied"
                   ? "Blocked by your browser. Allow notifications for this site in the browser's settings."
-                  : "Show a notification while this app is open in a tab."}
+                  : desktopApp
+                    ? "Show a notification for mentions and messages, even while the window is closed."
+                    : "Show a notification while this app is open in a tab."}
             </p>
           </div>
           <Switch checked={prefs.desktop && permission === "granted"} onCheckedChange={(v) => void setDesktop(v)} disabled={!supported || permission === "denied"} aria-label="Desktop notifications" />
         </div>
+        {desktopApp ? null : (
         <div className="flex items-center justify-between gap-4 rounded-md border px-4 py-3">
           <div>
             <p className="text-sm font-medium">Push notifications on this device</p>
@@ -509,6 +530,7 @@ function NotificationsTab() {
           </div>
           <Switch checked={!!push} onCheckedChange={(v) => void setPushOn(v)} disabled={!pushSupported() || needsHomeScreen() || pushBusy || push === null} aria-label="Push notifications on this device" />
         </div>
+        )}
         <div className="flex items-center justify-between gap-4 rounded-md border px-4 py-3">
           <div>
             <p className="text-sm font-medium">Show message text</p>

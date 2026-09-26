@@ -8,8 +8,12 @@ import { router } from "@/app/router";
 import { isApiError } from "@/lib/api";
 import "@/styles/globals.css";
 import { registerServiceWorker } from "@/lib/push";
+import { isDesktopApp, openExternalLinksInBrowser } from "@/lib/desktop";
 
-registerServiceWorker();
+// The desktop app has its own notifications and runs in the background, so it
+// doesn't need the service worker (installing, Web Push).
+if (isDesktopApp()) openExternalLinksInBrowser();
+else registerServiceWorker();
 
 const queryClient = new QueryClient({
   defaultOptions: {
