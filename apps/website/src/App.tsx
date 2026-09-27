@@ -52,13 +52,54 @@ const features = [
   { icon: Shield, title: "Yours", text: "Your data lives in your own Cloudflare account. Moderation, backups and exports built in." },
 ];
 
+const phones = [
+  { src: "/screenshots/ios-home.jpg", alt: "Chat on iPhone: the server rail and a workspace's channels", label: "iOS" },
+  { src: "/screenshots/ios-channel.jpg", alt: "Chat on iPhone: a channel with messages and reactions", label: "iOS" },
+  { src: "/screenshots/android-home.jpg", alt: "Chat on Android: the server rail and a workspace's channels", label: "Android" },
+  { src: "/screenshots/android-channel.jpg", alt: "Chat on Android: a channel with messages", label: "Android" },
+];
+
+function Screenshots() {
+  return (
+    <section id="screenshots" className="mx-auto max-w-5xl scroll-mt-20 px-4 py-16" aria-labelledby="screenshots-title">
+      <p className="font-mono text-xs tracking-widest text-muted-foreground uppercase">Everywhere</p>
+      <h2 id="screenshots-title" className="mt-2 text-3xl font-semibold tracking-tight">Desktop, iOS and Android</h2>
+      <p className="mt-2 text-muted-foreground">The same server on every device. Sign in to several servers and they share one list.</p>
+
+      <figure className="mt-8">
+        <div className="overflow-hidden rounded-xl border border-border bg-card shadow-2xl">
+          <div className="flex items-center gap-1.5 border-b border-border px-4 py-2.5" aria-hidden>
+            <span className="size-2.5 rounded-full bg-accent" />
+            <span className="size-2.5 rounded-full bg-accent" />
+            <span className="size-2.5 rounded-full bg-accent" />
+          </div>
+          <img src="/screenshots/desktop.jpg" alt="Chat on the desktop: channels, a conversation and the member list" className="block w-full" width={2000} height={1250} loading="lazy" />
+        </div>
+        <figcaption className="mt-3 font-mono text-xs text-muted-foreground">Windows · macOS · Web</figcaption>
+      </figure>
+
+      <div className="mt-12 grid grid-cols-2 gap-6 lg:grid-cols-4">
+        {phones.map((p) => (
+          <figure key={p.src}>
+            <div className="overflow-hidden rounded-[2rem] border-4 border-accent bg-card shadow-xl">
+              <img src={p.src} alt={p.alt} className="block w-full" loading="lazy" />
+            </div>
+            <figcaption className="mt-3 text-center font-mono text-xs text-muted-foreground">{p.label}</figcaption>
+          </figure>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 export function App() {
   return (
     <div className="min-h-dvh">
       <header className="sticky top-0 z-10 border-b border-border bg-background/90 backdrop-blur">
         <nav className="mx-auto flex max-w-5xl items-center gap-6 px-4 py-3 text-sm" aria-label="Main">
-          <a href="#" className="flex items-center gap-2 font-semibold"><Server className="size-5" aria-hidden />Beacon Chat</a>
+          <a href="#" className="flex items-center gap-2 font-semibold"><Server className="size-5" aria-hidden />Chat</a>
           <div className="ml-auto flex items-center gap-5 font-mono text-xs text-muted-foreground max-sm:hidden">
+            <a href="#screenshots" className="hover:text-foreground">Screenshots</a>
             <a href="#setup" className="hover:text-foreground">Setup</a>
             <a href="#faq" className="hover:text-foreground">FAQ</a>
             <a href="#troubleshooting" className="hover:text-foreground">Troubleshooting</a>
@@ -89,6 +130,8 @@ export function App() {
             </div>
           ))}
         </section>
+
+        <Screenshots />
 
         <Section id="setup" eyebrow="Setup" title="How to set it up" intro="You need a Cloudflare account. The free plan is enough, and you can sign up along the way.">
           <h3 className="mb-6 text-lg font-semibold">Option 1: the deploy button (nothing to install)</h3>
