@@ -183,6 +183,9 @@ export const updateServerSettingsSchema = z
     workspaceCreation: z.enum(["everyone", "owner"]).optional(),
     requireVerifiedEmail: z.boolean().optional(),
     name: z.string().trim().max(60).nullable().optional(),
+    /** Markdown. null goes back to the built-in template (shared/policies.ts). */
+    privacyPolicy: z.string().trim().max(50_000).nullable().optional(),
+    terms: z.string().trim().max(50_000).nullable().optional(),
     description: z.string().trim().max(300).nullable().optional(),
     /** R2 key from the upload flow (purpose "workspace-icon"), or null to remove. */
     iconKey: z.string().max(200).nullable().optional(),

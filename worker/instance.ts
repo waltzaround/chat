@@ -180,6 +180,21 @@ export async function setServerProfile(db: D1Database, input: { name?: string | 
   }
 }
 
+/** The owner's own privacy policy and terms (Markdown), or null for the template. */
+export async function serverPolicies(db: D1Database): Promise<{ privacyPolicy: string | null; terms: string | null }> {
+  const { results } = await db.prepare("SELECT key, value FROM instance_settings WHERE key IN ('privacy_policy', 'terms')").all<{ key: string; value: string }>();
+  const get = (k: string) => results.find((r) => r.key === k)?.value || null;
+  return { privacyPolicy: get("privacy_policy"), terms: get("terms") };
+}
+
+export async function setServerPolicies(db: D1Database, input: { privacyPolicy?: string | null; terms?: string | null }): Promise<void> {
+  for (const [key, value] of [["privacy_policy", input.privacyPolicy], ["terms", input.terms]] as const) {
+    if (value === undefined) continue;
+    if (value === null || value === "") await db.prepare("DELETE FROM instance_settings WHERE key = ?").bind(key).run();
+    else await setSetting(db, key, value);
+  }
+}
+
 /** Public URL for the icon; the key in the query busts caches when it changes. */
 export function serverIconUrl(profile: ServerProfile): string | null {
   return profile.iconKey ? `/api/instance/icon?v=${encodeURIComponent(profile.iconKey.split("/").pop() ?? "")}` : null;

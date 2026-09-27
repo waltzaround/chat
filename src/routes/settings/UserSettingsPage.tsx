@@ -26,6 +26,7 @@ import { authClient } from "@/lib/auth-client";
 import { errorMessage } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { PreferredStatus } from "@shared/types";
+import { DEFAULT_PRIVACY, DEFAULT_TERMS } from "@shared/policies";
 
 const TABS = [
   { id: "profile", label: "Profile", icon: <User className="size-3.5" /> },
@@ -312,6 +313,7 @@ function ServerTab() {
         <p className="text-sm text-muted-foreground">You own this server, so these settings apply to everyone on it.</p>
       </div>
       <ServerBrandingSettings />
+      <PolicySettings />
       <div className="grid gap-2">
         <p className="text-sm font-medium">Who can create an account</p>
         <RegistrationPolicyPicker />
@@ -401,6 +403,66 @@ function ServerBrandingSettings() {
         </Button>
       </div>
     </form>
+  );
+}
+
+/** The privacy policy and terms at /privacy and /terms (the app stores need both). */
+function PolicySettings() {
+  const current = useServerSettings().data;
+  const update = useUpdateServerSettings();
+  const [open, setOpen] = useState<"privacyPolicy" | "terms" | null>(null);
+  const [text, setText] = useState("");
+
+  const edit = (which: "privacyPolicy" | "terms") => {
+    setOpen(which);
+    setText(current?.[which] ?? (which === "privacyPolicy" ? DEFAULT_PRIVACY : DEFAULT_TERMS));
+  };
+  const save = async (value: string | null) => {
+    if (!open) return;
+    try {
+      await update.mutateAsync({ [open]: value });
+      toast.success(value === null ? "Back to the template" : "Saved");
+      setOpen(null);
+    } catch (err) {
+      toast.error(errorMessage(err));
+    }
+  };
+
+  return (
+    <div className="grid gap-2">
+      <p className="text-sm font-medium">Privacy policy and terms</p>
+      <p className="text-xs text-muted-foreground">
+        Shown at <a className="link" href="/privacy" target="_blank" rel="noreferrer">/privacy</a> and <a className="link" href="/terms" target="_blank" rel="noreferrer">/terms</a>, and linked from sign-up and the apps. Until you edit them, a template describing what this software stores is used. It isn't legal advice.
+      </p>
+      <div className="flex flex-wrap gap-2">
+        <Button type="button" variant="outline" size="sm" onClick={() => edit("privacyPolicy")}>
+          Edit privacy policy{current?.privacyPolicy ? "" : " (template)"}
+        </Button>
+        <Button type="button" variant="outline" size="sm" onClick={() => edit("terms")}>
+          Edit terms{current?.terms ? "" : " (template)"}
+        </Button>
+      </div>
+      {open ? (
+        <div className="grid gap-2">
+          <Label htmlFor="policy-text">{open === "privacyPolicy" ? "Privacy policy" : "Terms of use"} (Markdown)</Label>
+          <Textarea id="policy-text" value={text} onChange={(e) => setText(e.target.value)} rows={16} className="font-mono text-xs" />
+          <p className="text-xs text-muted-foreground">{"{server}"} and {"{owner}"} are replaced with this server's name and yours.</p>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" size="sm" disabled={update.isPending || !text.trim()} onClick={() => void save(text)}>
+              Save
+            </Button>
+            <Button type="button" size="sm" variant="ghost" onClick={() => setOpen(null)}>
+              Cancel
+            </Button>
+            {current?.[open] ? (
+              <Button type="button" size="sm" variant="ghost" className="ml-auto" onClick={() => void save(null)}>
+                Use the template
+              </Button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+    </div>
   );
 }
 

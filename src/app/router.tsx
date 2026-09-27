@@ -12,6 +12,8 @@ import { WorkspaceIndexRoute } from "@/routes/WorkspaceIndexRoute";
 import { NoWorkspacePage } from "@/routes/NoWorkspacePage";
 import { DirectMessagesPage } from "@/routes/DirectMessagesPage";
 import { LinkCompletePage, LinkPage } from "@/routes/LinkPage";
+import { PolicyPage } from "@/routes/PolicyPage";
+import { AppChallengePage } from "@/routes/AppChallengePage";
 import { FullscreenSpinner } from "@/components/common/FullscreenSpinner";
 
 const UserSettingsPage = lazy(() => import("@/routes/settings/UserSettingsPage").then((m) => ({ default: m.UserSettingsPage })));
@@ -27,6 +29,9 @@ export const router = createBrowserRouter([
   { path: "/invite/:code", element: <InvitePage /> },
   { path: "/forgot-password", element: <ForgotPasswordPage /> },
   { path: "/reset-password", element: <ResetPasswordPage /> },
+  { path: "/privacy", element: <PolicyPage kind="privacy" /> },
+  { path: "/app-challenge", element: <AppChallengePage /> },
+  { path: "/terms", element: <PolicyPage kind="terms" /> },
   {
     element: (
       <RequireAuth>

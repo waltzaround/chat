@@ -311,6 +311,15 @@ export interface InstanceInfo {
   version: string;
   apiVersion: number;
   registration: RegistrationPolicy;
+  /** How apps can create accounts here. */
+  signUp: {
+    /** Anyone can register in the app (open sign-up, and the owner account exists). */
+    open: boolean;
+    /** Registration needs a Turnstile token: apps get one from /app-challenge. */
+    challenge: boolean;
+    /** New accounts must confirm their email before they can sign in. */
+    requireVerifiedEmail: boolean;
+  };
   features: { voice: boolean; passwordResetEmail: boolean; googleSignIn: boolean; githubSignIn: boolean };
 }
 
@@ -320,7 +329,19 @@ export type RegistrationPolicy = "open" | "invite";
 /** "owner": only the server owner can create workspaces. */
 export type WorkspaceCreationPolicy = "everyone" | "owner";
 
+/** The server's privacy policy and terms, as Markdown, ready to show. */
+export interface ServerPolicies {
+  privacyPolicy: string;
+  terms: string;
+  /** False while the owner hasn't written their own and the template shows. */
+  customPrivacy: boolean;
+  customTerms: boolean;
+}
+
 export interface ServerSettings extends ServerBranding {
+  /** The owner's own text, or null for the template. */
+  privacyPolicy: string | null;
+  terms: string | null;
   registration: RegistrationPolicy;
   workspaceCreation: WorkspaceCreationPolicy;
   /** Email is set up, so members can reset their own password. */

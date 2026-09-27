@@ -8,7 +8,7 @@ import { toUserSummary } from "../lib/serialize";
 import { resetPasswordUrl } from "../auth/auth";
 import { emailEnabled } from "../email";
 import { parseBody } from "../lib/validate";
-import { registrationPolicy, serverIconUrl, serverOwnerId, serverProfile, setServerProfile, setRegistrationPolicy, setVerifiedEmailRequired, setWorkspaceCreationPolicy, verifiedEmailRequiredSince, workspaceCreationPolicy } from "../instance";
+import { registrationPolicy, serverIconUrl, serverOwnerId, serverPolicies, serverProfile, setServerPolicies, setServerProfile, setRegistrationPolicy, setVerifiedEmailRequired, setWorkspaceCreationPolicy, verifiedEmailRequiredSince, workspaceCreationPolicy } from "../instance";
 import { hubFor } from "../lib/hub";
 import { userHub } from "../lib/notify";
 import { WS_CLOSE } from "@shared/events";
@@ -31,8 +31,24 @@ serverRoutes.use("*", async (c, next) => {
 });
 
 async function settings(env: AppEnv["Bindings"]): Promise<ServerSettings> {
-  const [registration, workspaceCreation, since, profile] = await Promise.all([registrationPolicy(env.DB), workspaceCreationPolicy(env.DB), verifiedEmailRequiredSince(env.DB), serverProfile(env.DB)]);
-  return { registration, workspaceCreation, emailEnabled: emailEnabled(env), requireVerifiedEmail: since !== null, name: profile.name, description: profile.description, iconUrl: serverIconUrl(profile) };
+  const [registration, workspaceCreation, since, profile, policies] = await Promise.all([
+    registrationPolicy(env.DB),
+    workspaceCreationPolicy(env.DB),
+    verifiedEmailRequiredSince(env.DB),
+    serverProfile(env.DB),
+    serverPolicies(env.DB),
+  ]);
+  return {
+    registration,
+    workspaceCreation,
+    emailEnabled: emailEnabled(env),
+    requireVerifiedEmail: since !== null,
+    name: profile.name,
+    description: profile.description,
+    iconUrl: serverIconUrl(profile),
+    privacyPolicy: policies.privacyPolicy,
+    terms: policies.terms,
+  };
 }
 
 serverRoutes.get("/", async (c) => c.json(await settings(c.env)));
@@ -47,6 +63,7 @@ serverRoutes.patch("/", async (c) => {
   }
   if (input.iconKey && !input.iconKey.startsWith(`workspace-icons/${c.get("user").id}/`)) throw ApiError.validation(undefined, "Upload the icon first");
   await setServerProfile(c.env.DB, { name: input.name, description: input.description, iconKey: input.iconKey });
+  await setServerPolicies(c.env.DB, { privacyPolicy: input.privacyPolicy, terms: input.terms });
   return c.json(await settings(c.env));
 });
 

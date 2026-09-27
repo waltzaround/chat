@@ -1,7 +1,12 @@
 import { env, SELF } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import type { InstanceInfo, AuthConfig } from "../shared/types";
-import { apiRaw, signUp } from "./helpers";
+import { apiRaw, extractCookies, ORIGIN, signUp } from "./helpers";
+
+async function signIn(email: string): Promise<string> {
+  const res = await SELF.fetch(`${ORIGIN}/api/auth/sign-in/email`, { method: "POST", headers: { "Content-Type": "application/json", Origin: ORIGIN }, body: JSON.stringify({ email, password: "password123" }) });
+  return extractCookies(res.headers);
+}
 
 const publicInfo = async () => ((await (await SELF.fetch("http://localhost/api/instance")).json()) as InstanceInfo).server;
 
@@ -32,5 +37,29 @@ describe("server branding", () => {
     // Clearing a field removes it; the others stay.
     await apiRaw(owner.cookie, "/api/server", { method: "PATCH", json: { description: null } });
     expect(await publicInfo()).toMatchObject({ name: "Kiwi Devs", description: null });
+  });
+});
+
+describe("privacy policy and terms", () => {
+  it("serve the template until the owner writes their own", async () => {
+    const res = await SELF.fetch("http://localhost/api/policies");
+    const policies = (await res.json()) as { privacyPolicy: string; terms: string; customPrivacy: boolean };
+    expect(policies.customPrivacy).toBe(false);
+    expect(policies.privacyPolicy).toContain("# Privacy policy");
+    expect(policies.privacyPolicy).not.toContain("{server}");
+    expect(policies.terms).toContain("# Terms of use");
+  });
+
+  it("let only the owner replace them, and go back to the template", async () => {
+    // The first sign-up in this file ("brandowner", above) owns the server.
+    const owner = await signIn("brandowner@example.com");
+    const member = await signUp("policymember");
+    expect((await apiRaw(member.cookie, "/api/server", { method: "PATCH", json: { terms: "mine" } })).status).toBe(403);
+    expect((await apiRaw(owner, "/api/server", { method: "PATCH", json: { privacyPolicy: "# Ours\n\nRun by {owner}." } })).status).toBe(200);
+    const custom = (await (await SELF.fetch("http://localhost/api/policies")).json()) as { privacyPolicy: string; customPrivacy: boolean };
+    expect(custom.customPrivacy).toBe(true);
+    expect(custom.privacyPolicy).toBe("# Ours\n\nRun by brandowner.");
+    await apiRaw(owner, "/api/server", { method: "PATCH", json: { privacyPolicy: null } });
+    expect(((await (await SELF.fetch("http://localhost/api/policies")).json()) as { customPrivacy: boolean }).customPrivacy).toBe(false);
   });
 });

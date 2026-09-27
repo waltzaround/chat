@@ -7,8 +7,9 @@ import { ApiError } from "../lib/errors";
 import { parseBody } from "../lib/validate";
 import { toCurrentUser, toUserSummary, toWorkspaceSummary } from "../lib/serialize";
 import { notifyWorkspace } from "../lib/hub";
-import { canCreateWorkspace, registrationPolicy, serverIconUrl, serverOwnerId, serverProfile, verifiedEmailRequiredSince } from "../instance";
-import type { ServerBranding } from "@shared/types";
+import { canCreateWorkspace, registrationPolicy, serverIconUrl, serverOwnerId, serverPolicies, serverProfile, verifiedEmailRequiredSince } from "../instance";
+import { DEFAULT_PRIVACY, DEFAULT_TERMS, fillPolicy } from "@shared/policies";
+import type { ServerBranding, ServerPolicies } from "@shared/types";
 
 import { emailEnabled } from "../email";
 import { deleteAccountSchema, updateMeSchema } from "@shared/schemas";
@@ -36,18 +37,41 @@ async function branding(db: D1Database): Promise<ServerBranding> {
 
 /** Public: identifies this server to native apps before they sign in. */
 meRoutes.get("/instance", async (c) => {
+  const [registration, owner] = await Promise.all([registrationPolicy(c.env.DB), serverOwnerId(c.env.DB)]);
   const body: InstanceInfo = {
     server: await branding(c.env.DB),
     software: "chat",
     version: APP_VERSION,
     apiVersion: API_VERSION,
-    registration: await registrationPolicy(c.env.DB),
+    registration,
+    signUp: {
+      open: registration === "open" && !!owner,
+      challenge: !!(c.env.TURNSTILE_SECRET_KEY && c.env.TURNSTILE_SITE_KEY),
+      requireVerifiedEmail: emailEnabled(c.env) && (await verifiedEmailRequiredSince(c.env.DB)) !== null,
+    },
     features: {
       voice: realtimekitConfigured(c.env),
       passwordResetEmail: emailEnabled(c.env),
       googleSignIn: !!(c.env.GOOGLE_CLIENT_ID && c.env.GOOGLE_CLIENT_SECRET),
       githubSignIn: !!(c.env.GITHUB_CLIENT_ID && c.env.GITHUB_CLIENT_SECRET),
     },
+  };
+  return c.json(body);
+});
+
+/**
+ * Public: the privacy policy and terms (the /privacy and /terms pages, and the app
+ * stores' required links). The owner's own text, or the template filled in.
+ */
+meRoutes.get("/policies", async (c) => {
+  const [custom, profile, ownerId] = await Promise.all([serverPolicies(c.env.DB), serverProfile(c.env.DB), serverOwnerId(c.env.DB)]);
+  const owner = ownerId ? await c.env.DB.prepare("SELECT display_name FROM users WHERE id = ?").bind(ownerId).first<{ display_name: string }>() : null;
+  const vars = { server: profile.name ?? new URL(c.get("origin")).host, owner: owner?.display_name ?? "the server owner" };
+  const body: ServerPolicies = {
+    privacyPolicy: fillPolicy(custom.privacyPolicy ?? DEFAULT_PRIVACY, vars),
+    terms: fillPolicy(custom.terms ?? DEFAULT_TERMS, vars),
+    customPrivacy: custom.privacyPolicy !== null,
+    customTerms: custom.terms !== null,
   };
   return c.json(body);
 });

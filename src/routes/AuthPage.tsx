@@ -230,6 +230,19 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
                 {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
                 {mode === "login" ? "Sign in" : owner ? "Create owner account" : "Create account"}
               </Button>
+              {mode === "register" && !owner ? (
+                <p className="text-center text-[11px] text-muted-foreground">
+                  By creating an account you agree to the{" "}
+                  <a href="/terms" target="_blank" rel="noreferrer" className="link">
+                    terms
+                  </a>{" "}
+                  and{" "}
+                  <a href="/privacy" target="_blank" rel="noreferrer" className="link">
+                    privacy policy
+                  </a>
+                  .
+                </p>
+              ) : null}
             </form>
           </>
         )}
