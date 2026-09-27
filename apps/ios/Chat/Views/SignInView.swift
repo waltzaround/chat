@@ -12,6 +12,8 @@ struct SignInView: View {
     @State private var error: String?
     @State private var webPage: URL?
     @State private var branding: ServerBranding?
+    @State private var instance: InstanceInfo?
+    @State private var registering = false
     @FocusState private var field: Field?
 
     private enum Field { case email, password }
@@ -68,7 +70,10 @@ struct SignInView: View {
 
                 HStack(spacing: 4) {
                     Text("Need an account?").foregroundStyle(Theme.muted)
-                    Button("Register") { webPage = server.appending(path: "register") }
+                    Button("Register") {
+                        // Open sign-up happens here; invite-only servers need the invite link.
+                        if instance?.signUp?.open == true { registering = true } else { webPage = server.appending(path: "register") }
+                    }
                         .foregroundStyle(Theme.link)
                 }
                 .font(.app(.footnote, weight: .medium))
@@ -81,7 +86,13 @@ struct SignInView: View {
         .scrollDismissesKeyboard(.interactively)
         .background(Theme.chat.ignoresSafeArea())
         .navigationBarTitleDisplayMode(.inline)
-        .task { branding = try? await APIClient.instance(at: server).server }
+        .task {
+            instance = try? await APIClient.instance(at: server)
+            branding = instance?.server
+        }
+        .navigationDestination(isPresented: $registering) {
+            RegisterView(server: server, branding: branding, challenge: instance?.signUp?.challenge ?? false, onDone: onDone)
+        }
         .sheet(item: $webPage) { url in SafariView(url: url).ignoresSafeArea() }
     }
 

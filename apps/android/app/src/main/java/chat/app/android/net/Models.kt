@@ -11,7 +11,11 @@ import java.time.format.FormatStyle
 // Mirrors of the server's JSON (shared/types.ts). Only the fields the app uses.
 
 @Serializable
-data class InstanceInfo(val software: String, val version: String, val apiVersion: Int, val server: ServerBranding? = null)
+data class InstanceInfo(val software: String, val version: String, val apiVersion: Int, val server: ServerBranding? = null, val signUp: SignUpInfo? = null)
+
+/** How apps can create accounts on this server. */
+@Serializable
+data class SignUpInfo(val open: Boolean, val challenge: Boolean, val requireVerifiedEmail: Boolean)
 
 /** The name, description and icon the server's owner set. All optional. */
 @Serializable
@@ -21,7 +25,7 @@ data class ServerBranding(val name: String? = null, val description: String? = n
 data class UserSummary(val id: String, val username: String, val displayName: String, val avatarUrl: String? = null)
 
 @Serializable
-data class CurrentUser(val id: String, val username: String, val displayName: String, val avatarUrl: String? = null, val email: String) {
+data class CurrentUser(val id: String, val username: String, val displayName: String, val avatarUrl: String? = null, val email: String, val hasPassword: Boolean = true) {
     val summary get() = UserSummary(id, username, displayName, avatarUrl)
 }
 

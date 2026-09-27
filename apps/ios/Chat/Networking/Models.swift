@@ -8,6 +8,14 @@ struct InstanceInfo: Decodable {
     let version: String
     let apiVersion: Int
     let registration: String
+    /** Missing on servers from before in-app registration. */
+    let signUp: SignUpInfo?
+
+    struct SignUpInfo: Decodable {
+        let open: Bool
+        let challenge: Bool
+        let requireVerifiedEmail: Bool
+    }
 }
 
 /// The name, description and icon the server's owner set. All optional.
@@ -30,6 +38,8 @@ struct CurrentUser: Decodable {
     let displayName: String
     let avatarUrl: String?
     let email: String
+    /// Signs in with a password; deleting the account asks for it.
+    var hasPassword: Bool? = nil
 }
 
 struct WorkspaceSummary: Decodable, Hashable, Identifiable {

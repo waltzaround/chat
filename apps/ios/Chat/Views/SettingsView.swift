@@ -9,6 +9,7 @@ struct ProfileSheet: View {
     let addServer: () -> Void
     @State private var webPage: URL?
     @State private var confirmSignOut: Account?
+    @State private var deletingAccount: Account?
 
     var body: some View {
         ScrollView {
@@ -41,6 +42,16 @@ struct ProfileSheet: View {
                         addServer()
                     }
                 }
+                if let account = model.account(for: selected ?? model.accounts.first?.server ?? URL(string: "about:blank")!) {
+                    sectionTitle("About \(account.host)")
+                    group {
+                        row("Privacy Policy", icon: "hand.raised.fill", tint: Theme.muted) { webPage = account.server.appending(path: "privacy") }
+                        Rectangle().fill(Theme.raised).frame(height: 0.5).padding(.leading, 64)
+                        row("Terms of Use", icon: "doc.text.fill", tint: Theme.muted) { webPage = account.server.appending(path: "terms") }
+                        Rectangle().fill(Theme.raised).frame(height: 0.5).padding(.leading, 64)
+                        row("Delete Account", icon: "trash.fill", tint: Theme.danger) { deletingAccount = account }
+                    }
+                }
                 Text("Profile, notification and privacy settings open that server's settings page.")
                     .font(.app(.caption))
                     .foregroundStyle(Theme.faint)
@@ -50,6 +61,10 @@ struct ProfileSheet: View {
         }
         .background(Theme.rail.ignoresSafeArea())
         .sheet(item: $webPage) { url in SafariView(url: url).ignoresSafeArea() }
+        .sheet(item: $deletingAccount) { account in
+            DeleteAccountSheet(account: account)
+                .presentationBackground(Theme.panel)
+        }
         .confirmationDialog("Log out of \(confirmSignOut?.host ?? "this server")?", isPresented: Binding(get: { confirmSignOut != nil }, set: { if !$0 { confirmSignOut = nil } }), titleVisibility: .visible) {
             Button("Log Out", role: .destructive) {
                 if let account = confirmSignOut { Task { await model.signOut(account.server) } }
@@ -98,11 +113,11 @@ struct ProfileSheet: View {
             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
-    private func row(_ title: String, icon: String, action: @escaping () -> Void) -> some View {
+    private func row(_ title: String, icon: String, tint: Color? = nil, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 12) {
-                Image(systemName: icon).font(.title3).frame(width: 36).foregroundStyle(Color(hex: "23A55A")!)
-                Text(title).foregroundStyle(Theme.heading)
+                Image(systemName: icon).font(.title3).frame(width: 36).foregroundStyle(tint ?? Color(hex: "23A55A")!)
+                Text(title).foregroundStyle(tint == Theme.danger ? Theme.danger : Theme.heading)
                 Spacer()
             }
             .padding(.horizontal, 16)
@@ -110,6 +125,76 @@ struct ProfileSheet: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(ChannelRowStyle())
+    }
+}
+
+/// Deletes your account on one server, after you type your username (and password).
+struct DeleteAccountSheet: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    let account: Account
+    @State private var username = ""
+    @State private var password = ""
+    @State private var deleteMessages = false
+    @State private var busy = false
+    @State private var error: String?
+
+    private var needsPassword: Bool { account.me?.hasPassword ?? true }
+    private var ready: Bool { username.trimmingCharacters(in: .whitespaces) == account.me?.username && (!needsPassword || !password.isEmpty) }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Text("This permanently deletes your account on \(account.host): your profile, memberships and direct messages. It can't be undone. Your accounts on other servers aren't affected.")
+                        .foregroundStyle(Theme.text)
+                }
+                Section {
+                    Toggle("Also delete every message I've sent", isOn: $deleteMessages)
+                } footer: {
+                    Text("Otherwise your messages stay, shown as from a deleted user.")
+                }
+                Section("Type your username, \(account.me?.username ?? "")") {
+                    TextField("Username", text: $username).textInputAutocapitalization(.never).autocorrectionDisabled()
+                    if needsPassword {
+                        SecureField("Password", text: $password).textContentType(.password)
+                    }
+                }
+                if let error {
+                    Section { Text(error).foregroundStyle(Theme.danger) }
+                }
+                Section {
+                    Button(role: .destructive, action: delete) {
+                        HStack {
+                            Text("Delete Account")
+                            if busy { Spacer(); ProgressView() }
+                        }
+                    }
+                    .disabled(!ready || busy)
+                }
+            }
+            .scrollContentBackground(.hidden)
+            .navigationTitle("Delete Account")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
+        }
+    }
+
+    private func delete() {
+        busy = true
+        error = nil
+        Task {
+            struct Body: Encodable { let confirmUsername: String; let password: String?; let deleteMessages: Bool }
+            do {
+                let api = account.api
+                try await api.raw(api.request("/api/me", method: "DELETE", body: Body(confirmUsername: username.trimmingCharacters(in: .whitespaces), password: needsPassword ? password : nil, deleteMessages: deleteMessages)))
+                dismiss()
+                model.handleSignedOut(account.server)
+            } catch {
+                self.error = (error as? LocalizedError)?.errorDescription ?? "Couldn't delete the account."
+            }
+            busy = false
+        }
     }
 }
 

@@ -25,6 +25,8 @@ final class AppModel {
     var pendingLink: URL?
     /// Set when a notification is tapped: the channel to open.
     var pendingRoute: Route?
+    /// A screen to push on top of the current one, e.g. a thread.
+    var pushRoute: Route?
 
     private static let serversKey = "chat.servers"
     private static let legacyServerKey = "chat.server"
@@ -64,6 +66,21 @@ final class AppModel {
             accounts.append(account)
         }
         persist()
+    }
+
+    /// Registers, then signs in when the server allows it straight away.
+    func register(server: URL, name: String, username: String, email: String, password: String, challenge: String?) async throws -> Bool {
+        switch try await APIClient(server: server, token: nil).signUp(name: name, username: username, email: email, password: password, challenge: challenge) {
+        case let .signedIn(token):
+            Keychain.save(token, for: server)
+            let me: CurrentUser? = try? await APIClient(server: server, token: token).get("/api/me")
+            accounts.removeAll { $0.server == server }
+            accounts.append(Account(server: server, token: token, me: me))
+            persist()
+            return true
+        case .confirmEmail:
+            return false
+        }
     }
 
     func signOut(_ server: URL) async {

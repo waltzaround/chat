@@ -43,6 +43,25 @@ import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
 import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Cancel
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Flag
+import androidx.compose.material3.RadioButton
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.Tag
@@ -99,16 +118,32 @@ private val QUICK_REACTIONS = listOf("👍", "❤️", "😂", "😮", "😢", "
 
 /** A channel or DM: live messages, older history on scroll, and a composer. */
 @Composable
-fun ChannelScreen(state: AppState, route: ChannelRoute, onBack: () -> Unit) {
+fun ChannelScreen(state: AppState, route: ChannelRoute, open: (ChannelRoute) -> Unit, onBack: () -> Unit) {
     val api = state.api(route.server) ?: return onBack()
     val me = state.account(route.server)?.me
-    val store = remember(route) { ChannelStore(api, route.workspaceId, route.channelId) }
+    val store = remember(route) { ChannelStore(api, route.workspaceId, route.channelId, route.threadRoot?.id) }
     DisposableEffect(store) { onDispose { store.close() } }
     store.onSignedOut = { state.handleSignedOut(route.server) }
     val ui by store.ui.collectAsState()
     var draft by remember { mutableStateOf("") }
     var replyingTo by remember { mutableStateOf<Message?>(null) }
     var actionsFor by remember { mutableStateOf<Message?>(null) }
+    var editing by remember { mutableStateOf<Message?>(null) }
+    var reporting by remember { mutableStateOf<Message?>(null) }
+    var deleting by remember { mutableStateOf<Message?>(null) }
+    var revealed by remember { mutableStateOf(setOf<String>()) }
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val openThread = { m: Message -> open(route.copy(title = "Thread", peer = null, threadRoot = m, parent = route)) }
+    val pickPhoto = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri != null) scope.launch {
+            val photo = withContext(Dispatchers.IO) { readPhoto(context, uri) }
+            if (photo == null) return@launch
+            store.sendImage(photo.bytes, "image/jpeg", photo.width, photo.height, draft, replyingTo?.id)
+            draft = ""
+            replyingTo = null
+        }
+    }
     val composer = remember { FocusRequester() }
     val list = rememberLazyListState()
 
@@ -125,7 +160,11 @@ fun ChannelScreen(state: AppState, route: ChannelRoute, onBack: () -> Unit) {
         // Header
         Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Palette.heading) }
-            if (route.peer != null) Avatar(route.peer, 26.dp, api) else Icon(Icons.Filled.Tag, contentDescription = null, tint = Palette.faint, modifier = Modifier.size(22.dp))
+            when {
+                route.peer != null -> Avatar(route.peer, 26.dp, api)
+                route.threadRoot != null -> Icon(Icons.Filled.Forum, contentDescription = null, tint = Palette.faint, modifier = Modifier.size(22.dp))
+                else -> Icon(Icons.Filled.Tag, contentDescription = null, tint = Palette.faint, modifier = Modifier.size(22.dp))
+            }
             Spacer(Modifier.width(8.dp))
             Text(route.title, color = Palette.heading, fontWeight = FontWeight.SemiBold, fontSize = 17.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.semantics { heading() })
         }
@@ -139,12 +178,25 @@ fun ChannelScreen(state: AppState, route: ChannelRoute, onBack: () -> Unit) {
                     items(rows.size, key = { rows[it].key }) { i ->
                         when (val row = rows[i]) {
                             is Row_.Day -> DaySeparator(row.label)
-                            is Row_.Msg -> MessageRow(row.message, row.grouped, me, api, onLongPress = { actionsFor = row.message }, react = { store.toggleReaction(it, row.message.id) })
+                            is Row_.Msg -> if (row.message.author.id in ui.blocked && row.message.id !in revealed) {
+                                BlockedRow { revealed = revealed + row.message.id }
+                            } else {
+                                MessageRow(
+                                    row.message, row.grouped, me, api,
+                                    onLongPress = { actionsFor = row.message },
+                                    react = { store.toggleReaction(it, row.message.id) },
+                                    openThread = if (route.threadRoot == null) { { openThread(row.message) } } else null,
+                                )
+                            }
                             is Row_.Pending -> PendingRow(row.pending, me, api, row.grouped) { store.retry(row.pending.id) }
                         }
                     }
                     item(key = "top") {
                         if (ui.hasMore) Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Palette.muted, modifier = Modifier.size(24.dp)) }
+                        else if (route.threadRoot != null) Column {
+                            MessageRow(route.threadRoot, false, me, api, onLongPress = {}, react = {})
+                            DaySeparator("${ui.messages.size} ${if (ui.messages.size == 1) "reply" else "replies"}")
+                        }
                         else Welcome(route, api)
                     }
                 }
@@ -154,12 +206,27 @@ fun ChannelScreen(state: AppState, route: ChannelRoute, onBack: () -> Unit) {
         Composer(
             draft = draft,
             onDraft = { draft = it },
-            placeholder = if (route.peer != null) "Message @${route.title}" else "Message #${route.title}",
+            placeholder = when {
+                route.threadRoot != null -> "Reply in thread"
+                route.peer != null -> "Message @${route.title}"
+                else -> "Message #${route.title}"
+            },
             replyingTo = replyingTo,
+            editing = editing != null,
             onCancelReply = { replyingTo = null },
+            onCancelEdit = { editing = null; draft = "" },
+            canAttach = ui.canAttach && editing == null,
+            uploading = ui.uploading,
+            onAttach = { pickPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
             focus = composer,
             onSend = {
-                store.send(draft, replyingTo?.id)
+                val e = editing
+                if (e != null) {
+                    store.edit(e.id, draft)
+                    editing = null
+                } else {
+                    store.send(draft, replyingTo?.id)
+                }
                 draft = ""
                 replyingTo = null
             },
@@ -167,10 +234,47 @@ fun ChannelScreen(state: AppState, route: ChannelRoute, onBack: () -> Unit) {
     }
 
     actionsFor?.let { message ->
-        MessageActions(message, onDismiss = { actionsFor = null }, react = { store.toggleReaction(it, message.id) }, reply = {
-            replyingTo = message
-            runCatching { composer.requestFocus() }
-        })
+        val mine = message.author.id == me?.id
+        MessageActions(
+            message,
+            mine = mine,
+            canDelete = mine || ui.canManage,
+            blocked = message.author.id in ui.blocked,
+            inThread = route.threadRoot != null,
+            onDismiss = { actionsFor = null },
+            react = { store.toggleReaction(it, message.id) },
+            reply = { replyingTo = message; editing = null; runCatching { composer.requestFocus() } },
+            edit = { editing = message; replyingTo = null; draft = message.content; runCatching { composer.requestFocus() } },
+            thread = { openThread(message) },
+            report = { reporting = message },
+            block = { store.setBlocked(message.author.id, message.author.id !in ui.blocked) },
+            delete = { deleting = message },
+        )
+    }
+    reporting?.let { message ->
+        ReportSheet(message.author.name, onDismiss = { reporting = null }) { reason, note ->
+            store.report(message.id, reason, note, message.author.name)
+            reporting = null
+        }
+    }
+    deleting?.let { message ->
+        AlertDialog(
+            onDismissRequest = { deleting = null },
+            title = { Text("Delete this message?") },
+            text = { Text("This can't be undone.") },
+            confirmButton = { TextButton(onClick = { store.delete(message.id); deleting = null }) { Text("Delete", color = Palette.danger) } },
+            dismissButton = { TextButton(onClick = { deleting = null }) { Text("Cancel") } },
+            containerColor = Palette.panel,
+        )
+    }
+    ui.notice?.let { notice ->
+        AlertDialog(
+            onDismissRequest = store::clearNotice,
+            title = { Text("Reported") },
+            text = { Text(notice) },
+            confirmButton = { TextButton(onClick = store::clearNotice) { Text("OK") } },
+            containerColor = Palette.panel,
+        )
     }
     ui.error?.let { error ->
         AlertDialog(
@@ -251,7 +355,7 @@ private fun Welcome(route: ChannelRoute, api: ApiClient) {
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
 @Composable
-private fun MessageRow(message: Message, grouped: Boolean, me: CurrentUser?, api: ApiClient, onLongPress: () -> Unit, react: (String) -> Unit) {
+private fun MessageRow(message: Message, grouped: Boolean, me: CurrentUser?, api: ApiClient, onLongPress: () -> Unit, react: (String) -> Unit, openThread: (() -> Unit)? = null) {
     val haptics = LocalHapticFeedback.current
     val mentionsMe = remember(message.id, message.content, me?.id) { mentions(message, me) }
     Column(
@@ -304,7 +408,11 @@ private fun MessageRow(message: Message, grouped: Boolean, me: CurrentUser?, api
                     }
                 }
                 message.thread?.takeIf { it.replyCount > 0 }?.let { t ->
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(
+                        Modifier.clip(RoundedCornerShape(6.dp)).clickable(enabled = openThread != null, onClickLabel = "Open thread") { openThread?.invoke() },
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
                         Icon(Icons.Filled.Forum, contentDescription = null, tint = Palette.link, modifier = Modifier.size(16.dp))
                         Text("${t.replyCount} ${if (t.replyCount == 1) "reply" else "replies"}", color = Palette.link, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                     }
@@ -378,10 +486,28 @@ private fun PendingRow(pending: PendingMessage, me: CurrentUser?, api: ApiClient
 }
 
 @Composable
-private fun Composer(draft: String, onDraft: (String) -> Unit, placeholder: String, replyingTo: Message?, onCancelReply: () -> Unit, focus: FocusRequester, onSend: () -> Unit) {
+private fun Composer(
+    draft: String,
+    onDraft: (String) -> Unit,
+    placeholder: String,
+    replyingTo: Message?,
+    editing: Boolean,
+    onCancelReply: () -> Unit,
+    onCancelEdit: () -> Unit,
+    canAttach: Boolean,
+    uploading: Boolean,
+    onAttach: () -> Unit,
+    focus: FocusRequester,
+    onSend: () -> Unit,
+) {
     val empty = draft.isBlank()
     Column {
-        replyingTo?.let { m ->
+        if (editing) {
+            Row(Modifier.fillMaxWidth().background(Palette.panel).padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("Editing message", color = Palette.muted, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                Icon(Icons.Filled.Cancel, contentDescription = "Cancel editing", tint = Palette.muted, modifier = Modifier.size(20.dp).clickable(onClick = onCancelEdit))
+            }
+        } else replyingTo?.let { m ->
             Row(Modifier.fillMaxWidth().background(Palette.panel).padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(buildAnnotatedString {
                     withStyle(SpanStyle(color = Palette.muted)) { append("Replying to ") }
@@ -391,6 +517,12 @@ private fun Composer(draft: String, onDraft: (String) -> Unit, placeholder: Stri
             }
         }
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (canAttach) {
+                Box(Modifier.size(44.dp).clip(CircleShape).background(Palette.raised).clickable(enabled = !uploading, onClickLabel = "Send a photo", onClick = onAttach), contentAlignment = Alignment.Center) {
+                    if (uploading) CircularProgressIndicator(color = Palette.muted, strokeWidth = 2.dp, modifier = Modifier.size(18.dp))
+                    else Icon(Icons.Filled.Add, contentDescription = "Send a photo", tint = Palette.heading)
+                }
+            }
             BasicTextField(
                 value = draft,
                 onValueChange = onDraft,
@@ -417,10 +549,25 @@ private fun Composer(draft: String, onDraft: (String) -> Unit, placeholder: Stri
 /** Discord's long-press sheet: quick reactions, then message actions. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun MessageActions(message: Message, onDismiss: () -> Unit, react: (String) -> Unit, reply: () -> Unit) {
+private fun MessageActions(
+    message: Message,
+    mine: Boolean,
+    canDelete: Boolean,
+    blocked: Boolean,
+    inThread: Boolean,
+    onDismiss: () -> Unit,
+    react: (String) -> Unit,
+    reply: () -> Unit,
+    edit: () -> Unit,
+    thread: () -> Unit,
+    report: () -> Unit,
+    block: () -> Unit,
+    delete: () -> Unit,
+) {
     val clipboard = LocalClipboardManager.current
+    val run = { action: () -> Unit -> onDismiss(); action() }
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Palette.panel) {
-        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                 QUICK_REACTIONS.forEach { emoji ->
                     Box(Modifier.size(48.dp).clip(CircleShape).background(Palette.rail).clickable(onClickLabel = "React with $emoji") { react(emoji); onDismiss() }, contentAlignment = Alignment.Center) {
@@ -429,20 +576,101 @@ private fun MessageActions(message: Message, onDismiss: () -> Unit, react: (Stri
                 }
             }
             Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Palette.rail)) {
-                ActionRow(Icons.AutoMirrored.Filled.Reply, "Reply") { onDismiss(); reply() }
+                ActionRow(Icons.AutoMirrored.Filled.Reply, "Reply") { run(reply) }
+                if (!inThread) {
+                    Divider(Modifier.padding(start = 52.dp), Palette.raised)
+                    ActionRow(Icons.Filled.Forum, if (message.thread == null) "Start Thread" else "Open Thread") { run(thread) }
+                }
+                if (mine && message.content.isNotEmpty()) {
+                    Divider(Modifier.padding(start = 52.dp), Palette.raised)
+                    ActionRow(Icons.Filled.Edit, "Edit Message") { run(edit) }
+                }
                 if (message.content.isNotEmpty()) {
                     Divider(Modifier.padding(start = 52.dp), Palette.raised)
                     ActionRow(Icons.Filled.ContentCopy, "Copy Text") { clipboard.setText(AnnotatedString(message.content)); onDismiss() }
+                }
+            }
+            if (!mine || canDelete) {
+                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Palette.rail)) {
+                    if (!mine) {
+                        ActionRow(Icons.Filled.Flag, "Report Message", Palette.danger) { run(report) }
+                        Divider(Modifier.padding(start = 52.dp), Palette.raised)
+                        ActionRow(Icons.Filled.Block, if (blocked) "Unblock ${message.author.name}" else "Block ${message.author.name}", Palette.danger) { run(block) }
+                    }
+                    if (canDelete) {
+                        if (!mine) Divider(Modifier.padding(start = 52.dp), Palette.raised)
+                        ActionRow(Icons.Filled.Delete, "Delete Message", Palette.danger) { run(delete) }
+                    }
                 }
             }
         }
     }
 }
 
+/** Why a message is being reported, and an optional note for the moderators. */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ActionRow(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit) {
+private fun ReportSheet(authorName: String, onDismiss: () -> Unit, submit: (String, String?) -> Unit) {
+    val reasons = listOf("spam" to "Spam", "harassment" to "Harassment or bullying", "inappropriate" to "Inappropriate content", "other" to "Something else")
+    var reason by remember { mutableStateOf("harassment") }
+    var note by remember { mutableStateOf("") }
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Palette.panel, sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("Report Message", color = Palette.heading, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            Text("What's wrong with this message?", color = Palette.muted, fontSize = 14.sp)
+            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Palette.rail).selectableGroup()) {
+                reasons.forEach { (key, label) ->
+                    Row(
+                        Modifier.fillMaxWidth().selectable(selected = reason == key, role = Role.RadioButton) { reason = key }.heightIn(min = 52.dp).padding(horizontal = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(label, color = Palette.heading, fontSize = 16.sp, modifier = Modifier.weight(1f))
+                        RadioButton(selected = reason == key, onClick = null)
+                    }
+                }
+            }
+            Text("The workspace's moderators see your report and the message. $authorName isn't told who reported it.", color = Palette.muted, fontSize = 13.sp)
+            FilledField(note, { note = it }, placeholder = "Note for the moderators (optional)")
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                TextButton(onClick = onDismiss) { Text("Cancel") }
+                TextButton(onClick = { submit(reason, note.trim().ifEmpty { null }) }) { Text("Report", color = Palette.danger, fontWeight = FontWeight.SemiBold) }
+            }
+        }
+    }
+}
+
+/** A collapsed message from someone you blocked. */
+@Composable
+private fun BlockedRow(reveal: () -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Icon(Icons.Filled.Block, contentDescription = null, tint = Palette.faint, modifier = Modifier.size(16.dp))
+        Text("Message from someone you blocked.", color = Palette.faint, fontSize = 13.sp)
+        Text("Show", color = Palette.link, fontSize = 13.sp, modifier = Modifier.clickable(onClick = reveal))
+    }
+}
+
+private class Photo(val bytes: ByteArray, val width: Int, val height: Int)
+
+/** Decodes a picked photo, shrinks it to at most 2048px, and re-encodes it as JPEG. */
+private fun readPhoto(context: android.content.Context, uri: android.net.Uri): Photo? = runCatching {
+    val source = android.graphics.ImageDecoder.createSource(context.contentResolver, uri)
+    val bitmap = android.graphics.ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
+        val longest = maxOf(info.size.width, info.size.height)
+        if (longest > 2048) {
+            val scale = 2048f / longest
+            decoder.setTargetSize((info.size.width * scale).toInt(), (info.size.height * scale).toInt())
+        }
+        decoder.allocator = android.graphics.ImageDecoder.ALLOCATOR_SOFTWARE
+    }
+    val out = java.io.ByteArrayOutputStream()
+    bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, out)
+    Photo(out.toByteArray(), bitmap.width, bitmap.height)
+}.getOrNull()
+
+@Composable
+private fun ActionRow(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, tint: Color? = null, onClick: () -> Unit) {
     Row(Modifier.fillMaxWidth().clickable(onClick = onClick).heightIn(min = 52.dp).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-        Icon(icon, contentDescription = null, tint = Palette.muted)
-        Text(label, color = Palette.heading, fontWeight = FontWeight.Medium, fontSize = 16.sp)
+        Icon(icon, contentDescription = null, tint = tint ?: Palette.muted)
+        Text(label, color = tint ?: Palette.heading, fontWeight = FontWeight.Medium, fontSize = 16.sp)
     }
 }

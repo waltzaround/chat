@@ -2,6 +2,8 @@ import SwiftUI
 
 enum Route: Hashable {
     case channel(server: URL, workspaceId: String, channelId: String, title: String, peer: UserSummary?)
+    /// One message's thread, opened from its "N replies" link.
+    case thread(server: URL, workspaceId: String, channelId: String, root: Message)
 }
 
 /// Signed-in shell: the Discord-style home, with channels pushed on top.
@@ -17,6 +19,8 @@ struct MainView: View {
                     switch route {
                     case let .channel(server, workspaceId, channelId, title, peer):
                         ChannelView(server: server, workspaceId: workspaceId, channelId: channelId, title: title, peer: peer)
+                    case let .thread(server, workspaceId, channelId, root):
+                        ChannelView(server: server, workspaceId: workspaceId, channelId: channelId, title: "Thread", peer: nil, threadRoot: root)
                     }
                 }
         }
@@ -33,6 +37,11 @@ struct MainView: View {
             guard let route else { return }
             model.pendingRoute = nil
             path = NavigationPath()
+            path.append(route)
+        }
+        .onChange(of: model.pushRoute) { _, route in
+            guard let route else { return }
+            model.pushRoute = nil
             path.append(route)
         }
     }

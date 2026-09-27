@@ -99,6 +99,22 @@ struct APIClient {
         return token
     }
 
+    /// Creates an account (the server must allow open sign-up). `challenge` is a
+    /// Turnstile token from /app-challenge when the server asks for one.
+    func signUp(name: String, username: String, email: String, password: String, challenge: String?) async throws -> SignUpResult {
+        var req = request("api/auth/sign-up/email", method: "POST", body: ["name": name, "username": username, "email": email, "password": password])
+        if let challenge { req.setValue(challenge, forHTTPHeaderField: "x-turnstile-token") }
+        let (data, response) = try await Self.session.data(for: req)
+        let http = response as? HTTPURLResponse
+        let body = try? JSONDecoder().decode(ErrorBody.self, from: data)
+        if body?.code == "email_not_verified" || body?.code == "EMAIL_NOT_VERIFIED" { return .confirmEmail }
+        guard http?.statusCode == 200 else {
+            throw APIError.server(status: http?.statusCode ?? 0, message: body?.message ?? "Couldn't create the account.")
+        }
+        if let token = http?.value(forHTTPHeaderField: "set-auth-token") { return .signedIn(token: token) }
+        return .confirmEmail
+    }
+
     func signOut() async {
         _ = try? await raw(request("api/auth/sign-out", method: "POST", body: [String: String]()))
     }
@@ -115,12 +131,25 @@ struct APIClient {
 /// Error bodies look like {"error": {"code": "...", "message": "..."}} or Better Auth's {"message": "..."}.
 private struct ErrorBody: Decodable {
     let message: String?
+    let code: String?
 
-    private struct Inner: Decodable { let message: String? }
-    private enum Keys: String, CodingKey { case error, message }
+    private struct Inner: Decodable { let message: String?; let code: String? }
+    private enum Keys: String, CodingKey { case error, message, code }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: Keys.self)
-        if let inner = try? c.decode(Inner.self, forKey: .error) { message = inner.message } else { message = try? c.decode(String.self, forKey: .message) }
+        if let inner = try? c.decode(Inner.self, forKey: .error) {
+            message = inner.message
+            code = inner.code
+        } else {
+            message = try? c.decode(String.self, forKey: .message)
+            code = try? c.decode(String.self, forKey: .code)
+        }
     }
+}
+
+enum SignUpResult {
+    case signedIn(token: String)
+    /** The account exists, but its email must be confirmed before signing in. */
+    case confirmEmail
 }

@@ -72,7 +72,7 @@ class MainActivity : ComponentActivity() {
                 if (accounts.isEmpty()) {
                     AddAccountFlow(state, adding = false, onDone = {})
                 } else {
-                    BackHandler(enabled = channel != null) { channel = null }
+                    BackHandler(enabled = channel != null) { channel = channel?.parent }
                     AnimatedContent(
                         targetState = channel,
                         transitionSpec = {
@@ -84,9 +84,9 @@ class MainActivity : ComponentActivity() {
                         if (route == null) {
                             HomeScreen(state, home) { channel = it }
                         } else {
-                            ChannelScreen(state, route) {
-                                channel = null
-                                home.refresh(state)
+                            ChannelScreen(state, route, open = { channel = it }) {
+                                channel = route.parent
+                                if (route.parent == null) home.refresh(state)
                             }
                         }
                     }

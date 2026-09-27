@@ -58,6 +58,15 @@ class AppState(app: Application) : AndroidViewModel(app) {
         save()
     }
 
+    /** Registers; true when signed in straight away, false when the email must be confirmed first. */
+    suspend fun register(server: String, name: String, username: String, email: String, password: String, challenge: String?): Boolean {
+        val token = ApiClient(server, null).signUp(name, username, email, password, challenge) ?: return false
+        val me = runCatching { ApiClient(server, token).get<CurrentUser>("/api/me") }.getOrNull()
+        _accounts.update { list -> list.filterNot { it.server == server } + Account(server, token, me) }
+        save()
+        return true
+    }
+
     fun signOut(server: String) {
         val account = account(server) ?: return
         viewModelScope.launch { account.api.signOut() }

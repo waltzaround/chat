@@ -8,6 +8,8 @@ struct MessageRow: View {
     let me: CurrentUser?
     let api: APIClient?
     let react: (String) -> Void
+    /// Opens this message's thread; nil inside a thread.
+    var openThread: (() -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -66,13 +68,18 @@ struct MessageRow: View {
                         .padding(.top, 2)
                     }
                     if let thread = message.thread, thread.replyCount > 0 {
-                        HStack(spacing: 6) {
-                            Image(systemName: "bubble.left.and.text.bubble.right.fill")
-                            Text("\(thread.replyCount) \(thread.replyCount == 1 ? "reply" : "replies")")
+                        Button { openThread?() } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "bubble.left.and.text.bubble.right.fill")
+                                Text("\(thread.replyCount) \(thread.replyCount == 1 ? "reply" : "replies")")
+                            }
+                            .font(.app(.footnote, weight: .semibold))
+                            .foregroundStyle(Theme.link)
+                            .padding(.top, 2)
                         }
-                        .font(.app(.footnote, weight: .semibold))
-                        .foregroundStyle(Theme.link)
-                        .padding(.top, 2)
+                        .buttonStyle(.plain)
+                        .disabled(openThread == nil)
+                        .accessibilityHint("Opens the thread")
                     }
                 }
                 Spacer(minLength: 0)

@@ -36,6 +36,11 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ChatBubble
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Policy
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.ExpandMore
@@ -105,7 +110,17 @@ import kotlinx.serialization.json.put
 import java.net.URLEncoder
 
 /** Where to go from home: a channel or DM on one of your servers. */
-data class ChannelRoute(val server: String, val workspaceId: String, val channelId: String, val title: String, val peer: UserSummary?)
+data class ChannelRoute(
+    val server: String,
+    val workspaceId: String,
+    val channelId: String,
+    val title: String,
+    val peer: UserSummary?,
+    /** Set for a thread: the message it started from. */
+    val threadRoot: chat.app.android.net.Message? = null,
+    /** The channel a thread was opened from, so Back returns there. */
+    val parent: ChannelRoute? = null,
+)
 
 /**
  * Discord's home: the rail of every workspace you're in (across all your servers), and
@@ -639,6 +654,66 @@ private fun NewMessageSheet(state: AppState, onDismiss: () -> Unit, open: (Accou
     }
 }
 
+@Composable
+private fun SheetRow(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, tint: Color? = null, onClick: () -> Unit) {
+    Row(Modifier.fillMaxWidth().clickable(onClick = onClick).heightIn(min = 52.dp).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Icon(icon, contentDescription = null, tint = tint ?: Palette.muted)
+        Text(label, color = tint ?: Palette.heading)
+    }
+}
+
+/** Deletes your account on one server, after you type your username (and password). */
+@Composable
+private fun DeleteAccountDialog(state: AppState, account: Account, onDismiss: () -> Unit) {
+    val me = account.me ?: return onDismiss()
+    var username by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var deleteMessages by remember { mutableStateOf(false) }
+    var busy by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+    val ready = username.trim() == me.username && (!me.hasPassword || password.isNotEmpty())
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Palette.panel,
+        title = { Text("Delete your account?") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("This permanently deletes your account on ${account.host}: your profile, memberships and direct messages. It can't be undone. Your accounts on other servers aren't affected.", color = Palette.text, fontSize = 14.sp)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Also delete every message I've sent", color = Palette.text, fontSize = 14.sp, modifier = Modifier.weight(1f))
+                    androidx.compose.material3.Switch(checked = deleteMessages, onCheckedChange = { deleteMessages = it })
+                }
+                Text("Type your username, ${me.username}", color = Palette.muted, fontSize = 12.sp)
+                FilledField(username, { username = it }, placeholder = "Username")
+                if (me.hasPassword) FilledField(password, { password = it }, placeholder = "Password", password = true)
+                error?.let { Text(it, color = Palette.danger, fontSize = 13.sp) }
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = ready && !busy, onClick = {
+                busy = true
+                error = null
+                scope.launch {
+                    try {
+                        account.api.raw("/api/me", "DELETE", buildJsonObject {
+                            put("confirmUsername", username.trim())
+                            if (me.hasPassword) put("password", password)
+                            put("deleteMessages", deleteMessages)
+                        }.toString())
+                        onDismiss()
+                        state.handleSignedOut(account.server)
+                    } catch (e: Exception) {
+                        error = e.message ?: "Couldn't delete the account."
+                    }
+                    busy = false
+                }
+            }) { Text("Delete Account", color = if (ready) Palette.danger else Palette.faint) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
 /** Opened from the profile pill: your account on each server, and settings. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -646,9 +721,10 @@ private fun ProfileSheet(state: AppState, selected: String?, onDismiss: () -> Un
     val accounts by state.accounts.collectAsState()
     val context = LocalContext.current
     var confirm by remember { mutableStateOf<Account?>(null) }
+    var deleting by remember { mutableStateOf<Account?>(null) }
     val account = accounts.firstOrNull { it.server == selected } ?: accounts.firstOrNull()
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Palette.rail) {
-        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
             account?.me?.let { me ->
                 Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Palette.panel)) {
                     Box(Modifier.fillMaxWidth().height(80.dp).background(Palette.hover))
@@ -690,8 +766,19 @@ private fun ProfileSheet(state: AppState, selected: String?, onDismiss: () -> Un
                     Text("Add a server", color = Palette.heading)
                 }
             }
+            account?.let { a ->
+                Text("ABOUT ${a.host.uppercase()}", color = Palette.muted, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Palette.panel)) {
+                    SheetRow(Icons.Filled.Policy, "Privacy Policy") { openInBrowser(context, "${a.server}/privacy") }
+                    Divider(Modifier.padding(start = 52.dp), Palette.raised)
+                    SheetRow(Icons.Filled.Description, "Terms of Use") { openInBrowser(context, "${a.server}/terms") }
+                    Divider(Modifier.padding(start = 52.dp), Palette.raised)
+                    SheetRow(Icons.Filled.Delete, "Delete Account", Palette.danger) { deleting = a }
+                }
+            }
         }
     }
+    deleting?.let { a -> DeleteAccountDialog(state, a) { deleting = null } }
     confirm?.let { a ->
         AlertDialog(
             onDismissRequest = { confirm = null },

@@ -100,6 +100,27 @@ class ApiClient(val server: String, val token: String?) {
         }
     }
 
+    /**
+     * Creates an account (the server must allow open sign-up). Returns the session
+     * token, or null when the email must be confirmed before signing in.
+     */
+    suspend fun signUp(name: String, username: String, email: String, password: String, challenge: String?): String? = withContext(Dispatchers.IO) {
+        val body = kotlinx.serialization.json.buildJsonObject {
+            put("name", kotlinx.serialization.json.JsonPrimitive(name))
+            put("username", kotlinx.serialization.json.JsonPrimitive(username))
+            put("email", kotlinx.serialization.json.JsonPrimitive(email))
+            put("password", kotlinx.serialization.json.JsonPrimitive(password))
+        }.toString()
+        val req = request("/api/auth/sign-up/email", "POST", body).newBuilder().apply { challenge?.let { header("x-turnstile-token", it) } }.build()
+        http.newCall(req).execute().use { res ->
+            val text = res.body?.string().orEmpty()
+            val code = runCatching { json.parseToJsonElement(text).jsonObject["code"]?.jsonPrimitive?.content }.getOrNull()
+            if (code.equals("email_not_verified", ignoreCase = true)) return@withContext null
+            if (!res.isSuccessful) throw ApiException.Server(res.code, errorMessage(text, "Couldn't create the account."))
+            res.header("set-auth-token")
+        }
+    }
+
     suspend fun signOut() {
         runCatching { raw("/api/auth/sign-out", "POST", "{}") }
     }

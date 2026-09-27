@@ -25,6 +25,20 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import java.net.URLEncoder
 import java.util.UUID
+import chat.app.android.net.UserSummary
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonPrimitive
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+
+@Serializable
+private data class Access(val permissions: Int)
+
+@Serializable
+private data class UploadAuthorization(val attachmentId: String, val uploadUrl: String, val headers: Map<String, String> = emptyMap())
 
 data class ChannelUi(
     val messages: List<Message> = emptyList(),
@@ -32,13 +46,25 @@ data class ChannelUi(
     val hasMore: Boolean = false,
     val loading: Boolean = true,
     val error: String? = null,
-)
+    /** Your permission bits here (shared/permissions.ts). */
+    val permissions: Int = 0,
+    /** People you've blocked: their messages are collapsed. */
+    val blocked: Set<String> = emptySet(),
+    val uploading: Boolean = false,
+    /** A one-off confirmation, e.g. after reporting. */
+    val notice: String? = null,
+) {
+    val canManage get() = permissions and (1 shl 4) != 0 || permissions and 1 != 0
+    val canAttach get() = permissions and (1 shl 11) != 0 || permissions and 1 != 0
+}
 
 /**
- * One open channel: its messages (not thread replies), older pages, live updates over
- * the workspace socket, sending, reactions, and read tracking.
+ * One open channel (or one thread in it): its messages, older pages, live updates over
+ * the workspace socket, sending (text and images), editing, deleting, reporting,
+ * blocking, reactions, and read tracking.
  */
-class ChannelStore(private val api: ApiClient, workspaceId: String, private val channelId: String) {
+class ChannelStore(private val api: ApiClient, workspaceId: String, private val channelId: String, private val threadRootId: String? = null) {
+    private val threadQuery get() = threadRootId?.let { "&thread=$it" } ?: ""
     /** Lives while the channel is on screen; [close] ends it and the socket. */
     private val viewModelScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val _ui = MutableStateFlow(ChannelUi())
@@ -55,8 +81,10 @@ class ChannelStore(private val api: ApiClient, workspaceId: String, private val 
         socket.connect()
         viewModelScope.launch {
             try {
-                val page = api.get<MessagePage>("/api/channels/$channelId/messages?limit=50")
-                _ui.update { it.copy(messages = page.messages.filter { m -> m.threadRootId == null }, hasMore = page.hasMore, loading = false) }
+                val page = api.get<MessagePage>("/api/channels/$channelId/messages?limit=50$threadQuery")
+                val permissions = runCatching { api.get<Access>("/api/channels/$channelId").permissions }.getOrDefault(0)
+                val blocked = runCatching { api.get<List<UserSummary>>("/api/me/blocks").map { it.id }.toSet() }.getOrDefault(emptySet())
+                _ui.update { it.copy(messages = page.messages.filter { m -> m.threadRootId == threadRootId }, hasMore = page.hasMore, loading = false, permissions = permissions, blocked = blocked) }
             } catch (e: ApiException.SignedOut) {
                 onSignedOut()
             } catch (e: Exception) {
@@ -75,25 +103,27 @@ class ChannelStore(private val api: ApiClient, workspaceId: String, private val 
         if (!_ui.value.hasMore || loadingOlder) return
         loadingOlder = true
         viewModelScope.launch {
-            runCatching { api.get<MessagePage>("/api/channels/$channelId/messages?limit=50&before=${first.sequence}") }.onSuccess { page ->
+            runCatching { api.get<MessagePage>("/api/channels/$channelId/messages?limit=50&before=${first.sequence}$threadQuery") }.onSuccess { page ->
                 _ui.update { s ->
                     val known = page.messages.map { it.id }.toSet()
-                    s.copy(messages = page.messages.filter { it.threadRootId == null } + s.messages.filterNot { it.id in known }, hasMore = page.hasMore)
+                    s.copy(messages = page.messages.filter { it.threadRootId == threadRootId } + s.messages.filterNot { it.id in known }, hasMore = page.hasMore)
                 }
             }
             loadingOlder = false
         }
     }
 
-    fun send(text: String, replyTo: String? = null) {
+    fun send(text: String, replyTo: String? = null, attachmentIds: List<String> = emptyList()) {
         val content = text.trim()
-        if (content.isEmpty()) return
+        if (content.isEmpty() && attachmentIds.isEmpty()) return
         val clientId = UUID.randomUUID().toString()
-        _ui.update { it.copy(pending = it.pending + PendingMessage(clientId, content, replyTo)) }
+        _ui.update { it.copy(pending = it.pending + PendingMessage(clientId, content.ifEmpty { "Sending image…" }, replyTo)) }
         val event = buildJsonObject {
             put("clientMessageId", clientId)
             put("content", content)
             replyTo?.let { put("replyTo", it) }
+            threadRootId?.let { put("threadRootId", it) }
+            if (attachmentIds.isNotEmpty()) put("attachmentIds", JsonArray(attachmentIds.map { JsonPrimitive(it) }))
         }
         if (socket.isOpen) {
             socket.send(buildJsonObject {
@@ -109,6 +139,82 @@ class ChannelStore(private val api: ApiClient, workspaceId: String, private val 
                 } catch (e: Exception) {
                     fail(clientId, e.message ?: "Couldn't send.")
                 }
+            }
+        }
+    }
+
+    // Editing, moderation, uploads
+
+    fun edit(messageId: String, text: String) {
+        val content = text.trim()
+        if (content.isEmpty()) return
+        perform { merge(api.send<Message>("/api/channels/$channelId/messages/$messageId", "PATCH", buildJsonObject { put("content", content) })) }
+    }
+
+    fun delete(messageId: String) {
+        perform {
+            api.raw("/api/channels/$channelId/messages/$messageId", "DELETE")
+            _ui.update { s -> s.copy(messages = s.messages.filterNot { it.id == messageId }) }
+        }
+    }
+
+    /** Sends the message to the workspace's moderators (or, in a DM, the server owner). */
+    fun report(messageId: String, reason: String, note: String?, authorName: String) {
+        perform {
+            api.raw("/api/channels/$channelId/messages/$messageId/report", "POST", buildJsonObject { put("reason", reason); note?.let { put("note", it) } }.toString())
+            _ui.update { it.copy(notice = "Thanks. The moderators will review it. You can also block $authorName from the message menu.") }
+        }
+    }
+
+    fun setBlocked(userId: String, block: Boolean) {
+        perform {
+            api.raw("/api/me/blocks/$userId", if (block) "PUT" else "DELETE")
+            _ui.update { it.copy(blocked = if (block) it.blocked + userId else it.blocked - userId) }
+        }
+    }
+
+    /** Uploads an image and sends it (with any text) as one message. */
+    fun sendImage(bytes: ByteArray, mimeType: String, width: Int?, height: Int?, text: String, replyTo: String?) {
+        _ui.update { it.copy(uploading = true) }
+        perform {
+            try {
+                val auth = api.send<UploadAuthorization>("/api/uploads/authorize", "POST", buildJsonObject {
+                    put("channelId", channelId)
+                    put("filename", if (mimeType == "image/png") "photo.png" else "photo.jpg")
+                    put("mimeType", mimeType)
+                    put("byteSize", bytes.size)
+                    put("purpose", "attachment")
+                })
+                // Presigned URLs go straight to R2 (no token); the dev fallback is a server path.
+                val target = if (auth.uploadUrl.startsWith("/")) api.url(auth.uploadUrl) else auth.uploadUrl
+                val put = Request.Builder().url(target).put(bytes.toRequestBody(mimeType.toMediaType())).apply {
+                    auth.headers.forEach { (k, v) -> header(k, v) }
+                    if (auth.uploadUrl.startsWith("/")) api.token?.let { header("Authorization", "Bearer $it") }
+                }.build()
+                val ok = withContext(Dispatchers.IO) { ApiClient.http.newCall(put).execute().use { it.isSuccessful } }
+                if (!ok) throw ApiException.Server(0, "The image didn't upload. Try again.")
+                api.raw("/api/uploads/complete", "POST", buildJsonObject {
+                    put("attachmentId", auth.attachmentId)
+                    width?.let { put("width", it) }
+                    height?.let { put("height", it) }
+                }.toString())
+                send(text, replyTo, listOf(auth.attachmentId))
+            } finally {
+                _ui.update { it.copy(uploading = false) }
+            }
+        }
+    }
+
+    fun clearNotice() = _ui.update { it.copy(notice = null) }
+
+    private fun perform(work: suspend () -> Unit) {
+        viewModelScope.launch {
+            try {
+                work()
+            } catch (e: ApiException.SignedOut) {
+                onSignedOut()
+            } catch (e: Exception) {
+                _ui.update { it.copy(error = e.message ?: "Something went wrong.") }
             }
         }
     }
@@ -198,7 +304,7 @@ class ChannelStore(private val api: ApiClient, workspaceId: String, private val 
 
     /** Thread replies belong to their thread, not the channel list. */
     private fun merge(message: Message) {
-        if (message.threadRootId != null) return
+        if (message.threadRootId != threadRootId) return
         _ui.update { s ->
             val list = if (s.messages.any { it.id == message.id }) s.messages.map { if (it.id == message.id) message else it } else (s.messages + message).sortedBy { it.sequence }
             s.copy(messages = list)

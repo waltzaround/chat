@@ -39,6 +39,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.text.withLink
+import androidx.compose.ui.text.withStyle
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -66,11 +68,13 @@ import kotlinx.coroutines.launch
 @Composable
 fun AddAccountFlow(state: AppState, adding: Boolean, onDone: () -> Unit, onCancel: () -> Unit = {}) {
     var server by remember { mutableStateOf<String?>(null) }
+    var registering by remember { mutableStateOf<chat.app.android.net.InstanceInfo?>(null) }
     val chosen = server
-    if (chosen == null) {
-        ServerPicker(state, adding, onChosen = { server = it }, onCancel = onCancel)
-    } else {
-        SignIn(state, chosen, onBack = { server = null }, onDone = onDone)
+    val signUp = registering
+    when {
+        chosen == null -> ServerPicker(state, adding, onChosen = { server = it }, onCancel = onCancel)
+        signUp != null -> RegisterScreen(state, chosen, signUp, onBack = { registering = null }, onDone = onDone)
+        else -> SignIn(state, chosen, onBack = { server = null }, onRegister = { registering = it }, onDone = onDone)
     }
 }
 
@@ -143,7 +147,7 @@ private fun ServerPicker(state: AppState, adding: Boolean, onChosen: (String) ->
 }
 
 @Composable
-private fun SignIn(state: AppState, server: String, onBack: () -> Unit, onDone: () -> Unit) {
+private fun SignIn(state: AppState, server: String, onBack: () -> Unit, onRegister: (chat.app.android.net.InstanceInfo) -> Unit, onDone: () -> Unit) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
@@ -168,8 +172,9 @@ private fun SignIn(state: AppState, server: String, onBack: () -> Unit, onDone: 
     }
 
     AuthScaffold(onBack = onBack, backLabel = "Use a different server") {
-        var branding by remember { mutableStateOf<chat.app.android.net.ServerBranding?>(null) }
-        androidx.compose.runtime.LaunchedEffect(server) { branding = runCatching { chat.app.android.net.ApiClient.instance(server).server }.getOrNull() }
+        var instance by remember { mutableStateOf<chat.app.android.net.InstanceInfo?>(null) }
+        androidx.compose.runtime.LaunchedEffect(server) { instance = runCatching { chat.app.android.net.ApiClient.instance(server) }.getOrNull() }
+        val branding = instance?.server
         ServerCard(server, branding)
         Spacer(Modifier.height(24.dp))
         Text("Log in to continue", color = Palette.muted, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.fillMaxWidth())
@@ -190,7 +195,11 @@ private fun SignIn(state: AppState, server: String, onBack: () -> Unit, onDone: 
         Spacer(Modifier.height(16.dp))
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text("Need an account?", color = Palette.muted, fontSize = 14.sp)
-            TextButton(onClick = { openInBrowser(context, "$server/register") }) { Text("Register", color = Palette.link, fontWeight = FontWeight.Medium) }
+            TextButton(onClick = {
+                // Open sign-up happens here; invite-only servers need the invite link.
+                val info = instance
+                if (info?.signUp?.open == true) onRegister(info) else openInBrowser(context, "$server/register")
+            }) { Text("Register", color = Palette.link, fontWeight = FontWeight.Medium) }
         }
     }
 }
@@ -222,6 +231,121 @@ private fun ServerCard(server: String, branding: chat.app.android.net.ServerBran
             if (branding?.name != null) Text(host, color = Palette.faint, style = MaterialTheme.typography.bodySmall)
         }
     }
+}
+
+/** Creating an account in the app, on servers where the owner allows open sign-up. */
+@Composable
+private fun RegisterScreen(state: AppState, server: String, info: chat.app.android.net.InstanceInfo, onBack: () -> Unit, onDone: () -> Unit) {
+    var name by remember { mutableStateOf("") }
+    var username by remember { mutableStateOf("") }
+    var usernameEdited by remember { mutableStateOf(false) }
+    var email by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var checkEmail by remember { mutableStateOf(false) }
+    var challenging by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val ready = username.isNotBlank() && "@" in email && password.length >= 8
+    val focus = androidx.compose.ui.platform.LocalFocusManager.current
+    val next = { focus.moveFocus(androidx.compose.ui.focus.FocusDirection.Down); Unit }
+
+    fun submit(token: String?) {
+        error = null
+        busy = true
+        scope.launch {
+            try {
+                val display = name.trim().ifEmpty { username }
+                if (state.register(server, display, username.trim(), email.trim(), password, token)) onDone() else checkEmail = true
+            } catch (e: Exception) {
+                error = e.message ?: "Couldn't create the account."
+            }
+            busy = false
+        }
+    }
+
+    AuthScaffold(onBack = onBack, backLabel = "Back to log in") {
+        ServerCard(server, info.server)
+        Spacer(Modifier.height(24.dp))
+        if (checkEmail) {
+            Text("Check your email", color = Palette.heading, fontWeight = FontWeight.SemiBold, fontSize = 18.sp, modifier = Modifier.fillMaxWidth())
+            Spacer(Modifier.height(8.dp))
+            Text("We sent a link to $email. Open it to confirm your address, then log in.", color = Palette.muted, modifier = Modifier.fillMaxWidth())
+            return@AuthScaffold
+        }
+        Text("Create your account", color = Palette.muted, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.fillMaxWidth())
+        Spacer(Modifier.height(12.dp))
+        FieldLabel("Your name")
+        FilledField(name, { name = it; if (!usernameEdited) username = usernameFrom(it) }, autoFocus = true, imeAction = ImeAction.Next, onIme = next)
+        Spacer(Modifier.height(20.dp))
+        FieldLabel("Username")
+        FilledField(username, { username = it.lowercase(); usernameEdited = true }, imeAction = ImeAction.Next, onIme = next)
+        Text("People mention you as @${username.ifEmpty { "username" }}. Lowercase letters, numbers, dots and underscores.", color = Palette.faint, fontSize = 12.sp, modifier = Modifier.fillMaxWidth().padding(top = 6.dp))
+        Spacer(Modifier.height(20.dp))
+        FieldLabel("Email")
+        FilledField(email, { email = it }, keyboardType = KeyboardType.Email, imeAction = ImeAction.Next, onIme = next)
+        Spacer(Modifier.height(20.dp))
+        FieldLabel("Password")
+        FilledField(password, { password = it }, keyboardType = KeyboardType.Password, password = true, imeAction = ImeAction.Done)
+        Text("At least 8 characters.", color = Palette.faint, fontSize = 12.sp, modifier = Modifier.fillMaxWidth().padding(top = 6.dp))
+        error?.let { Text(it, color = Palette.danger, fontSize = 13.sp, modifier = Modifier.fillMaxWidth().padding(top = 12.dp)) }
+        Spacer(Modifier.height(24.dp))
+        PrimaryButton(if (busy) null else "Create Account", enabled = ready && !busy) {
+            if (info.signUp?.challenge == true) challenging = true else submit(null)
+        }
+        Spacer(Modifier.height(12.dp))
+        val agreement = androidx.compose.ui.text.buildAnnotatedString {
+            append("By creating an account you agree to the ")
+            withLink(androidx.compose.ui.text.LinkAnnotation.Clickable("terms") { openInBrowser(context, "$server/terms") }) {
+                withStyle(androidx.compose.ui.text.SpanStyle(color = Palette.link)) { append("terms") }
+            }
+            append(" and ")
+            withLink(androidx.compose.ui.text.LinkAnnotation.Clickable("privacy") { openInBrowser(context, "$server/privacy") }) {
+                withStyle(androidx.compose.ui.text.SpanStyle(color = Palette.link)) { append("privacy policy") }
+            }
+            append(".")
+        }
+        Text(agreement, color = Palette.muted, fontSize = 12.sp, modifier = Modifier.fillMaxWidth())
+    }
+
+    if (challenging) {
+        androidx.compose.ui.window.Dialog(onDismissRequest = { challenging = false }) {
+            ChallengeWebView("$server/app-challenge") { token ->
+                challenging = false
+                submit(token)
+            }
+        }
+    }
+}
+
+/** "Walter Lim" → "walter.lim", like the web sign-up. */
+private fun usernameFrom(name: String) = name.lowercase().replace(' ', '.').filter { it in 'a'..'z' || it.isDigit() || it == '.' || it == '_' }.take(32)
+
+/** The server's /app-challenge page; solving it navigates to chat://challenge?token=… */
+@android.annotation.SuppressLint("SetJavaScriptEnabled")
+@Composable
+private fun ChallengeWebView(url: String, done: (String) -> Unit) {
+    androidx.compose.ui.viewinterop.AndroidView(
+        modifier = Modifier.fillMaxWidth().height(320.dp).clip(RoundedCornerShape(16.dp)),
+        factory = { context ->
+            android.webkit.WebView(context).apply {
+                settings.javaScriptEnabled = true
+                settings.domStorageEnabled = true
+                webViewClient = object : android.webkit.WebViewClient() {
+                    override fun shouldOverrideUrlLoading(view: android.webkit.WebView, request: android.webkit.WebResourceRequest): Boolean {
+                        val uri = request.url
+                        if (uri.scheme == "chat" && uri.host == "challenge") {
+                            uri.getQueryParameter("token")?.let(done)
+                            return true
+                        }
+                        return false
+                    }
+                }
+                loadUrl(url)
+            }
+        },
+    )
 }
 
 /** Uppercase label above a filled field, like Discord's forms. */
