@@ -3,10 +3,18 @@ import Foundation
 // Mirrors of the server's JSON (shared/types.ts). Only the fields the app uses.
 
 struct InstanceInfo: Decodable {
+    let server: ServerBranding?
     let software: String
     let version: String
     let apiVersion: Int
     let registration: String
+}
+
+/// The name, description and icon the server's owner set. All optional.
+struct ServerBranding: Decodable {
+    let name: String?
+    let description: String?
+    let iconUrl: String?
 }
 
 struct UserSummary: Codable, Hashable, Identifiable {

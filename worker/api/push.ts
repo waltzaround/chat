@@ -5,7 +5,8 @@ import { ApiError } from "../lib/errors";
 import { parseBody } from "../lib/validate";
 import { userHub } from "../lib/notify";
 import { toPushItem, vapidKeys } from "../lib/push";
-import { pushSubscriptionSchema } from "@shared/schemas";
+import { pushDeviceSchema, pushSubscriptionSchema } from "@shared/schemas";
+import { newId } from "@shared/id";
 
 /** Web Push: devices subscribe here; the service worker fetches what to show. */
 export const pushRoutes = new Hono<AppEnv>();
@@ -35,7 +36,33 @@ pushRoutes.delete("/subscriptions", async (c) => {
   return c.body(null, 204);
 });
 
-/** Called by the service worker with its endpoint, so each device's settings apply. */
+/**
+ * The iOS and Android apps register here with a push key from their push relay. One
+ * row per phone and session, so signing out (or revoking the session) stops pushes.
+ */
+pushRoutes.post("/devices", async (c) => {
+  const input = await parseBody(c, pushDeviceSchema);
+  const relay = new URL(input.relay).origin;
+  const existing = await c.env.DB.prepare("SELECT id FROM push_devices WHERE push_key = ?").bind(input.pushKey).first<{ id: string }>();
+  const id = existing?.id ?? newId();
+  await c.env.DB.prepare(
+    `INSERT INTO push_devices (id, user_id, session_id, platform, relay, push_key, origin, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT (push_key) DO UPDATE SET user_id = excluded.user_id, session_id = excluded.session_id, relay = excluded.relay, origin = excluded.origin`,
+  )
+    .bind(id, c.get("user").id, c.get("sessionId"), input.platform, relay, input.pushKey, c.get("origin"), Date.now())
+    .run();
+  return c.json({ id }, 201);
+});
+
+pushRoutes.delete("/devices/:id", async (c) => {
+  await c.env.DB.prepare("DELETE FROM push_devices WHERE id = ? AND user_id = ?").bind(c.req.param("id"), c.get("user").id).run();
+  return c.body(null, 204);
+});
+
+/**
+ * What to show after a push: the service worker passes its endpoint (so that
+ * browser's settings apply); the apps just ask.
+ */
 pushRoutes.get("/pending", async (c) => {
   const me = c.get("user").id;
   const endpoint = c.req.query("endpoint");

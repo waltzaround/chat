@@ -123,7 +123,7 @@ fun ChannelScreen(state: AppState, route: ChannelRoute, onBack: () -> Unit) {
 
     Column(Modifier.fillMaxSize().background(Palette.chat).statusBarsPadding().navigationBarsPadding().imePadding()) {
         // Header
-        Row(Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Palette.heading) }
             if (route.peer != null) Avatar(route.peer, 26.dp, api) else Icon(Icons.Filled.Tag, contentDescription = null, tint = Palette.faint, modifier = Modifier.size(22.dp))
             Spacer(Modifier.width(8.dp))
@@ -264,7 +264,7 @@ private fun MessageRow(message: Message, grouped: Boolean, me: CurrentUser?, api
             .padding(start = 16.dp, end = 16.dp, top = if (grouped) 2.dp else if (message.replyTo != null) 4.dp else 14.dp, bottom = 2.dp),
     ) {
         message.replyTo?.let { reply ->
-            Row(Modifier.padding(start = 20.dp, bottom = 2.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(Modifier.padding(start = 17.dp, bottom = 2.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Box(Modifier.width(28.dp).height(10.dp).padding(top = 6.dp).border(width = 2.dp, color = Palette.faint, shape = RoundedCornerShape(topStart = 6.dp)))
                 if (reply.deleted) {
                     Text("Original message was deleted", color = Palette.muted, fontSize = 13.sp, fontStyle = FontStyle.Italic)
@@ -275,8 +275,8 @@ private fun MessageRow(message: Message, grouped: Boolean, me: CurrentUser?, api
                 }
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            if (grouped) Spacer(Modifier.width(40.dp)) else Avatar(message.author.summary, 40.dp, api)
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (grouped) Spacer(Modifier.width(34.dp)) else Avatar(message.author.summary, 34.dp, api)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 if (!grouped) {
                     Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -367,8 +367,8 @@ private fun ReactionPill(reaction: Reaction, onClick: () -> Unit) {
 
 @Composable
 private fun PendingRow(pending: PendingMessage, me: CurrentUser?, api: ApiClient, grouped: Boolean, retry: () -> Unit) {
-    Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = if (grouped) 2.dp else 14.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        if (grouped || me == null) Spacer(Modifier.width(40.dp)) else Avatar(me.summary, 40.dp, api)
+    Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = if (grouped) 2.dp else 14.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        if (grouped || me == null) Spacer(Modifier.width(34.dp)) else Avatar(me.summary, 34.dp, api)
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             if (!grouped && me != null) Text(me.displayName, color = Palette.heading, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
             Text(pending.content, color = Palette.faint, fontSize = 16.sp)
@@ -424,7 +424,7 @@ private fun MessageActions(message: Message, onDismiss: () -> Unit, react: (Stri
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                 QUICK_REACTIONS.forEach { emoji ->
                     Box(Modifier.size(48.dp).clip(CircleShape).background(Palette.rail).clickable(onClickLabel = "React with $emoji") { react(emoji); onDismiss() }, contentAlignment = Alignment.Center) {
-                        Text(emoji, fontSize = 24.sp)
+                        Text(emoji, fontSize = fixedSp(24f))
                     }
                 }
             }

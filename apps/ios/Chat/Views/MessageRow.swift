@@ -12,16 +12,16 @@ struct MessageRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             if let reply = message.replyTo { replyLine(reply) }
-            HStack(alignment: .top, spacing: 12) {
+            HStack(alignment: .top, spacing: 10) {
                 if grouped {
-                    Color.clear.frame(width: 40, height: 1)
+                    Color.clear.frame(width: 34, height: 1)
                 } else {
-                    Avatar(user: UserSummary(id: message.author.id, username: message.author.username, displayName: message.author.name, avatarUrl: message.author.avatarUrl), size: 40)
+                    Avatar(user: UserSummary(id: message.author.id, username: message.author.username, displayName: message.author.name, avatarUrl: message.author.avatarUrl), size: 34)
                 }
                 VStack(alignment: .leading, spacing: 4) {
                     if !grouped {
                         HStack(alignment: .firstTextBaseline, spacing: 8) {
-                            Text(message.author.name).font(.system(size: 16, weight: .semibold)).foregroundStyle(colour).lineLimit(1)
+                            Text(message.author.name).font(.callout.weight(.semibold)).foregroundStyle(colour).lineLimit(1)
                             Text(ChatDate.label(message.createdAt)).font(.caption).foregroundStyle(Theme.faint)
                         }
                     }
@@ -91,7 +91,7 @@ struct MessageRow: View {
     /// The small "↱ Name: quoted text" line above a reply.
     private func replyLine(_ reply: ReplyContext) -> some View {
         HStack(spacing: 6) {
-            ReplySpine().stroke(Theme.faint, lineWidth: 2).frame(width: 28, height: 10).padding(.leading, 20).padding(.top, 6)
+            ReplySpine().stroke(Theme.faint, lineWidth: 2).frame(width: 28, height: 10).padding(.leading, 17).padding(.top, 6)
             if reply.deleted {
                 Text("Original message was deleted").italic()
             } else {
@@ -147,7 +147,7 @@ struct MessageRow: View {
         var result = (try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(text)
         for run in result.runs where run.inlinePresentationIntent?.contains(.code) == true {
             result[run.range].backgroundColor = Theme.rail
-            result[run.range].font = .system(size: 14, design: .monospaced)
+            result[run.range].font = .system(.subheadline, design: .monospaced)
         }
         let plain = String(result.characters)
         for match in plain.matches(of: /@[A-Za-z0-9_.]+/) {
@@ -157,7 +157,7 @@ struct MessageRow: View {
             let upper = result.characters.index(lower, offsetBy: length)
             result[lower ..< upper].foregroundColor = Color(hex: "C9CDFB")!
             result[lower ..< upper].backgroundColor = Theme.accent.opacity(0.3)
-            result[lower ..< upper].font = .system(size: 16, weight: .medium)
+            result[lower ..< upper].font = .callout.weight(.medium)
         }
         return result
     }
@@ -165,7 +165,7 @@ struct MessageRow: View {
 
 private extension Text {
     func messageText() -> some View {
-        font(.system(size: 16))
+        font(.callout)
             .foregroundStyle(Theme.text)
             .tint(Theme.link)
             .fixedSize(horizontal: false, vertical: true)
@@ -191,8 +191,8 @@ struct ReactionPill: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 4) {
-                Text(reaction.emoji).font(.system(size: 15))
-                Text("\(reaction.count)").font(.system(size: 14, weight: .semibold))
+                Text(reaction.emoji).font(.subheadline)
+                Text("\(reaction.count)").font(.subheadline.weight(.semibold))
                     .foregroundStyle(reaction.me ? Color(hex: "C9CDFB")! : Theme.muted)
             }
             .padding(.horizontal, 8)
@@ -212,17 +212,17 @@ struct PendingRow: View {
     let retry: () -> Void
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .top, spacing: 10) {
             if grouped || me == nil {
-                Color.clear.frame(width: 40, height: 1)
+                Color.clear.frame(width: 34, height: 1)
             } else if let me {
-                Avatar(user: UserSummary(id: me.id, username: me.username, displayName: me.displayName, avatarUrl: me.avatarUrl), size: 40)
+                Avatar(user: UserSummary(id: me.id, username: me.username, displayName: me.displayName, avatarUrl: me.avatarUrl), size: 34)
             }
             VStack(alignment: .leading, spacing: 4) {
                 if !grouped, let me {
-                    Text(me.displayName).font(.system(size: 16, weight: .semibold)).foregroundStyle(Theme.heading)
+                    Text(me.displayName).font(.callout.weight(.semibold)).foregroundStyle(Theme.heading)
                 }
-                Text(pending.content).font(.system(size: 16)).foregroundStyle(Theme.faint)
+                Text(pending.content).font(.callout).foregroundStyle(Theme.faint)
                 if pending.failed {
                     Button("Message failed to send. Tap to retry.", action: retry).font(.caption.weight(.medium)).foregroundStyle(Theme.danger)
                 }

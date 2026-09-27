@@ -59,7 +59,7 @@ export interface PushTarget {
  */
 export async function pushToUser(env: Env, userId: string, notification: NotificationPayload, fetcher: typeof fetch = fetch): Promise<number> {
   const { results } = await env.DB.prepare("SELECT endpoint, origin, muted_workspaces AS mutedWorkspaces FROM push_subscriptions WHERE user_id = ?").bind(userId).all<PushTarget>();
-  let sent = 0;
+  let sent = await pushToDevices(env, userId, fetcher);
   await Promise.all(
     results.map(async (sub) => {
       if ((JSON.parse(sub.mutedWorkspaces) as string[]).includes(notification.workspaceId)) return;
@@ -74,12 +74,46 @@ export async function pushToUser(env: Env, userId: string, notification: Notific
   return sent;
 }
 
-/** What the service worker shows for a notification. */
+interface DeviceTarget {
+  id: string;
+  relay: string;
+  pushKey: string;
+  origin: string;
+}
+
+/**
+ * Push to the user's phones through their push relays. The relay only learns which
+ * server and which device to wake; the app fetches /api/push/pending itself. A relay
+ * answering 410 means the phone is gone (app deleted, token expired).
+ */
+async function pushToDevices(env: Env, userId: string, fetcher: typeof fetch): Promise<number> {
+  const { results } = await env.DB.prepare("SELECT id, relay, push_key AS pushKey, origin FROM push_devices WHERE user_id = ?").bind(userId).all<DeviceTarget>();
+  let sent = 0;
+  await Promise.all(
+    results.map(async (device) => {
+      const res = await fetcher(`${device.relay}/v1/notify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pushKey: device.pushKey, server: device.origin, device: device.id }),
+      }).catch(() => null);
+      if (res?.status === 410) await env.DB.prepare("DELETE FROM push_devices WHERE id = ?").bind(device.id).run();
+      else if (res?.ok) sent += 1;
+    }),
+  );
+  return sent;
+}
+
+/** What the service worker (or an app) shows for a notification. */
 export function toPushItem(n: NotificationPayload, hideText = false) {
   return {
     title: n.kind === "dm" ? n.author.displayName : `${n.author.displayName} in #${n.channelName}`,
     body: hideText ? (n.kind === "dm" ? "Sent you a message" : `Mentioned you in ${n.workspaceName}`) : n.preview || "Sent an attachment",
+    kind: n.kind,
+    workspaceId: n.workspaceId,
     channelId: n.channelId,
+    channelName: n.channelName,
+    messageId: n.messageId,
+    author: n.author,
     icon: n.author.avatarUrl,
     url: n.threadRootId ? `/w/${n.workspaceId}/c/${n.channelId}?thread=${n.threadRootId}` : `/w/${n.workspaceId}/c/${n.channelId}?m=${n.sequence}`,
     createdAt: n.createdAt,

@@ -35,6 +35,12 @@ Then enter `http://localhost:8787` in the app. Plain HTTP is allowed only for `l
 
 `./gradlew :app:assembleRelease` builds a minified, unsigned APK. To publish, sign it with your upload key, or add a `signingConfig` to `app/build.gradle.kts`.
 
+## Push notifications
+
+Notifications go through the push relay (`apps/push-relay`). Add your Firebase `google-services.json` to `app/` (it is git-ignored). Then build with `-PchatPushRelay=https://…`. Without both, push is off.
+
+The relay only wakes the phone. The app then fetches the notification's text from your server, so Google never sees message content.
+
 ## Layout
 
 - `net/`: API client, JSON models, realtime socket.
@@ -43,4 +49,4 @@ Then enter `http://localhost:8787` in the app. Plain HTTP is allowed only for `l
 
 ## Not yet
 
-Push notifications (FCM), threads, uploads, editing and deleting messages, and voice. Use the web app for these for now.
+Threads, uploads, editing and deleting messages, and voice. Use the web app for these for now.

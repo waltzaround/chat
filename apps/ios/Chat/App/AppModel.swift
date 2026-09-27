@@ -23,6 +23,8 @@ final class AppModel {
     private(set) var accounts: [Account] = []
     /// Set when a chat:// link arrives, e.g. an invite.
     var pendingLink: URL?
+    /// Set when a notification is tapped: the channel to open.
+    var pendingRoute: Route?
 
     private static let serversKey = "chat.servers"
     private static let legacyServerKey = "chat.server"
@@ -87,6 +89,7 @@ final class AppModel {
 
     private func remove(_ server: URL) {
         Keychain.delete(for: server)
+        SharedStore.pushDevices[server.absoluteString] = nil
         accounts.removeAll { $0.server == server }
         persist()
     }

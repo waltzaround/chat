@@ -36,7 +36,7 @@ struct ChannelView: View {
                     if let peer {
                         Avatar(user: peer, size: 24)
                     } else {
-                        Image(systemName: "number").font(.system(size: 16, weight: .semibold)).foregroundStyle(Theme.faint)
+                        Image(systemName: "number").font(.callout.weight(.semibold)).foregroundStyle(Theme.faint)
                     }
                     Text(title).font(.headline).foregroundStyle(Theme.heading).lineLimit(1)
                 }

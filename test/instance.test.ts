@@ -168,3 +168,4 @@ async function signIn(username: string, password = "password123"): Promise<{ coo
   const cookie = (res.headers.getSetCookie?.() ?? []).map((c) => c.split(";")[0]!).join("; ");
   return { cookie, user: await api<CurrentUser>(cookie, "/api/me") };
 }
+

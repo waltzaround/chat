@@ -23,11 +23,14 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.foundation.border
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -165,19 +168,12 @@ private fun SignIn(state: AppState, server: String, onBack: () -> Unit, onDone: 
     }
 
     AuthScaffold(onBack = onBack, backLabel = "Use a different server") {
-        Text("Welcome back!", color = Palette.heading, fontSize = 28.sp, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(8.dp))
-        Text("We're so excited to see you again!", color = Palette.muted)
+        var branding by remember { mutableStateOf<chat.beacon.android.net.ServerBranding?>(null) }
+        androidx.compose.runtime.LaunchedEffect(server) { branding = runCatching { chat.beacon.android.net.ApiClient.instance(server).server }.getOrNull() }
+        ServerCard(server, branding)
+        Spacer(Modifier.height(24.dp))
+        Text("Log in to continue", color = Palette.muted, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.fillMaxWidth())
         Spacer(Modifier.height(12.dp))
-        Row(
-            Modifier.background(Palette.raised, RoundedCornerShape(50)).padding(horizontal = 10.dp, vertical = 5.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            Icon(Icons.Filled.Dns, contentDescription = null, tint = Palette.text, modifier = Modifier.size(14.dp))
-            Text(server.substringAfter("://"), color = Palette.text, fontSize = 13.sp, fontWeight = FontWeight.Medium)
-        }
-        Spacer(Modifier.height(28.dp))
         FieldLabel("Email")
         FilledField(email, { email = it }, keyboardType = KeyboardType.Email, imeAction = ImeAction.Next, onIme = { passwordFocus.requestFocus() }, autoFocus = true)
         Spacer(Modifier.height(20.dp))
@@ -195,6 +191,35 @@ private fun SignIn(state: AppState, server: String, onBack: () -> Unit, onDone: 
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text("Need an account?", color = Palette.muted, fontSize = 14.sp)
             TextButton(onClick = { openInBrowser(context, "$server/register") }) { Text("Register", color = Palette.link, fontWeight = FontWeight.Medium) }
+        }
+    }
+}
+
+/**
+ * Which server you're signing in to: the owner's icon, name and description, and its
+ * address. Servers without a name show their address.
+ */
+@Composable
+private fun ServerCard(server: String, branding: chat.beacon.android.net.ServerBranding?) {
+    val host = server.substringAfter("://")
+    val name = branding?.name ?: host
+    Row(
+        Modifier.fillMaxWidth().background(Palette.panel, RoundedCornerShape(16.dp)).border(1.dp, Palette.raised, RoundedCornerShape(16.dp)).padding(16.dp)
+            .semantics(mergeDescendants = true) {},
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        val placeholder = @Composable {
+            Box(Modifier.size(56.dp).background(Palette.accent, RoundedCornerShape(17.dp)), contentAlignment = Alignment.Center) {
+                if (branding?.name != null) Text(initials(branding.name), color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = fixedSp(20f))
+                else Icon(Icons.Filled.Forum, contentDescription = null, tint = Color.White)
+            }
+        }
+        RemoteImage(branding?.iconUrl, chat.beacon.android.net.ApiClient(server, null), Modifier.size(56.dp).clip(RoundedCornerShape(17.dp))) { placeholder() }
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text(name, color = Palette.heading, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            branding?.description?.let { Text(it, color = Palette.text, style = MaterialTheme.typography.bodyMedium) }
+            if (branding?.name != null) Text(host, color = Palette.faint, style = MaterialTheme.typography.bodySmall)
         }
     }
 }
@@ -240,7 +265,7 @@ fun FilledField(
 /** Full-width blurple button; a null label shows a spinner. */
 @Composable
 fun PrimaryButton(label: String?, enabled: Boolean = true, onClick: () -> Unit) {
-    Button(onClick = onClick, enabled = enabled, colors = primaryButtonColors, shape = RoundedCornerShape(8.dp), modifier = Modifier.fillMaxWidth().height(50.dp)) {
+    Button(onClick = onClick, enabled = enabled, colors = primaryButtonColors, shape = RoundedCornerShape(8.dp), modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) {
         if (label == null) CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(20.dp)) else Text(label, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
     }
 }

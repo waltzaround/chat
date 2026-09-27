@@ -8,7 +8,7 @@ import { toUserSummary } from "../lib/serialize";
 import { resetPasswordUrl } from "../auth/auth";
 import { emailEnabled } from "../email";
 import { parseBody } from "../lib/validate";
-import { registrationPolicy, serverOwnerId, setRegistrationPolicy, setVerifiedEmailRequired, setWorkspaceCreationPolicy, verifiedEmailRequiredSince, workspaceCreationPolicy } from "../instance";
+import { registrationPolicy, serverIconUrl, serverOwnerId, serverProfile, setServerProfile, setRegistrationPolicy, setVerifiedEmailRequired, setWorkspaceCreationPolicy, verifiedEmailRequiredSince, workspaceCreationPolicy } from "../instance";
 import { hubFor } from "../lib/hub";
 import { userHub } from "../lib/notify";
 import { WS_CLOSE } from "@shared/events";
@@ -31,8 +31,8 @@ serverRoutes.use("*", async (c, next) => {
 });
 
 async function settings(env: AppEnv["Bindings"]): Promise<ServerSettings> {
-  const [registration, workspaceCreation, since] = await Promise.all([registrationPolicy(env.DB), workspaceCreationPolicy(env.DB), verifiedEmailRequiredSince(env.DB)]);
-  return { registration, workspaceCreation, emailEnabled: emailEnabled(env), requireVerifiedEmail: since !== null };
+  const [registration, workspaceCreation, since, profile] = await Promise.all([registrationPolicy(env.DB), workspaceCreationPolicy(env.DB), verifiedEmailRequiredSince(env.DB), serverProfile(env.DB)]);
+  return { registration, workspaceCreation, emailEnabled: emailEnabled(env), requireVerifiedEmail: since !== null, name: profile.name, description: profile.description, iconUrl: serverIconUrl(profile) };
 }
 
 serverRoutes.get("/", async (c) => c.json(await settings(c.env)));
@@ -45,6 +45,8 @@ serverRoutes.patch("/", async (c) => {
     if (input.requireVerifiedEmail && !emailEnabled(c.env)) throw ApiError.validation(undefined, "Set up email first: verification needs the Workers Paid plan and a sender address");
     await setVerifiedEmailRequired(c.env.DB, input.requireVerifiedEmail);
   }
+  if (input.iconKey && !input.iconKey.startsWith(`workspace-icons/${c.get("user").id}/`)) throw ApiError.validation(undefined, "Upload the icon first");
+  await setServerProfile(c.env.DB, { name: input.name, description: input.description, iconKey: input.iconKey });
   return c.json(await settings(c.env));
 });
 

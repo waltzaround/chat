@@ -235,7 +235,7 @@ private fun Rail(
                 RailItem(ws.name, selected = selection == item, badge = ws.mentionCount, onClick = { onSelect(item) }) { sel ->
                     RemoteImage(ws.iconUrl, state.api(account.server), Modifier.fillMaxSize()) {
                         Box(Modifier.fillMaxSize().background(if (sel) Palette.accent else Palette.raised), contentAlignment = Alignment.Center) {
-                            Text(initials(ws.name, 3), color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                            Text(initials(ws.name, 3), color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = fixedSp(16f))
                         }
                     }
                 }
@@ -348,7 +348,7 @@ private fun ChannelListPanel(
                 Spacer(Modifier.height(14.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Row(
-                        Modifier.weight(1f).height(40.dp).clip(RoundedCornerShape(12.dp)).background(Palette.field).clickable { searching = true },
+                        Modifier.weight(1f).heightIn(min = 40.dp).clip(RoundedCornerShape(12.dp)).background(Palette.field).clickable { searching = true },
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.Center,
                     ) {
@@ -419,7 +419,7 @@ private fun ChannelListPanel(
 
 @Composable
 private fun SquareButton(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit) {
-    Box(Modifier.size(width = 44.dp, height = 40.dp).clip(RoundedCornerShape(12.dp)).background(Palette.field).clickable(onClickLabel = label, onClick = onClick), contentAlignment = Alignment.Center) {
+    Box(Modifier.width(44.dp).heightIn(min = 40.dp).clip(RoundedCornerShape(12.dp)).background(Palette.field).clickable(onClickLabel = label, onClick = onClick), contentAlignment = Alignment.Center) {
         Icon(icon, contentDescription = label, tint = Palette.heading, modifier = Modifier.size(20.dp))
     }
 }
@@ -463,7 +463,7 @@ private fun DirectMessagesPanel(items: List<AccountDm>, loaded: Boolean, state: 
                 Spacer(Modifier.height(14.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                     if (searching) {
-                        Row(Modifier.weight(1f).height(40.dp).clip(RoundedCornerShape(12.dp)).background(Palette.field).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Row(Modifier.weight(1f).heightIn(min = 40.dp).clip(RoundedCornerShape(12.dp)).background(Palette.field).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Filled.Search, contentDescription = null, tint = Palette.muted, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(8.dp))
                             BasicTextField(filter, { filter = it }, singleLine = true, textStyle = TextStyle(color = Palette.heading, fontSize = 16.sp), cursorBrush = SolidColor(Palette.accent), modifier = Modifier.weight(1f), decorationBox = { inner ->
@@ -475,7 +475,7 @@ private fun DirectMessagesPanel(items: List<AccountDm>, loaded: Boolean, state: 
                     } else {
                         SquareButton(Icons.Filled.Search, "Find a conversation") { searching = true }
                         Row(
-                            Modifier.weight(1f).height(40.dp).clip(RoundedCornerShape(12.dp)).background(Palette.field).clickable { newMessage = true },
+                            Modifier.weight(1f).heightIn(min = 40.dp).clip(RoundedCornerShape(12.dp)).background(Palette.field).clickable { newMessage = true },
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.Center,
                         ) {
@@ -554,7 +554,7 @@ private fun SearchSheet(api: ApiClient, workspace: WorkspaceSummary, onDismiss: 
     }
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true), containerColor = Palette.chat) {
         Column(Modifier.fillMaxWidth().heightIn(min = 500.dp).padding(horizontal = 16.dp)) {
-            Row(Modifier.fillMaxWidth().height(44.dp).clip(RoundedCornerShape(12.dp)).background(Palette.field).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.fillMaxWidth().heightIn(min = 44.dp).clip(RoundedCornerShape(12.dp)).background(Palette.field).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Filled.Search, contentDescription = null, tint = Palette.muted, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
                 BasicTextField(query, { query = it }, singleLine = true, textStyle = TextStyle(color = Palette.heading, fontSize = 16.sp), cursorBrush = SolidColor(Palette.accent),

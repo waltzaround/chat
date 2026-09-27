@@ -15,6 +15,8 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "0.1.0"
+        // The push relay this build uses (apps/push-relay); empty turns push off.
+        buildConfigField("String", "PUSH_RELAY", "\"${project.findProperty("chatPushRelay") ?: ""}\"")
     }
 
     buildTypes {
@@ -32,6 +34,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
@@ -53,5 +56,12 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     implementation("io.coil-kt:coil-compose:2.7.0")
+    // Push. Firebase only starts when the build has a google-services.json (see README).
+    implementation("com.google.firebase:firebase-messaging:24.1.0")
     debugImplementation("androidx.compose.ui:ui-tooling")
+}
+
+// Only builds that publish the app (and hold its Firebase project) turn this on.
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
 }

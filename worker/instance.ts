@@ -151,6 +151,40 @@ function safeEqual(a: string, b: string): boolean {
   return diff === 0;
 }
 
+/** How the server presents itself before sign-in: login screens and the apps' server picker. */
+export interface ServerProfile {
+  name: string | null;
+  description: string | null;
+  iconKey: string | null;
+}
+
+export async function serverProfile(db: D1Database): Promise<ServerProfile> {
+  const { results } = await db
+    .prepare("SELECT key, value FROM instance_settings WHERE key IN ('server_name', 'server_description', 'server_icon_key')")
+    .all<{ key: string; value: string }>();
+  const get = (k: string) => results.find((r) => r.key === k)?.value || null;
+  return { name: get("server_name"), description: get("server_description"), iconKey: get("server_icon_key") };
+}
+
+/** null clears a field; undefined leaves it. */
+export async function setServerProfile(db: D1Database, input: { name?: string | null; description?: string | null; iconKey?: string | null }): Promise<void> {
+  const fields: Array<[string, string | null | undefined]> = [
+    ["server_name", input.name],
+    ["server_description", input.description],
+    ["server_icon_key", input.iconKey],
+  ];
+  for (const [key, value] of fields) {
+    if (value === undefined) continue;
+    if (value === null || value === "") await db.prepare("DELETE FROM instance_settings WHERE key = ?").bind(key).run();
+    else await setSetting(db, key, value);
+  }
+}
+
+/** Public URL for the icon; the key in the query busts caches when it changes. */
+export function serverIconUrl(profile: ServerProfile): string | null {
+  return profile.iconKey ? `/api/instance/icon?v=${encodeURIComponent(profile.iconKey.split("/").pop() ?? "")}` : null;
+}
+
 async function setSetting(db: D1Database, key: string, value: string): Promise<void> {
   await db.prepare("INSERT INTO instance_settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value").bind(key, value).run();
 }

@@ -265,6 +265,7 @@ export interface ApiErrorBody {
 }
 
 export interface AuthConfig {
+  server: ServerBranding;
   providers: { github: boolean; google: boolean };
   turnstileSiteKey: string | null;
   /** No owner yet: the next sign-up becomes the server owner. */
@@ -295,7 +296,16 @@ export interface ReportedMessage {
 }
 
 /** What a client learns about a server before signing in: GET /api/instance. */
+/** Name, description and icon the server owner set. All optional. */
+export interface ServerBranding {
+  name: string | null;
+  description: string | null;
+  /** Public, relative to the server: no sign-in needed. */
+  iconUrl: string | null;
+}
+
 export interface InstanceInfo {
+  server: ServerBranding;
   /** Always "beacon-chat", so apps can tell they've found a server of this kind. */
   software: "beacon-chat";
   version: string;
@@ -310,7 +320,7 @@ export type RegistrationPolicy = "open" | "invite";
 /** "owner": only the server owner can create workspaces. */
 export type WorkspaceCreationPolicy = "everyone" | "owner";
 
-export interface ServerSettings {
+export interface ServerSettings extends ServerBranding {
   registration: RegistrationPolicy;
   workspaceCreation: WorkspaceCreationPolicy;
   /** Email is set up, so members can reset their own password. */

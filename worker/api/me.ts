@@ -7,7 +7,9 @@ import { ApiError } from "../lib/errors";
 import { parseBody } from "../lib/validate";
 import { toCurrentUser, toUserSummary, toWorkspaceSummary } from "../lib/serialize";
 import { notifyWorkspace } from "../lib/hub";
-import { canCreateWorkspace, registrationPolicy, serverOwnerId, verifiedEmailRequiredSince } from "../instance";
+import { canCreateWorkspace, registrationPolicy, serverIconUrl, serverOwnerId, serverProfile, verifiedEmailRequiredSince } from "../instance";
+import type { ServerBranding } from "@shared/types";
+
 import { emailEnabled } from "../email";
 import { deleteAccountSchema, updateMeSchema } from "@shared/schemas";
 import { deleteAccount, exportAccount } from "../lib/accounts";
@@ -26,9 +28,16 @@ const linkSchema = z.object({
 
 export const meRoutes = new Hono<AppEnv>();
 
+/** The owner's name, description and icon for this server, shown before sign-in. */
+async function branding(db: D1Database): Promise<ServerBranding> {
+  const profile = await serverProfile(db);
+  return { name: profile.name, description: profile.description, iconUrl: serverIconUrl(profile) };
+}
+
 /** Public: identifies this server to native apps before they sign in. */
 meRoutes.get("/instance", async (c) => {
   const body: InstanceInfo = {
+    server: await branding(c.env.DB),
     software: "beacon-chat",
     version: APP_VERSION,
     apiVersion: API_VERSION,
@@ -43,10 +52,24 @@ meRoutes.get("/instance", async (c) => {
   return c.json(body);
 });
 
+/** Public: the server's icon, for login screens before anyone signs in. */
+meRoutes.get("/instance/icon", async (c) => {
+  const { iconKey } = await serverProfile(c.env.DB);
+  const object = iconKey ? await c.env.UPLOADS.get(iconKey) : null;
+  if (!object) return c.json({ error: { code: "not_found", message: "No server icon" } }, 404);
+  const headers = new Headers();
+  object.writeHttpMetadata(headers);
+  if (!headers.get("Content-Type")?.startsWith("image/")) headers.set("Content-Type", "application/octet-stream");
+  headers.set("Cache-Control", "public, max-age=86400");
+  headers.set("Content-Security-Policy", "default-src 'none'; sandbox");
+  return new Response(object.body, { headers });
+});
+
 /** Public: which auth providers are available, the Turnstile site key, and whether this is a fresh deployment. */
 meRoutes.get("/auth-config", async (c) => {
   const [owner, registration] = await Promise.all([serverOwnerId(c.env.DB), registrationPolicy(c.env.DB)]);
   const body: AuthConfig = {
+    server: await branding(c.env.DB),
     providers: {
       github: !!(c.env.GITHUB_CLIENT_ID && c.env.GITHUB_CLIENT_SECRET),
       google: !!(c.env.GOOGLE_CLIENT_ID && c.env.GOOGLE_CLIENT_SECRET),

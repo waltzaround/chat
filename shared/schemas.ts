@@ -148,6 +148,17 @@ export const pushSubscriptionSchema = z.object({
   hideText: z.boolean().default(false),
 });
 
+export const pushDeviceSchema = z.object({
+  platform: z.enum(["ios", "android"]),
+  /** The push relay that issued pushKey (https, or http on localhost for development). */
+  relay: z
+    .string()
+    .url()
+    .max(200)
+    .refine((v) => /^https:\/\//.test(v) || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/.test(v), "Use an https address"),
+  pushKey: z.string().min(16).max(2000),
+});
+
 export const openDmSchema = z.object({
   userId: z.string().min(1),
 });
@@ -171,8 +182,12 @@ export const updateServerSettingsSchema = z
     registration: z.enum(["open", "invite"]).optional(),
     workspaceCreation: z.enum(["everyone", "owner"]).optional(),
     requireVerifiedEmail: z.boolean().optional(),
+    name: z.string().trim().max(60).nullable().optional(),
+    description: z.string().trim().max(300).nullable().optional(),
+    /** R2 key from the upload flow (purpose "workspace-icon"), or null to remove. */
+    iconKey: z.string().max(200).nullable().optional(),
   })
-  .refine((v) => v.registration !== undefined || v.workspaceCreation !== undefined || v.requireVerifiedEmail !== undefined, "Nothing to update");
+  .refine((v) => Object.values(v).some((x) => x !== undefined), "Nothing to update");
 
 export const createInviteSchema = z.object({
   /** Seconds until expiry, or null for never. */

@@ -63,3 +63,43 @@ describe("web push", () => {
     expect(hidden.at(-1)?.body).toBe(`Mentioned you in ${ws.name}`);
   });
 });
+
+describe("phone push (through a push relay)", () => {
+  const relay = "https://push.example.org";
+  const register = (cookie: string, pushKey: string, relayUrl = relay) =>
+    apiRaw(cookie, "/api/push/devices", { method: "POST", json: { platform: "ios", relay: relayUrl, pushKey } });
+
+  it("registers a phone per session, and only with https relays", async () => {
+    const me = await signUp();
+    expect((await register(me.cookie, "key-that-is-long-enough", "http://evil.example.com")).status).toBe(400);
+    const first = await register(me.cookie, "key-that-is-long-enough");
+    expect(first.status).toBe(201);
+    const { id } = (await first.json()) as { id: string };
+    // Registering the same phone again keeps its id.
+    expect(((await (await register(me.cookie, "key-that-is-long-enough")).json()) as { id: string }).id).toBe(id);
+
+    // Signing out removes it, so a signed-out phone gets nothing.
+    await apiRaw(me.cookie, "/api/auth/sign-out", { method: "POST", json: {} });
+    const left = await env.DB.prepare("SELECT id FROM push_devices WHERE id = ?").bind(id).first();
+    expect(left).toBeNull();
+  });
+
+  it("wakes each phone through its relay without message text, and forgets gone ones", async () => {
+    const me = await signUp();
+    const phone = ((await (await register(me.cookie, "phone-key-0123456789")).json()) as { id: string }).id;
+    await register(me.cookie, "gone-key-0123456789");
+    const bodies: Array<Record<string, string>> = [];
+    const fetcher = (async (url: string, init: RequestInit) => {
+      expect(url).toBe(`${relay}/v1/notify`);
+      const body = JSON.parse(String(init.body)) as Record<string, string>;
+      bodies.push(body);
+      return new Response(null, { status: body.pushKey?.startsWith("gone") ? 410 : 202 });
+    }) as unknown as typeof fetch;
+    const notification = { kind: "dm" as const, workspaceId: "w1", workspaceName: "W", channelId: "c1", channelName: "dm", messageId: "m1", sequence: 1, threadRootId: null, author: { id: "u", username: "u", displayName: "U", avatarUrl: null }, preview: "secret text", createdAt: new Date().toISOString() };
+    expect(await pushToUser(env, me.user.id, notification, fetcher)).toBe(1);
+    expect(bodies.find((b) => b.pushKey === "phone-key-0123456789")).toEqual({ pushKey: "phone-key-0123456789", server: "http://localhost", device: phone });
+    expect(JSON.stringify(bodies)).not.toContain("secret text");
+    const left = await env.DB.prepare("SELECT push_key FROM push_devices WHERE user_id = ?").bind(me.user.id).all<{ push_key: string }>();
+    expect(left.results.map((r) => r.push_key)).toEqual(["phone-key-0123456789"]);
+  });
+});

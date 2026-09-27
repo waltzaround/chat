@@ -28,6 +28,14 @@ xcodebuild -project Chat.xcodeproj -scheme Chat -sdk iphonesimulator \
 
 Keep the ad-hoc signing (`CODE_SIGN_IDENTITY=-`). An unsigned build can't write to the Keychain, so you'd be signed out on every launch.
 
+## Push notifications
+
+Notifications go through the push relay (`apps/push-relay`). Set its address with `CHAT_PUSH_RELAY=https://…` when building. With it empty, push is off.
+
+The `NotificationService` extension fetches each notification's text from your server, so Apple never sees message content. Push needs a real device and a signing team with the Push Notifications capability and the `group.chat.beacon.ios` app group.
+
+To test a notification in the Simulator, drag an `.apns` file onto it or run `xcrun simctl push`.
+
 ## Layout
 
 - `Chat/Networking`: the API client, JSON models, Keychain and realtime socket.
@@ -37,4 +45,4 @@ Keep the ad-hoc signing (`CODE_SIGN_IDENTITY=-`). An unsigned build can't write 
 
 ## Not yet
 
-Push notifications (APNs), threads, uploads, editing and deleting messages, and voice. Use the web app for these for now.
+Threads, uploads, editing and deleting messages, and voice. Use the web app for these for now.

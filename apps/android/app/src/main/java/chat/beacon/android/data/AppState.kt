@@ -25,7 +25,7 @@ data class Account(val server: String, val token: String, val me: CurrentUser? =
 }
 
 @Serializable
-private data class SavedAccount(val server: String, val token: String)
+internal data class SavedAccount(val server: String, val token: String)
 
 /**
  * Every server you're signed in to, with tokens in EncryptedSharedPreferences
@@ -81,6 +81,9 @@ class AppState(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Syncs push registration with every signed-in server. */
+    fun syncPush() = chat.beacon.android.push.Push.sync(getApplication(), _accounts.value.map { it.server to it.token })
+
     private fun remove(server: String) {
         _accounts.update { list -> list.filterNot { it.server == server } }
         save()
@@ -94,8 +97,13 @@ class AppState(app: Application) : AndroidViewModel(app) {
         prefs.edit().putString(KEY, json.encodeToString(kotlinx.serialization.builtins.ListSerializer(SavedAccount.serializer()), _accounts.value.map { SavedAccount(it.server, it.token) })).apply()
     }
 
-    private companion object {
+    internal companion object {
         const val KEY = "accounts"
+
+        /** Session tokens by server, for the push service (which runs without the UI). */
+        fun tokens(context: Context): Map<String, String> = runCatching {
+            json.decodeFromString<List<SavedAccount>>(openPrefs(context).getString(KEY, "[]")!!).associate { it.server to it.token }
+        }.getOrDefault(emptyMap())
 
         fun openPrefs(context: Context): SharedPreferences {
             val key = MasterKey.Builder(context).setKeyScheme(MasterKey.KeyScheme.AES256_GCM).build()

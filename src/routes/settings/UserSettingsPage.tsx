@@ -311,6 +311,7 @@ function ServerTab() {
         <h2 className="text-base font-semibold">Server</h2>
         <p className="text-sm text-muted-foreground">You own this server, so these settings apply to everyone on it.</p>
       </div>
+      <ServerBrandingSettings />
       <div className="grid gap-2">
         <p className="text-sm font-medium">Who can create an account</p>
         <RegistrationPolicyPicker />
@@ -332,6 +333,74 @@ function ServerTab() {
         <ReportsPanel source="server" />
       </div>
     </div>
+  );
+}
+
+/** Name, icon and description shown on the sign-in page and in the apps. */
+function ServerBrandingSettings() {
+  const current = useServerSettings().data;
+  const update = useUpdateServerSettings();
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [iconKey, setIconKey] = useState<string | null>(null);
+  const [iconRemoved, setIconRemoved] = useState(false);
+  const [dirty, setDirty] = useState(false);
+
+  useEffect(() => {
+    if (!current || dirty) return;
+    setName(current.name ?? "");
+    setDescription(current.description ?? "");
+  }, [current, dirty]);
+
+  const save = async (e: FormEvent) => {
+    e.preventDefault();
+    try {
+      await update.mutateAsync({
+        name: name.trim() || null,
+        description: description.trim() || null,
+        ...(iconKey ? { iconKey } : iconRemoved ? { iconKey: null } : {}),
+      });
+      setDirty(false);
+      setIconKey(null);
+      setIconRemoved(false);
+      toast.success("Server details saved");
+    } catch (err) {
+      toast.error(errorMessage(err));
+    }
+  };
+
+  return (
+    <form onSubmit={(e) => void save(e)} className="grid gap-3">
+      <div className="space-y-1">
+        <p className="text-sm font-medium">How your server appears</p>
+        <p className="text-xs text-muted-foreground">Shown on the sign-in page and in the Chat apps before anyone signs in.</p>
+      </div>
+      <ImagePicker
+        purpose="workspace-icon"
+        value={iconKey}
+        currentUrl={iconRemoved ? null : current?.iconUrl}
+        onChange={(key) => {
+          setIconKey(key);
+          setIconRemoved(key === null);
+          setDirty(true);
+        }}
+        label="Server icon"
+        fallbackText={name.trim().slice(0, 2).toUpperCase() || "S"}
+      />
+      <div className="grid gap-1.5">
+        <Label htmlFor="server-name">Name</Label>
+        <Input id="server-name" value={name} maxLength={60} placeholder="Kiwi Devs" onChange={(e) => { setName(e.target.value); setDirty(true); }} />
+      </div>
+      <div className="grid gap-1.5">
+        <Label htmlFor="server-description">Description (optional)</Label>
+        <Textarea id="server-description" value={description} maxLength={300} rows={2} placeholder="What this server is for" onChange={(e) => { setDescription(e.target.value); setDirty(true); }} />
+      </div>
+      <div>
+        <Button type="submit" disabled={!dirty || update.isPending}>
+          Save
+        </Button>
+      </div>
+    </form>
   );
 }
 

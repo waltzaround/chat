@@ -128,18 +128,26 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
   const owner = mode === "register" && firstRun && !blocked;
   const title = mode === "login" ? "Welcome back" : owner ? "Create your owner account" : blocked ? "Welcome" : "Create your account";
   const subtitle = owner ? "You are setting up this server. You can change its settings any time." : "Community chat on Cloudflare";
+  const server = config.data?.server;
 
   return (
     <main className="flex min-h-dvh flex-col items-center justify-center gap-4 bg-rail p-4">
       {owner ? <SetupSteps current={0} /> : null}
       <div className="w-full max-w-sm rounded-lg border bg-card p-6 shadow-sm">
-        <div className="mb-6 flex items-center gap-2.5">
-          <img src="/favicon.svg" alt="" className="size-8 rounded-md" />
-          <div>
-            <h1 className="text-lg font-semibold leading-tight">{title}</h1>
-            <p className="text-xs text-muted-foreground">{subtitle}</p>
+        {server?.name && !owner ? (
+          <>
+            <ServerBrandingCard name={server.name} description={server.description} iconUrl={server.iconUrl} />
+            <h1 className="mb-4 text-sm text-muted-foreground">{mode === "login" ? "Log in to continue" : title}</h1>
+          </>
+        ) : (
+          <div className="mb-6 flex items-center gap-2.5">
+            <img src="/favicon.svg" alt="" className="size-8 rounded-md" />
+            <div>
+              <h1 className="text-lg font-semibold leading-tight">{title}</h1>
+              <p className="text-xs text-muted-foreground">{subtitle}</p>
+            </div>
           </div>
-        </div>
+        )}
 
         {unverified ? (
           <CheckEmail email={unverified} />
@@ -290,6 +298,26 @@ function SignUpClosed({ reason }: { reason: "claim" | "invite" }) {
           ? "The owner account is created from the setup link that npm run setup printed. If you set up this server, open that link."
           : "Ask a member for an invite link, then open it to create your account."}
       </p>
+    </div>
+  );
+}
+
+/** The server's own name, icon and description, set by its owner in Server settings. */
+function ServerBrandingCard({ name, description, iconUrl }: { name: string; description: string | null; iconUrl: string | null }) {
+  return (
+    <div className="mb-5 flex items-center gap-3 rounded-lg border bg-muted/40 p-3">
+      {iconUrl ? (
+        <img src={iconUrl} alt="" className="size-12 shrink-0 rounded-xl object-cover" />
+      ) : (
+        <span className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-primary font-semibold text-primary-foreground" aria-hidden>
+          {name.split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("")}
+        </span>
+      )}
+      <div className="min-w-0">
+        <p className="font-semibold leading-tight">{name}</p>
+        {description ? <p className="mt-0.5 text-sm text-muted-foreground">{description}</p> : null}
+        <p className="mt-0.5 text-xs text-muted-foreground/70">{window.location.host}</p>
+      </div>
     </div>
   );
 }

@@ -23,7 +23,18 @@ struct MainView: View {
         .tint(Theme.heading)
         .sheet(item: $webPage) { url in SafariView(url: url).ignoresSafeArea() }
         .onChange(of: model.pendingLink, initial: true) { _, link in openLink(link) }
-        .task { await model.loadProfiles() }
+        .task {
+            await model.loadProfiles()
+            PushManager.shared.model = model
+            PushManager.shared.start()
+        }
+        .onChange(of: model.accounts.map(\.server)) { _, _ in Task { await PushManager.shared.syncAccounts() } }
+        .onChange(of: model.pendingRoute, initial: true) { _, route in
+            guard let route else { return }
+            model.pendingRoute = nil
+            path = NavigationPath()
+            path.append(route)
+        }
     }
 
     /// chat://invite/CODE opens that invite's page on your first server.

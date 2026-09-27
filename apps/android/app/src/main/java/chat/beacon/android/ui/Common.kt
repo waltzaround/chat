@@ -40,10 +40,20 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.platform.LocalDensity
 import chat.beacon.android.net.ApiClient
 import chat.beacon.android.net.UserSummary
 import coil.compose.SubcomposeAsyncImage
 import coil.request.ImageRequest
+
+/**
+ * Text uses sp, which follows the system font size. Glyphs drawn inside fixed-size
+ * shapes (avatar initials, rail icons, emoji buttons, badges) use this instead, so a
+ * large font setting can't push them out of their circle.
+ */
+@Composable
+fun fixedSp(value: Float): TextUnit = with(LocalDensity.current) { value.dp.toSp() }
 
 /** Discord-style dark palette. The app is always dark, like Discord mobile. */
 object Palette {
@@ -117,7 +127,7 @@ fun initials(name: String, max: Int = 2) = name.split(" ").filter { it.isNotBlan
 fun Avatar(user: UserSummary, size: Dp, api: ApiClient?, modifier: Modifier = Modifier) {
     RemoteImage(user.avatarUrl, api, modifier.size(size).clip(CircleShape)) {
         Box(Modifier.size(size).background(avatarColour(user.id), CircleShape), contentAlignment = Alignment.Center) {
-            Text(initials(user.displayName), color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = (size.value * 0.38f).sp)
+            Text(initials(user.displayName), color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = fixedSp(size.value * 0.38f))
         }
     }
 }
@@ -136,7 +146,7 @@ fun CountBadge(count: Int, modifier: Modifier = Modifier, ring: Color = Palette.
             .semantics { contentDescription = "$count unread" },
         contentAlignment = Alignment.Center,
     ) {
-        Text(if (count > 99) "99+" else "$count", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        Text(if (count > 99) "99+" else "$count", color = Color.White, fontSize = fixedSp(12f), fontWeight = FontWeight.Bold)
     }
 }
 

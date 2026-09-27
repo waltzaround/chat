@@ -333,10 +333,10 @@ struct ProfilePill: View {
                     VStack(alignment: .leading, spacing: 1) {
                         HStack(spacing: 4) {
                             Text(account.me?.displayName ?? " ")
-                                .font(.system(size: 16, weight: .semibold))
+                                .font(.callout.weight(.semibold))
                                 .foregroundStyle(Theme.heading)
                                 .lineLimit(1)
-                            Image(systemName: "chevron.down").font(.system(size: 11, weight: .bold)).foregroundStyle(Theme.muted)
+                            Image(systemName: "chevron.down").font(.caption2.weight(.bold)).foregroundStyle(Theme.muted)
                         }
                         Text("Online").font(.caption).foregroundStyle(Theme.muted)
                     }
@@ -420,9 +420,9 @@ struct ChannelListPanel: View {
                             }
                         } label: {
                             HStack(spacing: 6) {
-                                Text(section.title).font(.system(size: 15, weight: .semibold))
+                                Text(section.title).font(.subheadline.weight(.semibold))
                                 Image(systemName: "chevron.down")
-                                    .font(.system(size: 11, weight: .bold))
+                                    .font(.caption2.weight(.bold))
                                     .rotationEffect(.degrees(collapsed.contains(section.id) ? -90 : 0))
                                 Spacer()
                             }
@@ -474,10 +474,10 @@ struct ChannelListPanel: View {
             Button { webPage = server.appending(path: "w/\(workspace.id)/settings") } label: {
                 HStack(spacing: 6) {
                     Text(workspace.name)
-                        .font(.system(size: 20, weight: .bold))
+                        .font(.title3.weight(.bold))
                         .foregroundStyle(Theme.heading)
                         .lineLimit(1)
-                    Image(systemName: "chevron.right").font(.system(size: 13, weight: .bold)).foregroundStyle(Theme.muted)
+                    Image(systemName: "chevron.right").font(.footnote.weight(.bold)).foregroundStyle(Theme.muted)
                 }
             }
             .buttonStyle(.plain)
@@ -486,7 +486,7 @@ struct ChannelListPanel: View {
             HStack(spacing: 10) {
                 Button { searching = true } label: {
                     Label("Search", systemImage: "magnifyingglass")
-                        .font(.system(size: 16, weight: .medium))
+                        .font(.callout.weight(.medium))
                         .foregroundStyle(Theme.text)
                         .frame(maxWidth: .infinity, minHeight: 40)
                         .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.field))
@@ -543,11 +543,11 @@ struct ChannelRow: View {
         Button(action: action) {
             HStack(spacing: 10) {
                 Image(systemName: channel.isVoice ? "speaker.wave.2.fill" : "number")
-                    .font(.system(size: 18, weight: .medium))
+                    .font(.body.weight(.medium))
                     .foregroundStyle(selected || channel.isUnread ? Theme.heading : Theme.faint)
                     .frame(width: 24)
                 Text(channel.name)
-                    .font(.system(size: 17, weight: channel.isUnread || selected ? .semibold : .regular))
+                    .font(.body.weight(channel.isUnread || selected ? .semibold : .regular))
                     .foregroundStyle(selected || channel.isUnread ? Theme.heading : Theme.muted)
                     .lineLimit(1)
                 Spacer(minLength: 4)
@@ -600,7 +600,7 @@ struct DirectMessagesPanel: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 Text("Messages")
-                    .font(.system(size: 20, weight: .bold))
+                    .font(.title3.weight(.bold))
                     .foregroundStyle(Theme.heading)
                     .padding(.horizontal, 16)
                     .padding(.top, 24)
@@ -624,7 +624,7 @@ struct DirectMessagesPanel: View {
                         CircleButton(icon: "magnifyingglass", label: "Find a conversation") { searching = true }
                         Button { newMessage = true } label: {
                             Label("New Message", systemImage: "square.and.pencil")
-                                .font(.system(size: 16, weight: .semibold))
+                                .font(.callout.weight(.semibold))
                                 .foregroundStyle(Theme.heading)
                                 .frame(maxWidth: .infinity, minHeight: 40)
                                 .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.field))
@@ -639,7 +639,7 @@ struct DirectMessagesPanel: View {
                     ProgressView().tint(Theme.muted).frame(maxWidth: .infinity).padding(.top, 40)
                 } else if items.isEmpty {
                     VStack(spacing: 8) {
-                        Image(systemName: "bubble.left.and.bubble.right").font(.system(size: 36)).foregroundStyle(Theme.faint)
+                        Image(systemName: "bubble.left.and.bubble.right").font(.largeTitle).foregroundStyle(Theme.faint)
                         Text("No messages yet").font(.headline).foregroundStyle(Theme.heading)
                         Text("Start a conversation with someone from one of your workspaces.")
                             .font(.footnote)
@@ -688,7 +688,7 @@ struct DMRow: View {
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(alignment: .firstTextBaseline) {
                         Text(item.dm.peer.displayName)
-                            .font(.system(size: 17, weight: unread ? .bold : .medium))
+                            .font(.body.weight(unread ? .bold : .medium))
                             .foregroundStyle(unread ? Theme.heading : Theme.text)
                             .lineLimit(1)
                         Spacer(minLength: 4)
@@ -698,7 +698,7 @@ struct DMRow: View {
                     }
                     HStack {
                         Text(preview)
-                            .font(.system(size: 15, weight: unread ? .semibold : .regular))
+                            .font(.subheadline.weight(unread ? .semibold : .regular))
                             .foregroundStyle(unread ? Theme.text : Theme.muted)
                             .lineLimit(1)
                         Spacer(minLength: 4)
