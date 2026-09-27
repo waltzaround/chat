@@ -23,7 +23,9 @@
     "backup": "tsx scripts/backup.ts backup",
     "restore": "tsx scripts/backup.ts restore",
     "cf-typegen": "wrangler types worker/env.d.ts",
-    "realtimekit:presets": "tsx scripts/realtimekit-presets.ts"
+    "realtimekit:presets": "tsx scripts/realtimekit-presets.ts",
+    "website": "vite --config apps/website/vite.config.ts",
+    "website:build": "vite build --config apps/website/vite.config.ts"
   },
   "dependencies": {
     "@cloudflare/realtimekit": "^2.0.2",
@@ -66,7 +68,7 @@
         "description": "Optional but recommended. Any long random phrase. The first account on a new server becomes its owner; with this set, only `https://YOUR-URL/register?claim=<phrase>` can create it, so a stranger cannot get there first."
       },
       "EMAIL_FROM": {
-        "description": "Optional, and needs the Workers Paid plan ($5/month). Sender for password-reset email, like `chat@yourdomain.com`, on a domain in Cloudflare DNS set up under Email → Email Sending. Also add `\"send_email\": [{ \"name\": \"EMAIL\" }]` to wrangler.jsonc. Leave blank on the free plan: the server owner makes reset links instead."
+        "description": "Optional, and needs the Workers Paid plan ($5/month). Sender for password-reset email, like `chat@yourdomain.com`, on a domain in Cloudflare DNS set up under Email \u2192 Email Sending. Also add `\"send_email\": [{ \"name\": \"EMAIL\" }]` to wrangler.jsonc. Leave blank on the free plan: the server owner makes reset links instead."
       },
       "TURNSTILE_SITE_KEY": {
         "description": "Optional. Public Turnstile site key. The default is Cloudflare's always-pass test key. Replace it together with `TURNSTILE_SECRET_KEY` when you create a real widget."
@@ -90,7 +92,7 @@
         "description": "Optional, for voice. Your Cloudflare account id. Voice stays disabled until this, `REALTIMEKIT_APP_ID`, and `CLOUDFLARE_REALTIME_API_TOKEN` are all set."
       },
       "REALTIMEKIT_APP_ID": {
-        "description": "Optional, for voice. RealtimeKit app id from the Cloudflare dashboard (Realtime → RealtimeKit)."
+        "description": "Optional, for voice. RealtimeKit app id from the Cloudflare dashboard (Realtime \u2192 RealtimeKit)."
       },
       "CLOUDFLARE_REALTIME_API_TOKEN": {
         "description": "Optional, for voice. API token with Realtime permissions. After the three RealtimeKit secrets are set, run `npm run realtimekit:presets` once."

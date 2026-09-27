@@ -1,0 +1,22 @@
+@import "tailwindcss";
+
+@theme {
+  --color-background: #1e1f22;
+  --color-card: #2b2d31;
+  --color-muted: #313338;
+  --color-border: #3f4147;
+  --color-foreground: #f2f3f5;
+  --color-muted-foreground: #a3a9b3;
+  --color-primary: #5865f2;
+  --color-primary-foreground: #ffffff;
+  --color-accent: #404249;
+  --color-accent-foreground: #f2f3f5;
+  --color-ring: #5865f2;
+  --color-destructive: #f23f43;
+  --color-secondary: #383a40;
+  --color-secondary-foreground: #f2f3f5;
+  --color-input: #3f4147;
+}
+
+body { @apply bg-background text-foreground antialiased; }
+:not(pre) > code { @apply rounded bg-muted px-1.5 py-0.5 text-[0.9em]; }
