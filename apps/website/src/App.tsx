@@ -5,10 +5,11 @@ import { Button } from "@/components/ui/button";
 const REPO = "https://github.com/waltzaround/beacon";
 const DEPLOY = `https://deploy.workers.cloudflare.com/?url=${REPO}`;
 
-function Section({ id, title, intro, children }: { id: string; title: string; intro?: string; children: ReactNode }) {
+function Section({ id, eyebrow, title, intro, children }: { id: string; eyebrow: string; title: string; intro?: string; children: ReactNode }) {
   return (
     <section id={id} className="mx-auto max-w-3xl scroll-mt-20 px-4 py-16">
-      <h2 className="text-3xl font-bold">{title}</h2>
+      <p className="font-mono text-xs tracking-widest text-muted-foreground uppercase">{eyebrow}</p>
+      <h2 className="mt-2 text-3xl font-semibold tracking-tight">{title}</h2>
       {intro ? <p className="mt-2 text-muted-foreground">{intro}</p> : null}
       <div className="mt-8">{children}</div>
     </section>
@@ -22,7 +23,7 @@ function Code({ children }: { children: string }) {
 function Step({ n, title, children }: { n: number; title: string; children: ReactNode }) {
   return (
     <li className="flex gap-4">
-      <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary font-semibold text-primary-foreground">{n}</span>
+      <span className="flex size-8 shrink-0 items-center justify-center rounded-md border border-border bg-card font-mono text-sm text-muted-foreground">{String(n).padStart(2, "0")}</span>
       <div className="min-w-0 flex-1 pb-8">
         <h3 className="font-semibold">{title}</h3>
         <div className="mt-1 space-y-2 text-muted-foreground">{children}</div>
@@ -56,8 +57,8 @@ export function App() {
     <div className="min-h-dvh">
       <header className="sticky top-0 z-10 border-b border-border bg-background/90 backdrop-blur">
         <nav className="mx-auto flex max-w-5xl items-center gap-6 px-4 py-3 text-sm" aria-label="Main">
-          <a href="#" className="flex items-center gap-2 font-semibold"><Server className="size-5 text-primary" aria-hidden />Beacon Chat</a>
-          <div className="ml-auto flex items-center gap-5 text-muted-foreground max-sm:hidden">
+          <a href="#" className="flex items-center gap-2 font-semibold"><Server className="size-5" aria-hidden />Beacon Chat</a>
+          <div className="ml-auto flex items-center gap-5 font-mono text-xs text-muted-foreground max-sm:hidden">
             <a href="#setup" className="hover:text-foreground">Setup</a>
             <a href="#faq" className="hover:text-foreground">FAQ</a>
             <a href="#troubleshooting" className="hover:text-foreground">Troubleshooting</a>
@@ -68,7 +69,8 @@ export function App() {
 
       <main>
         <section className="mx-auto max-w-3xl px-4 pt-20 pb-12 text-center">
-          <h1 className="text-4xl font-bold tracking-tight sm:text-6xl">Your own community chat</h1>
+          <p className="font-mono text-xs tracking-widest text-muted-foreground uppercase">Self-hosted · Open source · Cloudflare</p>
+          <h1 className="mt-4 text-4xl font-semibold tracking-tight sm:text-6xl">Your own community chat</h1>
           <p className="mx-auto mt-5 max-w-xl text-lg text-muted-foreground">
             A Discord-style chat server you run yourself on Cloudflare. It fits in the free plan, and there's nothing to configure.
           </p>
@@ -81,14 +83,14 @@ export function App() {
         <section className="mx-auto grid max-w-5xl gap-4 px-4 pb-8 sm:grid-cols-2 lg:grid-cols-4" aria-label="Features">
           {features.map(({ icon: Icon, title, text }) => (
             <div key={title} className="rounded-xl border border-border bg-card p-5">
-              <Icon className="size-6 text-primary" aria-hidden />
+              <Icon className="size-5 text-muted-foreground" aria-hidden />
               <h3 className="mt-3 font-semibold">{title}</h3>
               <p className="mt-1 text-sm text-muted-foreground">{text}</p>
             </div>
           ))}
         </section>
 
-        <Section id="setup" title="How to set it up" intro="You need a Cloudflare account. The free plan is enough, and you can sign up along the way.">
+        <Section id="setup" eyebrow="Setup" title="How to set it up" intro="You need a Cloudflare account. The free plan is enough, and you can sign up along the way.">
           <h3 className="mb-6 text-lg font-semibold">Option 1: the deploy button (nothing to install)</h3>
           <ol>
             <Step n={1} title="Click Deploy to Cloudflare">
@@ -128,7 +130,7 @@ npm run deploy   # build, migrate the database and deploy
 npm run backup   # save the database to backups/`}</Code>
         </Section>
 
-        <Section id="faq" title="FAQ">
+        <Section id="faq" eyebrow="Questions" title="FAQ">
           <div className="space-y-3">
             <Question q="How much does it cost?">
               <p>Nothing for most communities: it runs on Cloudflare's free plan. Email needs the Workers Paid plan ($5 a month). Voice and video are billed by RealtimeKit usage.</p>
@@ -157,7 +159,7 @@ npm run backup   # save the database to backups/`}</Code>
           </div>
         </Section>
 
-        <Section id="troubleshooting" title="Troubleshooting">
+        <Section id="troubleshooting" eyebrow="Help" title="Troubleshooting">
           <div className="space-y-3">
             <Question q="The deploy stops with an R2 error">
               <p>Open <strong>R2</strong> in the Cloudflare dashboard once to enable it. The free tier is enough, but Cloudflare asks for a payment method. Then retry the deploy.</p>
@@ -188,7 +190,7 @@ npm run backup   # save the database to backups/`}</Code>
       </main>
 
       <footer className="border-t border-border py-8 text-center text-sm text-muted-foreground">
-        Open source. <a href={REPO} className="underline hover:text-foreground">View on GitHub</a>
+        Open source. <a href={REPO} className="link hover:text-foreground">View on GitHub</a>
       </footer>
     </div>
   );

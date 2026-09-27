@@ -1,22 +1,31 @@
 @import "tailwindcss";
+@import "@fontsource-variable/public-sans";
+@import "@fontsource-variable/jetbrains-mono";
 
+/* Same neutral dark palette and type as the app: no brand colour, just contrast. */
 @theme {
-  --color-background: #1e1f22;
-  --color-card: #2b2d31;
-  --color-muted: #313338;
-  --color-border: #3f4147;
-  --color-foreground: #f2f3f5;
-  --color-muted-foreground: #a3a9b3;
-  --color-primary: #5865f2;
-  --color-primary-foreground: #ffffff;
-  --color-accent: #404249;
-  --color-accent-foreground: #f2f3f5;
-  --color-ring: #5865f2;
-  --color-destructive: #f23f43;
-  --color-secondary: #383a40;
-  --color-secondary-foreground: #f2f3f5;
-  --color-input: #3f4147;
+  --font-sans: "Public Sans Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --color-background: oklch(0.17 0.005 285);
+  --color-card: oklch(0.21 0.006 285);
+  --color-muted: oklch(0.24 0.006 285);
+  --color-border: oklch(1 0 0 / 9%);
+  --color-foreground: oklch(0.93 0.004 285);
+  --color-muted-foreground: oklch(0.7 0.012 285);
+  --color-primary: oklch(0.93 0.004 285);
+  --color-primary-foreground: oklch(0.21 0.006 285);
+  --color-accent: oklch(0.28 0.006 285);
+  --color-accent-foreground: oklch(0.93 0.004 285);
+  --color-secondary: oklch(0.28 0.006 285);
+  --color-secondary-foreground: oklch(0.93 0.004 285);
+  --color-ring: oklch(0.55 0.016 285);
+  --color-input: oklch(1 0 0 / 12%);
+  --color-destructive: oklch(0.65 0.21 25);
 }
 
-body { @apply bg-background text-foreground antialiased; }
-:not(pre) > code { @apply rounded bg-muted px-1.5 py-0.5 text-[0.9em]; }
+body { @apply bg-background font-sans text-foreground antialiased; }
+:not(pre) > code { @apply rounded bg-muted px-1.5 py-0.5 font-mono text-[0.85em]; }
+pre, pre code { @apply font-mono; }
+/* Links are told apart by an underline, since the accent is neutral. */
+.link { @apply underline decoration-muted-foreground/60 underline-offset-[3px] hover:decoration-foreground; }

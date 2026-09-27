@@ -34,6 +34,7 @@
     "@dnd-kit/modifiers": "^9.0.0",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
+    "@fontsource-variable/public-sans": "^5.3.0",
     "@tanstack/react-query": "^5.103.2",
     "@tanstack/react-virtual": "^3.14.13",
     "aws4fetch": "^1.0.20",
@@ -68,7 +69,7 @@
         "description": "Optional but recommended. Any long random phrase. The first account on a new server becomes its owner; with this set, only `https://YOUR-URL/register?claim=<phrase>` can create it, so a stranger cannot get there first."
       },
       "EMAIL_FROM": {
-        "description": "Optional, and needs the Workers Paid plan ($5/month). Sender for password-reset email, like `chat@yourdomain.com`, on a domain in Cloudflare DNS set up under Email \u2192 Email Sending. Also add `\"send_email\": [{ \"name\": \"EMAIL\" }]` to wrangler.jsonc. Leave blank on the free plan: the server owner makes reset links instead."
+        "description": "Optional, and needs the Workers Paid plan ($5/month). Sender for password-reset email, like `chat@yourdomain.com`, on a domain in Cloudflare DNS set up under Email → Email Sending. Also add `\"send_email\": [{ \"name\": \"EMAIL\" }]` to wrangler.jsonc. Leave blank on the free plan: the server owner makes reset links instead."
       },
       "TURNSTILE_SITE_KEY": {
         "description": "Optional. Public Turnstile site key. The default is Cloudflare's always-pass test key. Replace it together with `TURNSTILE_SECRET_KEY` when you create a real widget."
@@ -92,7 +93,7 @@
         "description": "Optional, for voice. Your Cloudflare account id. Voice stays disabled until this, `REALTIMEKIT_APP_ID`, and `CLOUDFLARE_REALTIME_API_TOKEN` are all set."
       },
       "REALTIMEKIT_APP_ID": {
-        "description": "Optional, for voice. RealtimeKit app id from the Cloudflare dashboard (Realtime \u2192 RealtimeKit)."
+        "description": "Optional, for voice. RealtimeKit app id from the Cloudflare dashboard (Realtime → RealtimeKit)."
       },
       "CLOUDFLARE_REALTIME_API_TOKEN": {
         "description": "Optional, for voice. API token with Realtime permissions. After the three RealtimeKit secrets are set, run `npm run realtimekit:presets` once."
@@ -109,6 +110,7 @@
     "@cloudflare/vite-plugin": "^1.57.3",
     "@cloudflare/vitest-pool-workers": "^0.22.0",
     "@cloudflare/workers-types": "^5.20260922.1",
+    "@fontsource-variable/jetbrains-mono": "^5.3.0",
     "@tailwindcss/vite": "^4.3.3",
     "@tauri-apps/cli": "^2.12.0",
     "@types/node": "^24.0.0",
