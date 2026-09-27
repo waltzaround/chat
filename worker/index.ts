@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { BackgroundJob, Env } from "./env";
 import { withServices, resolveSession, type AppEnv } from "./auth/middleware";
+import { allowsCrossOrigin, LINKED_SCOPE } from "./auth/linked";
 import { errorHandler, ApiError } from "./lib/errors";
 import { securityHeaders } from "./security/headers";
 import { verifyTurnstile, clientIp } from "./security/turnstile";
@@ -33,6 +34,33 @@ app.onError(errorHandler);
 app.use("*", securityHeaders);
 app.use("*", withServices);
 
+// Other Chat servers' web apps (and the desktop app, from whichever server it has open)
+// read a linked account's rail summary with fetch(). Bearer tokens only: no cookies,
+// so "*" is safe, and only the routes linked sessions may call are opened up.
+app.use("/api/*", async (c, next) => {
+  const requestOrigin = c.req.header("origin");
+  if (!requestOrigin || requestOrigin === c.get("origin")) return next();
+  if (c.req.method === "OPTIONS") {
+    const method = c.req.header("access-control-request-method") ?? "GET";
+    if (!allowsCrossOrigin(method, c.req.path)) return c.body(null, 204);
+    return c.body(null, 204, {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, DELETE",
+      "Access-Control-Allow-Headers": "Authorization",
+      "Access-Control-Max-Age": "600",
+    });
+  }
+  await next();
+  if (allowsCrossOrigin(c.req.method, c.req.path)) {
+    try {
+      c.res.headers.set("Access-Control-Allow-Origin", "*");
+    } catch {
+      c.res = new Response(c.res.body, c.res);
+      c.res.headers.set("Access-Control-Allow-Origin", "*");
+    }
+  }
+});
+
 // Latency + error analytics for API routes.
 app.use("/api/*", async (c, next) => {
   const start = Date.now();
@@ -63,6 +91,12 @@ app.on(["GET", "POST"], "/api/auth/*", async (c) => {
   if (c.req.method === "POST" && path.endsWith("/request-password-reset")) {
     const attempts = await bumpPersistentCounter(db, `reset:${ip}`, 60 * 60 * 1000);
     if (attempts > 5) throw ApiError.rateLimited(3600);
+  }
+
+  // A linked session (another server's rail) must not reach account management.
+  if (c.req.header("authorization") || c.req.header("cookie")?.includes("session_token")) {
+    const current = await c.get("auth").api.getSession({ headers: c.req.raw.headers }).catch(() => null);
+    if ((current?.session as { scope?: string | null } | undefined)?.scope === LINKED_SCOPE) throw ApiError.forbidden();
   }
 
   const isSignIn = c.req.method === "POST" && path.endsWith("/sign-in/email");

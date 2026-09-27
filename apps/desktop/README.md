@@ -40,3 +40,7 @@ launch ("unidentified developer"; on macOS, right-click → Open once).
   `APPLE_PASSWORD` (an app-specific password), `APPLE_TEAM_ID`.
 - **Windows:** needs a code-signing certificate. See
   [Tauri's Windows signing guide](https://tauri.app/distribute/sign/windows/).
+
+## Several servers
+
+Each server you open registers itself with the app, which keeps the list in `servers.json` in the app's config folder. Every server's rail then shows the others' workspaces and unread counts. The tokens stored there are *linked sessions*: they can only read the workspace list, DM list and unread counts, never messages. Add a server with the globe button in the rail. Remove one under Settings → Profile → Your other servers.

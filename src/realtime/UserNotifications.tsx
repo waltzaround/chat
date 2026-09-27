@@ -1,3 +1,4 @@
+import { registerWithDesktopApp, useLinkedUnreadTotal } from "@/lib/linked-servers";
 import { useEffect } from "react";
 import { useNavigate } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
@@ -44,6 +45,10 @@ export function UserNotifications() {
   }, [qc, navigate]);
 
   useDesktopBadge();
+  useEffect(() => {
+    // Lets the desktop app's other servers show this one in their rails.
+    void registerWithDesktopApp().catch(() => undefined);
+  }, []);
   return null;
 }
 
@@ -51,7 +56,8 @@ export function UserNotifications() {
 function useDesktopBadge() {
   const workspaces = useWorkspaces().data;
   const dms = useDms().data;
-  const total = (workspaces ?? []).reduce((n, w) => n + w.mentionCount, 0) + (dms ?? []).reduce((n, d) => n + d.unreadCount, 0);
+  const linked = useLinkedUnreadTotal();
+  const total = (workspaces ?? []).reduce((n, w) => n + w.mentionCount, 0) + (dms ?? []).reduce((n, d) => n + d.unreadCount, 0) + linked;
   useEffect(() => {
     if (isDesktopApp()) setDesktopBadge(total);
   }, [total]);

@@ -5,6 +5,11 @@
 //! the server — and only that server — is allowed to use a few native features:
 //! notifications, the dock/taskbar unread badge, and "change server". Links anywhere
 //! else open in the system browser.
+//!
+//! You can belong to several servers. Each server you open registers itself here with
+//! a linked session (a token that can only read its workspace list and unread counts),
+//! so every server's rail can show all the others. Switching servers navigates the
+//! window; each server keeps its own sign-in cookies.
 
 use std::{
     fs,
@@ -38,6 +43,51 @@ impl Server {
     fn set(&self, url: Option<Url>) {
         *self.0.lock().unwrap() = url;
     }
+}
+
+/// A server in the rail, with its linked-session token.
+#[derive(Serialize, Deserialize, Clone)]
+struct Account {
+    origin: String,
+    token: String,
+}
+
+#[derive(Default, Clone)]
+struct Accounts(Arc<Mutex<Vec<Account>>>);
+
+impl Accounts {
+    fn list(&self) -> Vec<Account> {
+        self.0.lock().unwrap().clone()
+    }
+    fn contains(&self, origin: &str) -> bool {
+        self.0.lock().unwrap().iter().any(|a| a.origin == origin)
+    }
+}
+
+fn accounts_path(app: &AppHandle) -> Option<PathBuf> {
+    app.path().app_config_dir().ok().map(|dir| dir.join("servers.json"))
+}
+
+fn load_accounts(app: &AppHandle) -> Vec<Account> {
+    accounts_path(app)
+        .and_then(|p| fs::read_to_string(p).ok())
+        .and_then(|text| serde_json::from_str(&text).ok())
+        .unwrap_or_default()
+}
+
+fn store_accounts(app: &AppHandle, accounts: &[Account]) -> Result<(), String> {
+    let path = accounts_path(app).ok_or("No config directory")?;
+    if let Some(dir) = path.parent() {
+        fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    }
+    fs::write(&path, serde_json::to_string(accounts).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
+    // Tokens only: readable by this user alone.
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = fs::set_permissions(&path, fs::Permissions::from_mode(0o600));
+    }
+    Ok(())
 }
 
 #[derive(Serialize, Deserialize)]
@@ -86,7 +136,11 @@ fn allow_server(app: &AppHandle, server: &Url) {
         .permission("notification:default")
         .permission("opener:default")
         .permission("allow-set-unread")
-        .permission("allow-change-server");
+        .permission("allow-change-server")
+        .permission("allow-linked-servers")
+        .permission("allow-save-linked-server")
+        .permission("allow-remove-linked-server")
+        .permission("allow-switch-server");
     // Adding the same server twice is harmless; ignore "already exists".
     let _ = app.add_capability(capability);
 }
@@ -95,6 +149,10 @@ fn allow_server(app: &AppHandle, server: &Url) {
 /// origin once it answers as a Chat server.
 #[tauri::command]
 async fn check_server(input: String) -> Result<String, String> {
+    verify_server(&input).await
+}
+
+async fn verify_server(input: &str) -> Result<String, String> {
     let trimmed = input.trim();
     if trimmed.is_empty() {
         return Err("Enter your server's address.".into());
@@ -129,6 +187,51 @@ fn connect(app: AppHandle, server: tauri::State<Server>, origin: String) -> Resu
     server.set(Some(url.clone()));
     allow_server(&app, &url);
     main_window(&app)?.navigate(url).map_err(|e| e.to_string())
+}
+
+/// Every server in the rail, with the tokens their pages use to read each other's summaries.
+#[tauri::command]
+fn linked_servers(accounts: tauri::State<Accounts>) -> Vec<Account> {
+    accounts.list()
+}
+
+/// A server registers itself (never another server: the origin must be the caller's).
+#[tauri::command]
+fn save_linked_server(app: AppHandle, webview: tauri::Webview, accounts: tauri::State<Accounts>, origin: String, token: String) -> Result<(), String> {
+    let caller = webview.url().map_err(|e| e.to_string())?;
+    if origin_of(&caller) != origin {
+        return Err("A server can only add itself".into());
+    }
+    let mut list = accounts.0.lock().unwrap();
+    list.retain(|a| a.origin != origin);
+    list.push(Account { origin, token });
+    store_accounts(&app, &list)?;
+    if let Ok(url) = Url::parse(&list.last().unwrap().origin) {
+        allow_server(&app, &url);
+    }
+    Ok(())
+}
+
+/// Takes a server out of the rail.
+#[tauri::command]
+fn remove_linked_server(app: AppHandle, accounts: tauri::State<Accounts>, origin: String) -> Result<(), String> {
+    let mut list = accounts.0.lock().unwrap();
+    list.retain(|a| a.origin != origin);
+    store_accounts(&app, &list)
+}
+
+/// Opens a page on another server: one from the rail, or a new one being added (which
+/// must answer as a Chat server first).
+#[tauri::command]
+async fn switch_server(app: AppHandle, origin: String, path: String) -> Result<(), String> {
+    let known = app.state::<Accounts>().contains(&origin);
+    let origin = if known { origin } else { verify_server(&origin).await? };
+    let url = Url::parse(&origin).map_err(|e| e.to_string())?;
+    let target = url.join(if path.starts_with('/') { &path } else { "/" }).map_err(|e| e.to_string())?;
+    save(&app, &url)?;
+    app.state::<Server>().set(Some(url.clone()));
+    allow_server(&app, &url);
+    main_window(&app)?.navigate(target).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -172,7 +275,7 @@ fn open_deep_link(app: &AppHandle, link: &Url) {
     }
 }
 
-fn is_allowed(url: &Url, server: Option<&Url>) -> bool {
+fn is_allowed(url: &Url, server: Option<&Url>, accounts: &[Account]) -> bool {
     if url.scheme() == "tauri" || url.scheme() == "about" || url.host_str() == Some("tauri.localhost") {
         return true;
     }
@@ -180,6 +283,9 @@ fn is_allowed(url: &Url, server: Option<&Url>) -> bool {
         if origin_of(url) == origin_of(server) {
             return true;
         }
+    }
+    if accounts.iter().any(|a| a.origin == origin_of(url)) {
+        return true;
     }
     url.host_str().is_some_and(|host| AUTH_HOSTS.contains(&host))
 }
@@ -202,7 +308,18 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .manage(Server::default())
-        .invoke_handler(tauri::generate_handler![check_server, connect, current_server, change_server, set_unread])
+        .manage(Accounts::default())
+        .invoke_handler(tauri::generate_handler![
+            check_server,
+            connect,
+            current_server,
+            change_server,
+            set_unread,
+            linked_servers,
+            save_linked_server,
+            remove_linked_server,
+            switch_server
+        ])
         .setup(|app| {
             let handle = app.handle().clone();
             let saved = load_saved(&handle);
@@ -211,19 +328,34 @@ pub fn run() {
             if let Some(url) = &saved {
                 allow_server(&handle, url);
             }
+            let accounts = app.state::<Accounts>().inner().clone();
+            *accounts.0.lock().unwrap() = load_accounts(&handle);
+            for account in accounts.list() {
+                if let Ok(url) = Url::parse(&account.origin) {
+                    allow_server(&handle, &url);
+                }
+            }
 
             let start = match &saved {
                 Some(url) => WebviewUrl::External(url.clone()),
                 None => WebviewUrl::App("index.html".into()),
             };
             let guard_server = server.clone();
+            let guard_accounts = accounts.clone();
             let guard_app = handle.clone();
             WebviewWindowBuilder::new(app, MAIN, start)
                 .title("Chat")
                 .inner_size(1200.0, 800.0)
                 .min_inner_size(420.0, 520.0)
                 .on_navigation(move |url| {
-                    if is_allowed(url, guard_server.get().as_ref()) {
+                    let accounts = guard_accounts.list();
+                    if is_allowed(url, guard_server.get().as_ref(), &accounts) {
+                        // Following a link to another of your servers makes it the current one.
+                        if accounts.iter().any(|a| a.origin == origin_of(url)) {
+                            if let Ok(origin) = Url::parse(&origin_of(url)) {
+                                guard_server.set(Some(origin));
+                            }
+                        }
                         return true;
                     }
                     let _ = guard_app.opener().open_url(url.as_str(), None::<&str>);
@@ -294,15 +426,25 @@ mod tests {
     #[test]
     fn keeps_the_server_and_sign_in_pages_in_the_app() {
         let server = url("https://chat.example.com");
-        assert!(is_allowed(&url("https://chat.example.com/w/1/c/2"), Some(&server)));
-        assert!(is_allowed(&url("tauri://localhost/index.html"), Some(&server)));
-        assert!(is_allowed(&url("http://tauri.localhost/index.html"), Some(&server)));
-        assert!(is_allowed(&url("https://accounts.google.com/o/oauth2/auth"), Some(&server)));
+        let none: Vec<Account> = vec![];
+        let allowed = |u: &str| is_allowed(&url(u), Some(&server), &none);
+        assert!(allowed("https://chat.example.com/w/1/c/2"));
+        assert!(allowed("tauri://localhost/index.html"));
+        assert!(allowed("http://tauri.localhost/index.html"));
+        assert!(allowed("https://accounts.google.com/o/oauth2/auth"));
         // Anything else opens in the browser, including look-alikes and other ports.
-        assert!(!is_allowed(&url("https://example.com"), Some(&server)));
-        assert!(!is_allowed(&url("https://chat.example.com.evil.net"), Some(&server)));
-        assert!(!is_allowed(&url("https://chat.example.com:8443"), Some(&server)));
-        assert!(!is_allowed(&url("https://chat.example.com"), None));
+        assert!(!allowed("https://example.com"));
+        assert!(!allowed("https://chat.example.com.evil.net"));
+        assert!(!allowed("https://chat.example.com:8443"));
+        assert!(!is_allowed(&url("https://chat.example.com"), None, &none));
+    }
+
+    #[test]
+    fn keeps_your_other_servers_in_the_app() {
+        let server = url("https://chat.example.com");
+        let accounts = vec![Account { origin: "https://chat.other.org".into(), token: "t".into() }];
+        assert!(is_allowed(&url("https://chat.other.org/w/9"), Some(&server), &accounts));
+        assert!(!is_allowed(&url("https://other.org"), Some(&server), &accounts));
     }
 
     #[test]

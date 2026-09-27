@@ -90,6 +90,9 @@ function buildAuth(env: Env, db: Db, origin: string, secret: string) {
       },
     },
     session: {
+      additionalFields: {
+        scope: { type: "string", required: false, input: false },
+      },
       expiresIn: 60 * 60 * 24 * 30,
       updateAge: 60 * 60 * 24,
       cookieCache: { enabled: true, maxAge: 5 * 60 },

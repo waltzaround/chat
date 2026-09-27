@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-save-linked-server"
+description = "Enables the save_linked_server command without any pre-configured scope."
+commands.allow = ["save_linked_server"]
+
+[[permission]]
+identifier = "deny-save-linked-server"
+description = "Denies the save_linked_server command without any pre-configured scope."
+commands.deny = ["save_linked_server"]

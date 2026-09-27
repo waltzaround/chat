@@ -16,6 +16,13 @@ import { checkRateLimit } from "../security/ratelimit";
 import type { AuthConfig, InstanceInfo, WorkspaceSummary } from "@shared/types";
 import { API_VERSION, APP_VERSION } from "@shared/version";
 import { realtimekitConfigured } from "../realtimekit/client";
+import { createLinkedSession, LINKED_SCOPE } from "../auth/linked";
+import { z } from "zod";
+
+const linkSchema = z.object({
+  /** The web origin that will hold the session, or "desktop" for the desktop app. */
+  linkedTo: z.union([z.literal("desktop"), z.string().url().max(200).refine((v) => /^https?:\/\//.test(v), "Must be a web address")]),
+});
 
 export const meRoutes = new Hono<AppEnv>();
 
@@ -66,6 +73,28 @@ async function serverContext(db: D1Database, userId: string) {
 function credentialAccount(db: D1Database, userId: string) {
   return db.prepare("SELECT password FROM accounts WHERE user_id = ? AND provider_id = 'credential' AND password IS NOT NULL").bind(userId).first<{ password: string }>();
 }
+
+/**
+ * Links this account to another place that shows it in a server rail: another Chat
+ * server's web app (via the /link page) or the desktop app. Only callable by this
+ * server's own pages with a full session, so a linked session can't mint more.
+ */
+meRoutes.post("/me/linked-sessions", async (c) => {
+  if (c.get("sessionScope") === LINKED_SCOPE) throw ApiError.forbidden();
+  if (c.req.header("origin") !== c.get("origin")) throw ApiError.forbidden("Link servers from this server's own pages.");
+  checkRateLimit(`link:${c.get("user").id}`, 10, 60_000);
+  const { linkedTo } = await parseBody(c, linkSchema);
+  const label = linkedTo === "desktop" ? "Chat desktop app (server list)" : `Linked to ${new URL(linkedTo).host}`;
+  const token = await createLinkedSession(c.get("auth"), c.get("user").id, label);
+  return c.json({ token }, 201);
+});
+
+/** Unlinking: the other server revokes the linked session it holds. */
+meRoutes.delete("/me/linked-session", async (c) => {
+  if (c.get("sessionScope") !== LINKED_SCOPE) throw ApiError.forbidden();
+  await c.get("db").delete(schema.sessions).where(eq(schema.sessions.id, c.get("sessionId")));
+  return c.body(null, 204);
+});
 
 /** People you've blocked. */
 meRoutes.get("/me/blocks", async (c) => {

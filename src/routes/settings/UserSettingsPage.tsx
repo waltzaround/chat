@@ -6,6 +6,7 @@ import { SettingsLayout } from "./SettingsLayout";
 import { RegistrationPolicyPicker, WorkspaceCreationPicker } from "@/components/onboarding/RegistrationPolicyPicker";
 import { EmailStatus, ServerAccounts } from "./ServerAccounts";
 import { AccountSection } from "./AccountSection";
+import { LinkedServersSection } from "./LinkedServersSection";
 import { ReportsPanel } from "./ReportsPanel";
 import { ImagePicker } from "@/components/common/ImagePicker";
 import { Button } from "@/components/ui/button";
@@ -85,6 +86,7 @@ export function UserSettingsPage() {
         <div className="grid gap-10">
           <ProfileTab />
           {me?.hasPassword ? <ChangePassword /> : null}
+          <LinkedServersSection />
           <AccountSection />
         </div>
       )}

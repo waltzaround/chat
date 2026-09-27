@@ -1,13 +1,15 @@
 import { useState } from "react";
 import { MentionBadge } from "@/components/common/MentionBadge";
 import { NavLink, useLocation, useParams } from "react-router";
-import { Compass, MessageCircle, Plus } from "lucide-react";
+import { Compass, Globe, MessageCircle, Plus } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useDms, useMe, useWorkspace, useWorkspaces } from "@/lib/queries";
 import { cn } from "@/lib/utils";
 import { WorkspaceIcon } from "./WorkspaceIcon";
 import { CreateWorkspaceDialog } from "./CreateWorkspaceDialog";
 import { JoinWorkspaceDialog } from "./JoinWorkspaceDialog";
+import { AddServerDialog } from "./AddServerDialog";
+import { LinkedServerRail } from "./LinkedServerRail";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export function WorkspaceRail() {
@@ -24,6 +26,7 @@ export function WorkspaceRail() {
   const inDms = openWorkspace?.kind === "dm" || pathname.startsWith("/dms");
   const unreadDms = dms.filter((d) => d.workspaceId !== workspaceId).reduce((sum, d) => sum + d.unreadCount, 0);
   const [joinOpen, setJoinOpen] = useState(false);
+  const [addServerOpen, setAddServerOpen] = useState(false);
 
   return (
     <nav aria-label="Workspaces" className="flex w-16 shrink-0 flex-col items-center gap-2 border-r border-sidebar-border bg-rail py-2">
@@ -82,6 +85,7 @@ export function WorkspaceRail() {
                 </li>
               );
             })}
+        <LinkedServerRail />
         <li className="my-1 h-px w-8 bg-sidebar-border" aria-hidden />
         {canCreate ? (
           <li>
@@ -115,9 +119,25 @@ export function WorkspaceRail() {
             <TooltipContent side="right">Join with an invite</TooltipContent>
           </Tooltip>
         </li>
+        <li>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={() => setAddServerOpen(true)}
+                aria-label="Add a server on another domain"
+                className="flex size-12 items-center justify-center rounded-2xl bg-sidebar text-success transition-all hover:rounded-xl hover:bg-success hover:text-white focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+              >
+                <Globe className="size-5" aria-hidden />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="right">Add a server on another domain</TooltipContent>
+          </Tooltip>
+        </li>
       </ul>
       <CreateWorkspaceDialog open={createOpen} onOpenChange={setCreateOpen} />
       <JoinWorkspaceDialog open={joinOpen} onOpenChange={setJoinOpen} />
+      <AddServerDialog open={addServerOpen} onOpenChange={setAddServerOpen} />
     </nav>
   );
 }

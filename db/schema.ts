@@ -41,6 +41,8 @@ export const sessions = sqliteTable(
     expiresAt: timestamp("expires_at").notNull(),
     ipAddress: text("ip_address"),
     userAgent: text("user_agent"),
+    /** "linked" for a session another server uses for its server rail (see auth/linked.ts). */
+    scope: text("scope"),
     createdAt: timestamp("created_at").notNull(),
     updatedAt: timestamp("updated_at").notNull(),
   },

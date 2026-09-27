@@ -61,3 +61,10 @@ export function openExternalLinksInBrowser(): void {
     true,
   );
 }
+
+/** Calls one of the desktop app's commands. Rejects outside the app. */
+export function desktopInvoke<T = unknown>(command: string, args?: Record<string, unknown>): Promise<T> {
+  const t = tauri();
+  if (!t) return Promise.reject(new Error("Not in the desktop app"));
+  return t.core.invoke<T>(command, args);
+}
