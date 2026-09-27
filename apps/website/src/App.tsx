@@ -67,24 +67,15 @@ function Screenshots() {
       <p className="mt-2 text-muted-foreground">The same server on every device. Sign in to several servers and they share one list.</p>
 
       <figure className="mt-8">
-        <div className="overflow-hidden rounded-xl border border-border bg-card shadow-2xl">
-          <div className="flex items-center gap-1.5 border-b border-border px-4 py-2.5" aria-hidden>
-            <span className="size-2.5 rounded-full bg-accent" />
-            <span className="size-2.5 rounded-full bg-accent" />
-            <span className="size-2.5 rounded-full bg-accent" />
-          </div>
-          <img src="/screenshots/desktop.jpg" alt="Chat on the desktop: channels, a conversation and the member list" className="block w-full" width={2000} height={1250} loading="lazy" />
-        </div>
-        <figcaption className="mt-3 font-mono text-xs text-muted-foreground">Windows · macOS · Web</figcaption>
+        <img src="/screenshots/desktop.jpg" alt="Chat on the desktop: channels, a conversation and the member list" className="block w-full rounded-xl border border-border" width={2000} height={1250} loading="lazy" />
+        <figcaption className="mt-2 font-mono text-xs text-muted-foreground">Windows · macOS · Web</figcaption>
       </figure>
 
       <div className="mt-12 grid grid-cols-2 gap-6 lg:grid-cols-4">
         {phones.map((p) => (
           <figure key={p.src}>
-            <div className="overflow-hidden rounded-[2rem] border-4 border-accent bg-card shadow-xl">
-              <img src={p.src} alt={p.alt} className="block w-full" loading="lazy" />
-            </div>
-            <figcaption className="mt-3 text-center font-mono text-xs text-muted-foreground">{p.label}</figcaption>
+            <img src={p.src} alt={p.alt} className="block aspect-[9/19.5] w-full rounded-xl border border-border object-cover object-top" loading="lazy" />
+            <figcaption className="mt-2 font-mono text-xs text-muted-foreground">{p.label}</figcaption>
           </figure>
         ))}
       </div>
