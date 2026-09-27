@@ -45,4 +45,4 @@ To test a notification in the Simulator, drag an `.apns` file onto it or run `xc
 
 ## Not yet
 
-Threads, uploads, editing and deleting messages, and voice. Use the web app for these for now.
+Voice and video, files other than images, and pinning. Use the web app or desktop app for these for now.

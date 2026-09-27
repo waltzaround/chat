@@ -8,6 +8,12 @@ A Discord-style community chat application you can run yourself, built entirely 
 
 Workspaces contain categories, text channels, voice channels (with their own chat), members, roles with a permission bitfield, channel permission overwrites, invites, bans and an audit log. Text chat is realtime over one WebSocket per workspace; voice, video and screen sharing run on Cloudflare RealtimeKit with a fully custom media UI.
 
+It also has direct messages, threads, replies, reactions, pins, mentions, search, blocking and reporting, and push notifications.
+
+**Apps:** the web app (installable as a PWA), desktop apps for Windows and macOS (`apps/desktop`), and native apps for iOS (`apps/ios`) and Android (`apps/android`). Every app can sign in to several Chat servers at once, and all their workspaces share one server rail. Phone notifications go through a small push relay (`apps/push-relay`) that never sees message text.
+
+Licensed under the [GNU AGPL-3.0](LICENSE): you can run and change it freely. If you run a modified version as a service for others, you must publish your changes.
+
 ## Run your own server
 
 You need a Cloudflare account (the free plan is enough). If you don't have one, both options below let you sign up along the way. There is nothing to configure: the app generates its own auth secret and works on whatever URL it is deployed to.
@@ -84,8 +90,13 @@ worker/         Worker: Hono API, auth, permissions, Durable Object, uploads, qu
 shared/         Types, Zod schemas, WebSocket protocol and permission bitfield shared by both sides
 db/             Drizzle schema, D1 migrations (incl. FTS5), demo seed
 test/           Vitest (Workers pool): unit, API and realtime integration tests
-scripts/        RealtimeKit preset setup, Playwright smoke test
+scripts/        Setup, update, backup, recovery, RealtimeKit presets, Playwright smoke test
 public/         Static assets and `_headers` (CSP for the SPA)
+apps/desktop/   Tauri shell for Windows and macOS
+apps/ios/       SwiftUI app (and its notification extension)
+apps/android/   Kotlin and Jetpack Compose app
+apps/push-relay/ Worker that wakes phones through APNs and FCM
+apps/website/   Project website: setup guide, FAQ and troubleshooting
 ```
 
 ## Local development
@@ -140,7 +151,11 @@ Your first sign-up is a three-step setup: create your account, name your workspa
 - **Invite only** (the default for new servers). People need an invite link from any workspace to sign up. This covers Google/GitHub sign-up too.
 - **Anyone with the URL.** Open sign-up, protected by Turnstile and rate limits.
 
-The owner can change this later under User Settings → Server. Servers that already had accounts before this feature treat their earliest account as the owner and stay open.
+The owner can change this later under User Settings → Server. With open sign-up, people can also register in the iOS and Android apps; invite-only servers send them to their invite link. Servers that already had accounts before this feature treat their earliest account as the owner and stay open.
+
+### Your server's name, privacy policy and terms
+
+Under User Settings → Server the owner can set a name, description and icon, shown on the sign-in page and in the apps. The same tab edits the privacy policy and terms at `/privacy` and `/terms`. Until you change them, a template describing what the software stores is used. It is a starting point, not legal advice. The app stores require both pages.
 
 ### Updating
 
@@ -186,7 +201,7 @@ Both are Zod-validated discriminated unions in `shared/events.ts`.
 
 ## Not yet done
 
-- Native mobile apps (the web app installs to a phone's Home Screen and gets push notifications).
-- Group direct messages (DMs are one-to-one), and blocking people.
+- Voice and video in the iOS and Android apps (they use the web app or desktop app for now).
+- Group direct messages (DMs are one-to-one).
 - Passkeys (Better Auth plugin can be added without schema changes to the app tables).
 - Link unfurling and automated moderation (queue job types are typed but not implemented).
