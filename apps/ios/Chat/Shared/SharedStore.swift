@@ -2,7 +2,7 @@ import Foundation
 
 /// What the app shares with its notification service extension through the app group.
 enum SharedStore {
-    static let appGroup = "group.chat.beacon.ios"
+    static let appGroup = "group.chat.app.ios"
 
     static var defaults: UserDefaults { UserDefaults(suiteName: appGroup) ?? .standard }
 

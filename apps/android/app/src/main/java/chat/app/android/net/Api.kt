@@ -1,4 +1,4 @@
-package chat.beacon.android.net
+package chat.app.android.net
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -55,7 +55,7 @@ class ApiClient(val server: String, val token: String?) {
                     if (!res.isSuccessful) null else json.decodeFromString<InstanceInfo>(res.body!!.string())
                 }
             }.getOrNull()
-            if (info?.software != "beacon-chat") throw ApiException.NotAChatServer()
+            if (info?.software != "chat") throw ApiException.NotAChatServer()
             info
         }
 

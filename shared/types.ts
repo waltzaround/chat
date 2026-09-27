@@ -306,8 +306,8 @@ export interface ServerBranding {
 
 export interface InstanceInfo {
   server: ServerBranding;
-  /** Always "beacon-chat", so apps can tell they've found a server of this kind. */
-  software: "beacon-chat";
+  /** Always "chat", so apps can tell they've found a server of this kind. */
+  software: "chat";
   version: string;
   apiVersion: number;
   registration: RegistrationPolicy;

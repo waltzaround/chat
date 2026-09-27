@@ -18,7 +18,7 @@ const env: Env = {
   APNS_KEY: await pem(apple.privateKey),
   APNS_KEY_ID: "KEY123",
   APNS_TEAM_ID: "TEAM123",
-  APNS_TOPIC: "chat.beacon.ios",
+  APNS_TOPIC: "chat.app.ios",
   APNS_SANDBOX: "1",
   FCM_SERVICE_ACCOUNT: JSON.stringify({ client_email: "relay@proj.iam.gserviceaccount.com", private_key: await pem(google.privateKey), project_id: "proj" }),
 };
@@ -55,7 +55,7 @@ describe("relay", () => {
     expect(res.status).toBe(202);
     expect(calls[0]!.url).toBe("https://api.sandbox.push.apple.com/3/device/a1b2c3d4e5f6");
     const headers = calls[0]!.init.headers as Record<string, string>;
-    expect(headers["apns-topic"]).toBe("chat.beacon.ios");
+    expect(headers["apns-topic"]).toBe("chat.app.ios");
     const [h, p, s] = headers.authorization!.replace("bearer ", "").split(".");
     expect(JSON.parse(new TextDecoder().decode(fromBase64url(h!)))).toEqual({ alg: "ES256", kid: "KEY123" });
     expect(JSON.parse(new TextDecoder().decode(fromBase64url(p!)))).toMatchObject({ iss: "TEAM123" });

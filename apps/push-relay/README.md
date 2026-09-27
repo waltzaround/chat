@@ -28,7 +28,7 @@ Keep `RELAY_KEY` safe. Changing it invalidates every push key, so every phone ha
 
 ### Android (FCM)
 
-1. Create a Firebase project and add the Android app (`chat.beacon.android`).
+1. Create a Firebase project and add the Android app (`chat.app.android`).
 2. Put its `google-services.json` in `apps/android/app/`. The file is git-ignored.
 3. Create a service account with the Firebase Messaging API enabled. Set its JSON as the `FCM_SERVICE_ACCOUNT` secret.
 4. Build the app with `./gradlew assembleRelease -PchatPushRelay=https://your-relay.workers.dev`.

@@ -1,4 +1,4 @@
-package chat.beacon.android.net
+package chat.app.android.net
 
 import kotlinx.serialization.Serializable
 import java.time.Duration

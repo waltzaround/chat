@@ -1,4 +1,4 @@
-package chat.beacon.android.ui
+package chat.app.android.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -56,7 +56,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import chat.beacon.android.data.AppState
+import chat.app.android.data.AppState
 import kotlinx.coroutines.launch
 
 /**
@@ -168,8 +168,8 @@ private fun SignIn(state: AppState, server: String, onBack: () -> Unit, onDone: 
     }
 
     AuthScaffold(onBack = onBack, backLabel = "Use a different server") {
-        var branding by remember { mutableStateOf<chat.beacon.android.net.ServerBranding?>(null) }
-        androidx.compose.runtime.LaunchedEffect(server) { branding = runCatching { chat.beacon.android.net.ApiClient.instance(server).server }.getOrNull() }
+        var branding by remember { mutableStateOf<chat.app.android.net.ServerBranding?>(null) }
+        androidx.compose.runtime.LaunchedEffect(server) { branding = runCatching { chat.app.android.net.ApiClient.instance(server).server }.getOrNull() }
         ServerCard(server, branding)
         Spacer(Modifier.height(24.dp))
         Text("Log in to continue", color = Palette.muted, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.fillMaxWidth())
@@ -200,7 +200,7 @@ private fun SignIn(state: AppState, server: String, onBack: () -> Unit, onDone: 
  * address. Servers without a name show their address.
  */
 @Composable
-private fun ServerCard(server: String, branding: chat.beacon.android.net.ServerBranding?) {
+private fun ServerCard(server: String, branding: chat.app.android.net.ServerBranding?) {
     val host = server.substringAfter("://")
     val name = branding?.name ?: host
     Row(
@@ -215,7 +215,7 @@ private fun ServerCard(server: String, branding: chat.beacon.android.net.ServerB
                 else Icon(Icons.Filled.Forum, contentDescription = null, tint = Palette.onAccent)
             }
         }
-        RemoteImage(branding?.iconUrl, chat.beacon.android.net.ApiClient(server, null), Modifier.size(56.dp).clip(RoundedCornerShape(17.dp))) { placeholder() }
+        RemoteImage(branding?.iconUrl, chat.app.android.net.ApiClient(server, null), Modifier.size(56.dp).clip(RoundedCornerShape(17.dp))) { placeholder() }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Text(name, color = Palette.heading, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             branding?.description?.let { Text(it, color = Palette.text, style = MaterialTheme.typography.bodyMedium) }

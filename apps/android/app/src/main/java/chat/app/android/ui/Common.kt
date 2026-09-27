@@ -1,4 +1,4 @@
-package chat.beacon.android.ui
+package chat.app.android.ui
 
 import android.content.Context
 import android.net.Uri
@@ -44,9 +44,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.platform.LocalDensity
-import chat.beacon.android.R
-import chat.beacon.android.net.ApiClient
-import chat.beacon.android.net.UserSummary
+import chat.app.android.R
+import chat.app.android.net.ApiClient
+import chat.app.android.net.UserSummary
 import coil.compose.SubcomposeAsyncImage
 import coil.request.ImageRequest
 

@@ -21,7 +21,7 @@ import { extractJson } from "./onboard-config.ts";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const wranglerBin = path.join(root, "node_modules", ".bin", "wrangler");
 const MIGRATIONS = path.join(root, "db", "migrations");
-const HEADER = "-- Beacon backup";
+const HEADER = "-- Chat backup";
 
 const HELP = `Back up or restore the database.
 
@@ -77,7 +77,8 @@ function restore(flags: Flags): void {
   const file = path.resolve(flags.file);
   if (!existsSync(file)) fail(`No file at ${flags.file}.`);
   const text = readFileSync(file, "utf8");
-  if (!text.startsWith(HEADER)) fail("That file was not made by npm run backup.");
+  // Backups made before the rename say "Beacon".
+  if (!text.startsWith(HEADER) && !text.startsWith("-- Beacon backup")) fail("That file was not made by npm run backup.");
   const schema = /^-- schema: (\S+)/m.exec(text)?.[1];
   const known = readdirSync(MIGRATIONS).filter((f) => f.endsWith(".sql"));
   if (schema && schema !== "unknown" && !known.includes(schema)) {

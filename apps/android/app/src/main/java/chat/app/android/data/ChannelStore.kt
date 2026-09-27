@@ -1,17 +1,17 @@
-package chat.beacon.android.data
+package chat.app.android.data
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import chat.beacon.android.net.ApiClient
-import chat.beacon.android.net.ApiException
-import chat.beacon.android.net.Message
-import chat.beacon.android.net.MessagePage
-import chat.beacon.android.net.PendingMessage
-import chat.beacon.android.net.Reaction
-import chat.beacon.android.net.RealtimeSocket
-import chat.beacon.android.net.json
+import chat.app.android.net.ApiClient
+import chat.app.android.net.ApiException
+import chat.app.android.net.Message
+import chat.app.android.net.MessagePage
+import chat.app.android.net.PendingMessage
+import chat.app.android.net.Reaction
+import chat.app.android.net.RealtimeSocket
+import chat.app.android.net.json
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow

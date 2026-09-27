@@ -1,4 +1,4 @@
-package chat.beacon.android.ui
+package chat.app.android.ui
 
 import android.content.Intent
 import androidx.compose.animation.core.animateDpAsState
@@ -82,22 +82,22 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import chat.beacon.android.data.Account
-import chat.beacon.android.data.AccountDm
-import chat.beacon.android.data.AppState
-import chat.beacon.android.data.HomeModel
-import chat.beacon.android.data.Selection
-import chat.beacon.android.net.ApiClient
-import chat.beacon.android.net.Channel
-import chat.beacon.android.net.ChatDate
-import chat.beacon.android.net.CurrentUser
-import chat.beacon.android.net.Invite
-import chat.beacon.android.net.OpenedDm
-import chat.beacon.android.net.SearchResponse
-import chat.beacon.android.net.SearchResult
-import chat.beacon.android.net.UserSummary
-import chat.beacon.android.net.WorkspaceDetail
-import chat.beacon.android.net.WorkspaceSummary
+import chat.app.android.data.Account
+import chat.app.android.data.AccountDm
+import chat.app.android.data.AppState
+import chat.app.android.data.HomeModel
+import chat.app.android.data.Selection
+import chat.app.android.net.ApiClient
+import chat.app.android.net.Channel
+import chat.app.android.net.ChatDate
+import chat.app.android.net.CurrentUser
+import chat.app.android.net.Invite
+import chat.app.android.net.OpenedDm
+import chat.app.android.net.SearchResponse
+import chat.app.android.net.SearchResult
+import chat.app.android.net.UserSummary
+import chat.app.android.net.WorkspaceDetail
+import chat.app.android.net.WorkspaceSummary
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.buildJsonObject
@@ -361,7 +361,7 @@ private fun ChannelListPanel(
                             try {
                                 val invite = api!!.send<Invite>("/api/workspaces/${workspace.id}/invites", "POST", buildJsonObject { })
                                 context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, invite.url), "Invite to ${workspace.name}"))
-                            } catch (e: chat.beacon.android.net.ApiException.SignedOut) {
+                            } catch (e: chat.app.android.net.ApiException.SignedOut) {
                                 onSignedOut()
                             } catch (e: Exception) {
                                 openInBrowser(context, "$server/w/${workspace.id}")
@@ -618,7 +618,7 @@ private fun NewMessageSheet(state: AppState, onDismiss: () -> Unit, open: (Accou
                                 try {
                                     val api = state.api(server)!!
                                     val opened = api.send<OpenedDm>("/api/dms", "POST", buildJsonObject { put("userId", user.id) })
-                                    open(AccountDm(server, chat.beacon.android.net.DirectMessage(opened.workspaceId, opened.channelId, user, null, 0, null)))
+                                    open(AccountDm(server, chat.app.android.net.DirectMessage(opened.workspaceId, opened.channelId, user, null, 0, null)))
                                 } catch (e: Exception) {
                                     error = e.message
                                 }

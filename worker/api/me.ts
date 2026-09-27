@@ -38,7 +38,7 @@ async function branding(db: D1Database): Promise<ServerBranding> {
 meRoutes.get("/instance", async (c) => {
   const body: InstanceInfo = {
     server: await branding(c.env.DB),
-    software: "beacon-chat",
+    software: "chat",
     version: APP_VERSION,
     apiVersion: API_VERSION,
     registration: await registrationPolicy(c.env.DB),

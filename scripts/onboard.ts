@@ -378,7 +378,7 @@ async function ensureQueue(answers: Answers): Promise<void> {
 }
 
 async function configureCors(bucket: string, origins: string[], accountId: string): Promise<void> {
-  const file = path.join(tmpdir(), `beacon-r2-cors-${process.pid}.json`);
+  const file = path.join(tmpdir(), `chat-r2-cors-${process.pid}.json`);
   const body = {
     rules: [{ allowed: { origins, methods: ["PUT"], headers: ["Content-Type"] }, maxAgeSeconds: 3600 }],
   };
@@ -456,7 +456,7 @@ async function deployApp(answers: Answers, interactive: boolean, secrets: Record
   if (answers.migrate) await applyMigrations(answers.accountId);
 
   const names = Object.keys(secrets);
-  const file = path.join(tmpdir(), `beacon-secrets-${process.pid}.json`);
+  const file = path.join(tmpdir(), `chat-secrets-${process.pid}.json`);
   const args = ["deploy"];
   if (names.length) {
     writeFileSync(file, JSON.stringify(secrets), { mode: 0o600 });

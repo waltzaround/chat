@@ -8,7 +8,7 @@
   "observability": { "enabled": true },
   "vars": {
     // The iOS app's bundle id, and "1" while testing with development builds.
-    "APNS_TOPIC": "chat.beacon.ios",
+    "APNS_TOPIC": "chat.app.ios",
     "APNS_SANDBOX": "0"
   }
   // Secrets (wrangler secret put …):

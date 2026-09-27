@@ -11,7 +11,7 @@ const native = (path: string, init: RequestInit = {}) => SELF.fetch(`${ORIGIN}${
 describe("native app support", () => {
   it("identifies the server before sign-in", async () => {
     const info = (await (await native("/api/instance")).json()) as InstanceInfo;
-    expect(info).toMatchObject({ software: "beacon-chat", version: pkg.version, apiVersion: 1 });
+    expect(info).toMatchObject({ software: "chat", version: pkg.version, apiVersion: 1 });
     expect(APP_VERSION).toBe(pkg.version);
   });
 

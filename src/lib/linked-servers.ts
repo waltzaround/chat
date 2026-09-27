@@ -108,7 +108,7 @@ export async function checkChatServer(origin: string): Promise<InstanceInfo> {
   } catch {
     info = null;
   }
-  if (info?.software !== "beacon-chat") throw new Error("That address isn't a Chat server, or it can't be reached.");
+  if (info?.software !== "chat") throw new Error("That address isn't a Chat server, or it can't be reached.");
   return info;
 }
 

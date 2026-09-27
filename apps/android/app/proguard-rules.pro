@@ -1,6 +1,6 @@
 # kotlinx.serialization keeps its generated serializers.
 -keepattributes *Annotation*, InnerClasses
--keepclassmembers @kotlinx.serialization.Serializable class chat.beacon.android.** {
+-keepclassmembers @kotlinx.serialization.Serializable class chat.app.android.** {
     *** Companion;
     kotlinx.serialization.KSerializer serializer(...);
 }

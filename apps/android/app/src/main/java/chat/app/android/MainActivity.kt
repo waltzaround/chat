@@ -1,11 +1,11 @@
-package chat.beacon.android
+package chat.app.android
 
 import android.Manifest
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.result.contract.ActivityResultContracts
-import chat.beacon.android.push.Push
+import chat.app.android.push.Push
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
@@ -23,14 +23,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
-import chat.beacon.android.data.AppState
-import chat.beacon.android.data.HomeModel
-import chat.beacon.android.ui.AddAccountFlow
-import chat.beacon.android.ui.ChannelRoute
-import chat.beacon.android.ui.ChannelScreen
-import chat.beacon.android.ui.ChatTheme
-import chat.beacon.android.ui.HomeScreen
-import chat.beacon.android.ui.openInBrowser
+import chat.app.android.data.AppState
+import chat.app.android.data.HomeModel
+import chat.app.android.ui.AddAccountFlow
+import chat.app.android.ui.ChannelRoute
+import chat.app.android.ui.ChannelScreen
+import chat.app.android.ui.ChatTheme
+import chat.app.android.ui.HomeScreen
+import chat.app.android.ui.openInBrowser
 
 class MainActivity : ComponentActivity() {
     private val state: AppState by viewModels()

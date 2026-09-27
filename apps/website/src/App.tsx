@@ -143,7 +143,7 @@ export function App() {
 
           <h3 className="mt-4 mb-2 text-lg font-semibold">Option 2: from your terminal</h3>
           <p className="text-muted-foreground">Needs Node.js 22 or newer and git.</p>
-          <Code>{`git clone ${REPO}.git && cd beacon
+          <Code>{`git clone ${REPO}.git chat && cd chat
 npm install
 npm run setup`}</Code>
           <p className="mt-3 text-muted-foreground">
@@ -214,7 +214,7 @@ npm run backup   # save the database to backups/`}</Code>
               <p>The auth secret changed (for example, a new <code>BETTER_AUTH_SECRET</code> or a fresh database). Everyone just needs to sign in again.</p>
             </Question>
             <Question q="The app says “That address isn't a Chat server”">
-              <p>Check the address in a browser: <code>https://your-server/api/instance</code> should show <code>beacon-chat</code>. If it doesn't load, the server is down or the address is wrong. Older servers need <code>npm run update</code> and a deploy.</p>
+              <p>Check the address in a browser: <code>https://your-server/api/instance</code> should show <code>"software": "chat"</code>. If it doesn't load, the server is down or the address is wrong. Older servers need <code>npm run update</code> and a deploy.</p>
             </Question>
             <Question q="The update pull request never appears">
               <p>In your repo's Settings → Actions → General, turn on <strong>Allow GitHub Actions to create and approve pull requests</strong>.</p>

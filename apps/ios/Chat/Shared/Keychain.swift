@@ -4,7 +4,7 @@ import Security
 /// Session tokens live in the Keychain, one per server, in the app group's access group
 /// so the notification service extension can fetch what a push is about.
 enum Keychain {
-    private static let service = "chat.beacon.ios.session"
+    private static let service = "chat.app.ios.session"
 
     static func token(for server: URL) -> String? {
         if let token = read(server, group: SharedStore.appGroup) { return token }

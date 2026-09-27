@@ -1,4 +1,4 @@
-package chat.beacon.android.data
+package chat.app.android.data
 
 import android.app.Application
 import android.content.Context
@@ -7,10 +7,10 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
-import chat.beacon.android.net.ApiClient
-import chat.beacon.android.net.ApiException
-import chat.beacon.android.net.CurrentUser
-import chat.beacon.android.net.json
+import chat.app.android.net.ApiClient
+import chat.app.android.net.ApiException
+import chat.app.android.net.CurrentUser
+import chat.app.android.net.json
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -82,7 +82,7 @@ class AppState(app: Application) : AndroidViewModel(app) {
     }
 
     /** Syncs push registration with every signed-in server. */
-    fun syncPush() = chat.beacon.android.push.Push.sync(getApplication(), _accounts.value.map { it.server to it.token })
+    fun syncPush() = chat.app.android.push.Push.sync(getApplication(), _accounts.value.map { it.server to it.token })
 
     private fun remove(server: String) {
         _accounts.update { list -> list.filterNot { it.server == server } }

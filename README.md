@@ -28,7 +28,7 @@ If the deploy stops with an R2 error, open **R2** in the Cloudflare dashboard on
 Needs Node.js 22 or newer and git.
 
 ```bash
-git clone https://github.com/waltzaround/beacon.git && cd beacon
+git clone https://github.com/waltzaround/beacon.git chat && cd chat
 npm install
 npm run setup
 ```
@@ -91,7 +91,7 @@ public/         Static assets and `_headers` (CSP for the SPA)
 ## Local development
 
 ```bash
-git clone https://github.com/waltzaround/beacon.git && cd beacon
+git clone https://github.com/waltzaround/beacon.git chat && cd chat
 npm install
 npm run db:migrate                  # applies db/migrations to the local D1
 npm run db:seed                     # optional demo data (see below)

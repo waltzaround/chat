@@ -20,7 +20,9 @@ import { fileURLToPath } from "node:url";
 import { carryOverDeployment } from "./onboard-config.ts";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const MANIFEST = ".beacon-upstream.json";
+const MANIFEST = ".chat-upstream.json";
+/** What the manifest was called before the rename; read once, then replaced. */
+const LEGACY_MANIFEST = ".beacon-upstream.json";
 const DEFAULT_REPO = "waltzaround/beacon";
 
 const HELP = `Bring this copy up to date with upstream.
@@ -73,7 +75,7 @@ function main(): void {
   }
 
   for (const file of upstream.files) {
-    if (file === MANIFEST) continue;
+    if (file === MANIFEST || file === LEGACY_MANIFEST) continue;
     const target = path.join(root, file);
     mkdirSync(path.dirname(target), { recursive: true });
     if (file === "wrangler.jsonc" && existsSync(target)) {
@@ -90,6 +92,7 @@ function main(): void {
 
   const manifest: Manifest = { repo: flags.repo, commit: upstream.commit, files: upstream.files.filter((f) => f !== MANIFEST).sort() };
   writeFileSync(path.join(root, MANIFEST), `${JSON.stringify(manifest, null, 2)}\n`);
+  rmSync(path.join(root, LEGACY_MANIFEST), { force: true });
   upstream.cleanup();
 
   const changed = git(["status", "--porcelain"]).trim().split("\n").filter(Boolean);
@@ -133,7 +136,7 @@ function download(repo: string, ref: string, currentCommit: string | undefined):
   if (commit === currentCommit) return null;
 
   // A shallow clone uses your git credentials, so a private upstream works too.
-  const work = mkdtempSync(path.join(tmpdir(), "beacon-update-"));
+  const work = mkdtempSync(path.join(tmpdir(), "chat-update-"));
   const dir = path.join(work, "src");
   const cloned = spawnSync("git", ["clone", "--quiet", "--depth", "1", "--branch", ref, `https://github.com/${repo}.git`, dir], { stdio: ["ignore", "ignore", "pipe"], encoding: "utf8" });
   if (cloned.status !== 0) fail(`Could not download ${repo}@${ref}.\n${cloned.stderr.trim()}`);
@@ -150,8 +153,11 @@ function fromLocal(dir: string): Upstream {
 }
 
 function readManifest(): Manifest | null {
-  const file = path.join(root, MANIFEST);
-  return existsSync(file) ? (JSON.parse(readFileSync(file, "utf8")) as Manifest) : null;
+  for (const name of [MANIFEST, LEGACY_MANIFEST]) {
+    const file = path.join(root, name);
+    if (existsSync(file)) return JSON.parse(readFileSync(file, "utf8")) as Manifest;
+  }
+  return null;
 }
 
 function git(args: string[]): string {

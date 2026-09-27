@@ -174,7 +174,7 @@ async fn verify_server(input: &str) -> Result<String, String> {
         .await
         .map_err(|_| format!("Couldn't reach {origin}. Check the address and your connection."))?;
     let info: serde_json::Value = response.json().await.map_err(|_| format!("{origin} isn't a Chat server."))?;
-    if info.get("software").and_then(|v| v.as_str()) != Some("beacon-chat") {
+    if info.get("software").and_then(|v| v.as_str()) != Some("chat") {
         return Err(format!("{origin} isn't a Chat server."));
     }
     Ok(origin)

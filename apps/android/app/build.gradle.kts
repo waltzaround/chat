@@ -6,11 +6,11 @@ plugins {
 }
 
 android {
-    namespace = "chat.beacon.android"
+    namespace = "chat.app.android"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "chat.beacon.android"
+        applicationId = "chat.app.android"
         minSdk = 26
         targetSdk = 35
         versionCode = 1

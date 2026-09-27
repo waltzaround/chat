@@ -32,7 +32,7 @@ jobs:
             echo "Already up to date."
             exit 0
           fi
-          commit=$(node -p "require('./.beacon-upstream.json').commit.slice(0, 7)")
+          commit=$(node -p "require('./.chat-upstream.json').commit.slice(0, 7)")
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git switch -C upstream-update

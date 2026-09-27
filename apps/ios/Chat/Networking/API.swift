@@ -43,7 +43,7 @@ struct APIClient {
     /// Checks the address answers as a Chat server before anyone signs in.
     static func instance(at server: URL) async throws -> InstanceInfo {
         let (data, response) = try await session.data(from: server.appending(path: "api/instance"))
-        guard (response as? HTTPURLResponse)?.statusCode == 200, let info = try? JSONDecoder().decode(InstanceInfo.self, from: data), info.software == "beacon-chat" else {
+        guard (response as? HTTPURLResponse)?.statusCode == 200, let info = try? JSONDecoder().decode(InstanceInfo.self, from: data), info.software == "chat" else {
             throw APIError.notAChatServer
         }
         return info

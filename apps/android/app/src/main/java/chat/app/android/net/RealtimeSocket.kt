@@ -1,4 +1,4 @@
-package chat.beacon.android.net
+package chat.app.android.net
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job

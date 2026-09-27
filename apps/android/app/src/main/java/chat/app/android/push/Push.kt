@@ -1,4 +1,4 @@
-package chat.beacon.android.push
+package chat.app.android.push
 
 import android.Manifest
 import android.app.NotificationChannel
@@ -11,11 +11,11 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
-import chat.beacon.android.BuildConfig
-import chat.beacon.android.MainActivity
-import chat.beacon.android.R
-import chat.beacon.android.net.ApiClient
-import chat.beacon.android.net.json
+import chat.app.android.BuildConfig
+import chat.app.android.MainActivity
+import chat.app.android.R
+import chat.app.android.net.ApiClient
+import chat.app.android.net.json
 import com.google.firebase.FirebaseApp
 import com.google.firebase.messaging.FirebaseMessaging
 import com.google.firebase.messaging.FirebaseMessagingService
@@ -114,7 +114,7 @@ private data class PendingPush(
 
 /** Reads the app's saved session for one server. */
 private object SessionReader {
-    fun token(context: Context, server: String): String? = chat.beacon.android.data.AppState.tokens(context)[server]
+    fun token(context: Context, server: String): String? = chat.app.android.data.AppState.tokens(context)[server]
 }
 
 class PushService : FirebaseMessagingService() {

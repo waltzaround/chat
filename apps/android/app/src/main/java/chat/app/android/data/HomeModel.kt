@@ -1,12 +1,12 @@
-package chat.beacon.android.data
+package chat.app.android.data
 
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import chat.beacon.android.net.ApiException
-import chat.beacon.android.net.DirectMessage
-import chat.beacon.android.net.WorkspaceDetail
-import chat.beacon.android.net.WorkspaceSummary
+import chat.app.android.net.ApiException
+import chat.app.android.net.DirectMessage
+import chat.app.android.net.WorkspaceDetail
+import chat.app.android.net.WorkspaceSummary
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow

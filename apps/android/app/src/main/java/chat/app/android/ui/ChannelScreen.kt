@@ -1,4 +1,4 @@
-package chat.beacon.android.ui
+package chat.app.android.ui
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -85,14 +85,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import chat.beacon.android.data.AppState
-import chat.beacon.android.data.ChannelStore
-import chat.beacon.android.net.ApiClient
-import chat.beacon.android.net.ChatDate
-import chat.beacon.android.net.CurrentUser
-import chat.beacon.android.net.Message
-import chat.beacon.android.net.PendingMessage
-import chat.beacon.android.net.Reaction
+import chat.app.android.data.AppState
+import chat.app.android.data.ChannelStore
+import chat.app.android.net.ApiClient
+import chat.app.android.net.ChatDate
+import chat.app.android.net.CurrentUser
+import chat.app.android.net.Message
+import chat.app.android.net.PendingMessage
+import chat.app.android.net.Reaction
 import java.time.Duration
 
 private val QUICK_REACTIONS = listOf("👍", "❤️", "😂", "😮", "😢", "🎉")
