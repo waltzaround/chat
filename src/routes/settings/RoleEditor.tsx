@@ -248,7 +248,7 @@ function RoleForm({ role, workspaceId, onMove, onDelete }: { role: Role; workspa
           <div className="relative size-6">
             <input
               type="color"
-              value={colour ?? "#5865f2"}
+              value={colour ?? "#3498db"}
               onChange={(e) => { setColour(e.target.value); setDirty(true); }}
               className="absolute inset-0 size-full cursor-pointer rounded-full opacity-0"
               aria-label="Custom colour"

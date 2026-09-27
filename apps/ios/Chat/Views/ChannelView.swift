@@ -31,14 +31,14 @@ struct ChannelView: View {
         .toolbarBackground(Theme.chat, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
         .toolbar {
-            ToolbarItem(placement: .principal) {
+            ToolbarItem(placement: .topBarLeading) {
                 HStack(spacing: 8) {
                     if let peer {
                         Avatar(user: peer, size: 24)
                     } else {
                         Image(systemName: "number").font(.callout.weight(.semibold)).foregroundStyle(Theme.faint)
                     }
-                    Text(title).font(.headline).foregroundStyle(Theme.heading).lineLimit(1)
+                    Text(title).font(.app(.headline)).foregroundStyle(Theme.heading).lineLimit(1)
                 }
                 .accessibilityElement(children: .combine)
             }
@@ -126,8 +126,8 @@ struct ChannelView: View {
         VStack(alignment: .leading, spacing: 8) {
             if let peer {
                 Avatar(user: peer, size: 80)
-                Text(peer.displayName).font(.title.bold()).foregroundStyle(Theme.heading)
-                Text("@\(peer.username)").font(.title3).foregroundStyle(Theme.text)
+                Text(peer.displayName).font(.app(.title, weight: .bold)).foregroundStyle(Theme.heading)
+                Text("@\(peer.username)").font(.app(.title3)).foregroundStyle(Theme.text)
                 Text("This is the beginning of your direct message history with \(peer.displayName).")
                     .foregroundStyle(Theme.muted)
             } else {
@@ -136,7 +136,7 @@ struct ChannelView: View {
                     .foregroundStyle(.white)
                     .frame(width: 68, height: 68)
                     .background(Circle().fill(Theme.raised))
-                Text("Welcome to #\(title)!").font(.title.bold()).foregroundStyle(Theme.heading)
+                Text("Welcome to #\(title)!").font(.app(.title, weight: .bold)).foregroundStyle(Theme.heading)
                 Text("This is the start of the #\(title) channel.").foregroundStyle(Theme.muted)
             }
         }
@@ -150,14 +150,14 @@ struct ChannelView: View {
         return VStack(spacing: 0) {
             if let replyingTo {
                 HStack(spacing: 6) {
-                    Text("Replying to ").foregroundStyle(Theme.muted) + Text(replyingTo.author.name).bold().foregroundStyle(Theme.text)
+                    Text("Replying to ").foregroundStyle(Theme.muted) + Text(replyingTo.author.name).font(.app(.footnote, weight: .bold)).foregroundStyle(Theme.text)
                     Spacer()
                     Button { self.replyingTo = nil } label: {
                         Image(systemName: "xmark.circle.fill").foregroundStyle(Theme.muted)
                     }
                     .accessibilityLabel("Cancel reply")
                 }
-                .font(.footnote)
+                .font(.app(.footnote))
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
                 .background(Theme.panel)
@@ -179,7 +179,7 @@ struct ChannelView: View {
                     } label: {
                         Image(systemName: "paperplane.fill")
                             .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(Theme.onAccent)
                             .frame(width: 40, height: 40)
                             .background(Circle().fill(Theme.accent))
                     }
@@ -234,7 +234,7 @@ struct MessageActions: View {
                         dismiss()
                     } label: {
                         Text(emoji)
-                            .font(.system(size: 26))
+                            .font(.app(size: 26))
                             .frame(width: 48, height: 48)
                             .background(Circle().fill(Theme.rail))
                     }
@@ -267,7 +267,7 @@ struct MessageActions: View {
                 Text(title).foregroundStyle(Theme.heading)
                 Spacer()
             }
-            .font(.body.weight(.medium))
+            .font(.app(.body, weight: .medium))
             .padding(.horizontal, 16)
             .frame(minHeight: 52)
             .contentShape(Rectangle())
@@ -281,7 +281,7 @@ struct DaySeparator: View {
     var body: some View {
         HStack(spacing: 8) {
             Rectangle().fill(Theme.raised).frame(height: 1)
-            Text(ChatDate.day(date)).font(.caption.weight(.semibold)).foregroundStyle(Theme.faint).fixedSize()
+            Text(ChatDate.day(date)).font(.app(.caption, weight: .semibold)).foregroundStyle(Theme.faint).fixedSize()
             Rectangle().fill(Theme.raised).frame(height: 1)
         }
         .padding(.horizontal, 16)

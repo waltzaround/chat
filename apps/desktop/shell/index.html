@@ -3,17 +3,24 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
     <title>Chat</title>
     <link rel="stylesheet" href="shell.css" />
   </head>
   <body>
-    <main>
-      <img src="icon.svg" alt="" class="logo" />
-      <h1>Connect to your server</h1>
-      <p class="lead">Enter the address you use for Chat in your browser.</p>
+    <main class="card">
+      <div class="header">
+        <img src="icon.svg" alt="" class="logo" />
+        <div>
+          <h1>Connect to your server</h1>
+          <p class="subtitle">Enter the address you use for Chat in your browser.</p>
+        </div>
+      </div>
       <form id="form" novalidate>
-        <label for="server">Server address</label>
-        <input id="server" name="server" type="text" inputmode="url" autocomplete="url" autocapitalize="off" spellcheck="false" placeholder="chat.example.com" required autofocus />
+        <div class="field">
+          <label for="server">Server address</label>
+          <input id="server" name="server" type="text" inputmode="url" autocomplete="url" autocapitalize="off" spellcheck="false" placeholder="chat.example.com" required autofocus />
+        </div>
         <p id="error" role="alert" hidden></p>
         <button id="connect" type="submit">Connect</button>
       </form>

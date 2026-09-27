@@ -97,7 +97,7 @@ export const MessageItem = memo(function MessageItem({
     return (
       <div className={cn("px-4 py-1 text-xs text-muted-foreground", !compact && "mt-3")} id={`m-${message.sequence}`}>
         Message from someone you blocked.{" "}
-        <button type="button" className="text-primary hover:underline" onClick={() => setRevealed(true)}>
+        <button type="button" className="link" onClick={() => setRevealed(true)}>
           Show message
         </button>
       </div>
@@ -359,7 +359,7 @@ export function PendingMessageItem({ pending, compact, me }: { pending: PendingM
               <>
                 <AlertCircle className="size-3.5 text-destructive" aria-hidden />
                 <span className="text-destructive">{pending.error ?? "Failed to send"}.</span>
-                <button type="button" className="font-medium text-primary hover:underline" onClick={() => rt.retryMessage(pending.clientMessageId)}>
+                <button type="button" className="link font-medium" onClick={() => rt.retryMessage(pending.clientMessageId)}>
                   Retry
                 </button>
                 <button type="button" className="text-muted-foreground hover:underline" onClick={() => rt.discardMessage(pending.clientMessageId)}>

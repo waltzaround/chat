@@ -22,7 +22,8 @@ use tauri::{
     ipc::CapabilityBuilder,
     menu::{Menu, MenuItem},
     tray::TrayIconBuilder,
-    AppHandle, Manager, RunEvent, Url, WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent,
+    window::Color,
+    AppHandle, Manager, RunEvent, Theme, Url, WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent,
 };
 use tauri_plugin_deep_link::DeepLinkExt;
 use tauri_plugin_opener::OpenerExt;
@@ -253,6 +254,15 @@ fn set_unread(app: AppHandle, count: u32) -> Result<(), String> {
     Ok(())
 }
 
+/// The web app's rail colour for the system theme. It shows before a page paints and
+/// between pages, so it matches the launcher and the sign-in screen.
+fn window_background(theme: Theme) -> Color {
+    match theme {
+        Theme::Light => Color(231, 231, 234, 255),
+        _ => Color(11, 11, 13, 255),
+    }
+}
+
 fn main_window(app: &AppHandle) -> Result<WebviewWindow, String> {
     app.get_webview_window(MAIN).ok_or_else(|| "The main window is gone".to_string())
 }
@@ -343,7 +353,7 @@ pub fn run() {
             let guard_server = server.clone();
             let guard_accounts = accounts.clone();
             let guard_app = handle.clone();
-            WebviewWindowBuilder::new(app, MAIN, start)
+            let window = WebviewWindowBuilder::new(app, MAIN, start)
                 .title("Chat")
                 .inner_size(1200.0, 800.0)
                 .min_inner_size(420.0, 520.0)
@@ -362,6 +372,9 @@ pub fn run() {
                     false
                 })
                 .build()?;
+            if let Ok(theme) = window.theme() {
+                let _ = window.set_background_color(Some(window_background(theme)));
+            }
 
             // Tray: reopen the window, switch servers, or quit for real.
             let open = MenuItem::with_id(app, "open", "Open Chat", true, None::<&str>)?;
@@ -399,11 +412,17 @@ pub fn run() {
         })
         // Closing the window hides it, so notifications keep coming; Quit from the tray
         // (or Cmd+Q) exits.
-        .on_window_event(|window, event| {
-            if let WindowEvent::CloseRequested { api, .. } = event {
+        .on_window_event(|window, event| match event {
+            WindowEvent::CloseRequested { api, .. } => {
                 api.prevent_close();
                 let _ = window.hide();
             }
+            WindowEvent::ThemeChanged(theme) => {
+                if let Some(webview) = window.app_handle().get_webview_window(window.label()) {
+                    let _ = webview.set_background_color(Some(window_background(*theme)));
+                }
+            }
+            _ => {}
         })
         .build(tauri::generate_context!())
         .expect("error while building the app")

@@ -240,7 +240,7 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
               canRegister ? (
                 <>
                   New here?{" "}
-                  <Link className="text-primary hover:underline" to={`/register${nextQuery}`}>
+                  <Link className="link" to={`/register${nextQuery}`}>
                     Create an account
                   </Link>
                 </>
@@ -250,7 +250,7 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
             ) : (
               <>
                 Already have an account?{" "}
-                <Link className="text-primary hover:underline" to={`/login${nextQuery}`}>
+                <Link className="link" to={`/login${nextQuery}`}>
                   Sign in
                 </Link>
               </>

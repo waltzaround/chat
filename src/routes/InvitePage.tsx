@@ -80,7 +80,7 @@ export function InvitePage() {
             {!signedIn && !me.isPending ? (
               <p className="mt-3 text-xs text-muted-foreground">
                 Already have an account?{" "}
-                <button type="button" className="text-primary hover:underline" onClick={() => navigate(`/login?next=${encodeURIComponent(`/invite/${code}`)}`)}>
+                <button type="button" className="link" onClick={() => navigate(`/login?next=${encodeURIComponent(`/invite/${code}`)}`)}>
                   Sign in
                 </button>
               </p>

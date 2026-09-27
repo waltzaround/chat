@@ -41,15 +41,15 @@ struct SearchSheet: View {
                     ForEach(results) { result in
                         Button { open(result) } label: {
                             VStack(alignment: .leading, spacing: 6) {
-                                Text("#\(result.channelName)").font(.caption.weight(.semibold)).foregroundStyle(Theme.muted)
+                                Text("#\(result.channelName)").font(.app(.caption, weight: .semibold)).foregroundStyle(Theme.muted)
                                 HStack(alignment: .top, spacing: 10) {
                                     Avatar(user: UserSummary(id: result.message.author.id, username: result.message.author.username, displayName: result.message.author.name, avatarUrl: result.message.author.avatarUrl), size: 32, server: server)
                                     VStack(alignment: .leading, spacing: 2) {
                                         HStack(spacing: 6) {
-                                            Text(result.message.author.name).font(.subheadline.weight(.semibold)).foregroundStyle(Theme.heading)
-                                            Text(ChatDate.label(result.message.createdAt)).font(.caption2).foregroundStyle(Theme.faint)
+                                            Text(result.message.author.name).font(.app(.subheadline, weight: .semibold)).foregroundStyle(Theme.heading)
+                                            Text(ChatDate.label(result.message.createdAt)).font(.app(.caption2)).foregroundStyle(Theme.faint)
                                         }
-                                        Text(result.message.content).font(.subheadline).foregroundStyle(Theme.text).lineLimit(3)
+                                        Text(result.message.content).font(.app(.subheadline)).foregroundStyle(Theme.text).lineLimit(3)
                                     }
                                 }
                             }
@@ -108,7 +108,7 @@ struct NewMessageSheet: View {
                             VStack(alignment: .leading) {
                                 Text(person.user.displayName).foregroundStyle(Theme.heading)
                                 Text(model.accounts.count > 1 ? "@\(person.user.username) · \(model.account(for: person.server)?.host ?? "")" : "@\(person.user.username)")
-                                    .font(.caption).foregroundStyle(Theme.muted)
+                                    .font(.app(.caption)).foregroundStyle(Theme.muted)
                             }
                         }
                     }

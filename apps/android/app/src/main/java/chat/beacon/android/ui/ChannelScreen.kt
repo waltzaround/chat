@@ -361,7 +361,7 @@ private fun ReactionPill(reaction: Reaction, onClick: () -> Unit) {
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Text(reaction.emoji, fontSize = 15.sp)
-        Text("${reaction.count}", color = if (reaction.me) Palette.mentionChip else Palette.muted, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+        Text("${reaction.count}", color = if (reaction.me) Palette.heading else Palette.muted, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
     }
 }
 
@@ -395,7 +395,7 @@ private fun Composer(draft: String, onDraft: (String) -> Unit, placeholder: Stri
                 value = draft,
                 onValueChange = onDraft,
                 maxLines = 6,
-                textStyle = TextStyle(color = Palette.heading, fontSize = 16.sp),
+                textStyle = TextStyle(color = Palette.heading, fontSize = 16.sp, fontFamily = PublicSans),
                 cursorBrush = SolidColor(Palette.accent),
                 modifier = Modifier.weight(1f).focusRequester(focus),
                 decorationBox = { inner ->
@@ -407,7 +407,7 @@ private fun Composer(draft: String, onDraft: (String) -> Unit, placeholder: Stri
             )
             AnimatedVisibility(!empty, enter = scaleIn() + fadeIn(), exit = scaleOut() + fadeOut()) {
                 Box(Modifier.size(44.dp).clip(CircleShape).background(Palette.accent).clickable(onClickLabel = "Send", onClick = onSend), contentAlignment = Alignment.Center) {
-                    Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send", tint = Color.White, modifier = Modifier.size(20.dp))
+                    Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send", tint = Palette.onAccent, modifier = Modifier.size(20.dp))
                 }
             }
         }

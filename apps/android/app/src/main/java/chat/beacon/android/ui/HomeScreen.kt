@@ -210,7 +210,7 @@ private fun Rail(
         item {
             RailItem("Direct messages", selected = selection == Selection.Dms, onClick = { onSelect(Selection.Dms) }) { sel ->
                 Box(Modifier.fillMaxSize().background(if (sel) Palette.accent else Palette.raised), contentAlignment = Alignment.Center) {
-                    Icon(Icons.Filled.ChatBubble, contentDescription = null, tint = if (sel) Color.White else Palette.text, modifier = Modifier.size(24.dp))
+                    Icon(Icons.Filled.ChatBubble, contentDescription = null, tint = if (sel) Palette.onAccent else Palette.text, modifier = Modifier.size(24.dp))
                 }
             }
         }
@@ -235,7 +235,7 @@ private fun Rail(
                 RailItem(ws.name, selected = selection == item, badge = ws.mentionCount, onClick = { onSelect(item) }) { sel ->
                     RemoteImage(ws.iconUrl, state.api(account.server), Modifier.fillMaxSize()) {
                         Box(Modifier.fillMaxSize().background(if (sel) Palette.accent else Palette.raised), contentAlignment = Alignment.Center) {
-                            Text(initials(ws.name, 3), color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = fixedSp(16f))
+                            Text(initials(ws.name, 3), color = if (sel) Palette.onAccent else Color.White, fontWeight = FontWeight.SemiBold, fontSize = fixedSp(16f))
                         }
                     }
                 }
@@ -466,7 +466,7 @@ private fun DirectMessagesPanel(items: List<AccountDm>, loaded: Boolean, state: 
                         Row(Modifier.weight(1f).heightIn(min = 40.dp).clip(RoundedCornerShape(12.dp)).background(Palette.field).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Filled.Search, contentDescription = null, tint = Palette.muted, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(8.dp))
-                            BasicTextField(filter, { filter = it }, singleLine = true, textStyle = TextStyle(color = Palette.heading, fontSize = 16.sp), cursorBrush = SolidColor(Palette.accent), modifier = Modifier.weight(1f), decorationBox = { inner ->
+                            BasicTextField(filter, { filter = it }, singleLine = true, textStyle = TextStyle(color = Palette.heading, fontSize = 16.sp, fontFamily = PublicSans), cursorBrush = SolidColor(Palette.accent), modifier = Modifier.weight(1f), decorationBox = { inner ->
                                 if (filter.isEmpty()) Text("Find a conversation", color = Palette.faint, fontSize = 16.sp)
                                 inner()
                             })
@@ -557,7 +557,7 @@ private fun SearchSheet(api: ApiClient, workspace: WorkspaceSummary, onDismiss: 
             Row(Modifier.fillMaxWidth().heightIn(min = 44.dp).clip(RoundedCornerShape(12.dp)).background(Palette.field).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Filled.Search, contentDescription = null, tint = Palette.muted, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
-                BasicTextField(query, { query = it }, singleLine = true, textStyle = TextStyle(color = Palette.heading, fontSize = 16.sp), cursorBrush = SolidColor(Palette.accent),
+                BasicTextField(query, { query = it }, singleLine = true, textStyle = TextStyle(color = Palette.heading, fontSize = 16.sp, fontFamily = PublicSans), cursorBrush = SolidColor(Palette.accent),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search), keyboardActions = KeyboardActions(onSearch = { search() }), modifier = Modifier.weight(1f),
                     decorationBox = { inner ->
                         if (query.isEmpty()) Text("Search ${workspace.name}", color = Palette.faint, fontSize = 16.sp)
@@ -651,7 +651,7 @@ private fun ProfileSheet(state: AppState, selected: String?, onDismiss: () -> Un
         Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
             account?.me?.let { me ->
                 Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Palette.panel)) {
-                    Box(Modifier.fillMaxWidth().height(80.dp).background(Palette.accent))
+                    Box(Modifier.fillMaxWidth().height(80.dp).background(Palette.hover))
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Box(Modifier.offset(y = (-46).dp).size(86.dp).background(Palette.panel, CircleShape).padding(5.dp)) { Avatar(me.summary, 76.dp, account.api) }
                         Column(Modifier.offset(y = (-46).dp)) {

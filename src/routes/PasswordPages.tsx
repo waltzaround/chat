@@ -34,7 +34,7 @@ function ErrorNote({ children }: { children: ReactNode }) {
 
 const backToSignIn = (
   <p className="mt-4 text-center text-xs text-muted-foreground">
-    <Link className="text-primary hover:underline" to="/login">
+    <Link className="link" to="/login">
       Back to sign in
     </Link>
   </p>

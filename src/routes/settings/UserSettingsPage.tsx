@@ -200,7 +200,7 @@ function ProfileTab() {
                 Not confirmed yet.{" "}
                 <button
                   type="button"
-                  className="text-primary hover:underline"
+                  className="link"
                   onClick={() => void authClient.sendVerificationEmail({ email: me.email, callbackURL: "/settings/profile" }).then(() => toast.success("Check your inbox for the link"))}
                 >
                   Send a confirmation link

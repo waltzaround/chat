@@ -53,7 +53,7 @@ struct Avatar: View {
     var body: some View {
         RemoteImage(path: user.avatarUrl, api: (server ?? environmentServer).flatMap { model.api(for: $0) }) {
             Circle().fill(Self.colour(for: user.id))
-                .overlay(Text(initials).font(.system(size: size * 0.38, weight: .semibold)).foregroundStyle(.white))
+                .overlay(Text(initials).font(.app(size: size * 0.38, weight: .semibold)).foregroundStyle(.white))
         }
         .frame(width: size, height: size)
         .clipShape(Circle())
@@ -62,7 +62,7 @@ struct Avatar: View {
 
     /// Discord-style default avatar colours, picked from the user's id so each person keeps theirs.
     static func colour(for id: String) -> Color {
-        let palette = ["5865F2", "757E8A", "3BA55C", "FAA61A", "ED4245", "EB459F"]
+        let palette = ["3A9BDC", "757E8A", "3BA55C", "FAA61A", "ED4245", "EB459F"]
         let sum = id.unicodeScalars.reduce(0) { $0 &+ Int($1.value) }
         return Color(hex: palette[sum % palette.count])!
     }

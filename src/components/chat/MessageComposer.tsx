@@ -344,7 +344,7 @@ export function MessageComposer({
           <span className="text-muted-foreground">
             Editing message · <kbd className="rounded border px-1 font-mono">Esc</kbd> to cancel, <kbd className="rounded border px-1 font-mono">Enter</kbd> to save
           </span>
-          <button type="button" onClick={onDoneEditing} className="text-primary hover:underline">
+          <button type="button" onClick={onDoneEditing} className="link">
             Cancel
           </button>
         </div>

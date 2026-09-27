@@ -15,6 +15,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Typography
 import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
@@ -33,6 +34,7 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withLink
+import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -42,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.platform.LocalDensity
+import chat.beacon.android.R
 import chat.beacon.android.net.ApiClient
 import chat.beacon.android.net.UserSummary
 import coil.compose.SubcomposeAsyncImage
@@ -55,9 +58,11 @@ import coil.request.ImageRequest
 @Composable
 fun fixedSp(value: Float): TextUnit = with(LocalDensity.current) { value.dp.toSp() }
 
-/** Discord-style dark palette. The app is always dark, like Discord mobile. */
+/** Dark palette in the style of Discord mobile, with a neutral accent. The app is always dark. */
 object Palette {
-    val accent = Color(0xFF5865F2)
+    val accent = Color(0xFFF2F3F5)
+    /** Text and icons drawn on top of [accent]. */
+    val onAccent = Color(0xFF1E1F22)
     val rail = Color(0xFF1E1F22)
     val panel = Color(0xFF2B2D31)
     val chat = Color(0xFF313338)
@@ -72,15 +77,42 @@ object Palette {
     val link = Color(0xFF00A8FC)
     val green = Color(0xFF23A55A)
     val mention = Color(0xFFF0B232)
-    val mentionChip = Color(0xFFC9CDFB)
 }
+
+/** Public Sans, bundled in res/font. Weights without a file fall back to the nearest face. */
+val PublicSans = FontFamily(
+    Font(R.font.public_sans_regular, FontWeight.Normal),
+    Font(R.font.public_sans_italic, FontWeight.Normal, FontStyle.Italic),
+    Font(R.font.public_sans_medium, FontWeight.Medium),
+    Font(R.font.public_sans_semibold, FontWeight.SemiBold),
+    Font(R.font.public_sans_bold, FontWeight.Bold),
+)
+
+private fun Typography.withFontFamily(family: FontFamily) = copy(
+    displayLarge = displayLarge.copy(fontFamily = family),
+    displayMedium = displayMedium.copy(fontFamily = family),
+    displaySmall = displaySmall.copy(fontFamily = family),
+    headlineLarge = headlineLarge.copy(fontFamily = family),
+    headlineMedium = headlineMedium.copy(fontFamily = family),
+    headlineSmall = headlineSmall.copy(fontFamily = family),
+    titleLarge = titleLarge.copy(fontFamily = family),
+    titleMedium = titleMedium.copy(fontFamily = family),
+    titleSmall = titleSmall.copy(fontFamily = family),
+    bodyLarge = bodyLarge.copy(fontFamily = family),
+    bodyMedium = bodyMedium.copy(fontFamily = family),
+    bodySmall = bodySmall.copy(fontFamily = family),
+    labelLarge = labelLarge.copy(fontFamily = family),
+    labelMedium = labelMedium.copy(fontFamily = family),
+    labelSmall = labelSmall.copy(fontFamily = family),
+)
 
 @Composable
 fun ChatTheme(content: @Composable () -> Unit) {
     MaterialTheme(
+        typography = Typography().withFontFamily(PublicSans),
         colorScheme = darkColorScheme(
             primary = Palette.accent,
-            onPrimary = Color.White,
+            onPrimary = Palette.onAccent,
             background = Palette.chat,
             surface = Palette.panel,
             onSurface = Palette.text,
@@ -91,7 +123,7 @@ fun ChatTheme(content: @Composable () -> Unit) {
     )
 }
 
-val primaryButtonColors @Composable get() = ButtonDefaults.buttonColors(containerColor = Palette.accent, contentColor = Color.White, disabledContainerColor = Palette.accent.copy(alpha = 0.5f), disabledContentColor = Color.White.copy(alpha = 0.6f))
+val primaryButtonColors @Composable get() = ButtonDefaults.buttonColors(containerColor = Palette.accent, contentColor = Palette.onAccent, disabledContainerColor = Palette.accent.copy(alpha = 0.5f), disabledContentColor = Palette.onAccent.copy(alpha = 0.6f))
 
 /** An image from a Chat server: its own files need the bearer token. */
 @Composable
@@ -116,7 +148,7 @@ fun RemoteImage(path: String?, api: ApiClient?, modifier: Modifier = Modifier, p
     )
 }
 
-private val avatarPalette = listOf(0xFF5865F2, 0xFF757E8A, 0xFF3BA55C, 0xFFFAA61A, 0xFFED4245, 0xFFEB459F).map { Color(it) }
+private val avatarPalette = listOf(0xFF3A9BDC, 0xFF757E8A, 0xFF3BA55C, 0xFFFAA61A, 0xFFED4245, 0xFFEB459F).map { Color(it) }
 
 /** Discord-style default avatar colours, picked from the user's id so each person keeps theirs. */
 fun avatarColour(id: String) = avatarPalette[id.sumOf { it.code } % avatarPalette.size]
@@ -172,7 +204,7 @@ fun openInBrowser(context: Context, url: String) {
 
 /**
  * Inline Markdown the way the web app shows it: **bold**, *italic*, `code`, ~~strike~~,
- * links, and @mentions as blurple chips.
+ * links, and @mentions as chips.
  */
 fun renderMarkdown(text: String): AnnotatedString = buildAnnotatedString {
     val pattern = Regex("""\*\*(.+?)\*\*|__(.+?)__|\*(.+?)\*|_(.+?)_|~~(.+?)~~|`([^`]+)`|(https?://[^\s<]+[^\s<.,:;"')\]])|(@[A-Za-z0-9_.]+)""")
@@ -186,7 +218,7 @@ fun renderMarkdown(text: String): AnnotatedString = buildAnnotatedString {
             g[5].isNotEmpty() -> withStyle(SpanStyle(textDecoration = TextDecoration.LineThrough)) { append(g[5]) }
             g[6].isNotEmpty() -> withStyle(SpanStyle(fontFamily = FontFamily.Monospace, background = Palette.rail, fontSize = 14.sp)) { append(g[6]) }
             g[7].isNotEmpty() -> withLink(LinkAnnotation.Url(g[7], TextLinkStyles(SpanStyle(color = Palette.link)))) { append(g[7]) }
-            g[8].isNotEmpty() -> withStyle(SpanStyle(color = Palette.mentionChip, background = Palette.accent.copy(alpha = 0.3f), fontWeight = FontWeight.Medium)) { append(g[8]) }
+            g[8].isNotEmpty() -> withStyle(SpanStyle(color = Palette.heading, background = Palette.accent.copy(alpha = 0.3f), fontWeight = FontWeight.Medium)) { append(g[8]) }
         }
         index = match.range.last + 1
     }

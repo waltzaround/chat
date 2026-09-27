@@ -21,8 +21,8 @@ struct MessageRow: View {
                 VStack(alignment: .leading, spacing: 4) {
                     if !grouped {
                         HStack(alignment: .firstTextBaseline, spacing: 8) {
-                            Text(message.author.name).font(.callout.weight(.semibold)).foregroundStyle(colour).lineLimit(1)
-                            Text(ChatDate.label(message.createdAt)).font(.caption).foregroundStyle(Theme.faint)
+                            Text(message.author.name).font(.app(.callout, weight: .semibold)).foregroundStyle(colour).lineLimit(1)
+                            Text(ChatDate.label(message.createdAt)).font(.app(.caption)).foregroundStyle(Theme.faint)
                         }
                     }
                     if !message.content.isEmpty {
@@ -50,7 +50,7 @@ struct MessageRow: View {
                     ForEach(message.attachments.filter { !$0.isImage }) { attachment in
                         HStack(spacing: 10) {
                             Image(systemName: "doc.fill").font(.title2).foregroundStyle(Theme.accent)
-                            Text(attachment.filename).font(.subheadline.weight(.medium)).foregroundStyle(Theme.link).lineLimit(1)
+                            Text(attachment.filename).font(.app(.subheadline, weight: .medium)).foregroundStyle(Theme.link).lineLimit(1)
                         }
                         .padding(12)
                         .frame(maxWidth: 280, alignment: .leading)
@@ -70,7 +70,7 @@ struct MessageRow: View {
                             Image(systemName: "bubble.left.and.text.bubble.right.fill")
                             Text("\(thread.replyCount) \(thread.replyCount == 1 ? "reply" : "replies")")
                         }
-                        .font(.footnote.weight(.semibold))
+                        .font(.app(.footnote, weight: .semibold))
                         .foregroundStyle(Theme.link)
                         .padding(.top, 2)
                     }
@@ -96,11 +96,11 @@ struct MessageRow: View {
                 Text("Original message was deleted").italic()
             } else {
                 if let author = reply.author { Avatar(user: author, size: 16) }
-                Text(reply.author?.displayName ?? "Deleted user").fontWeight(.semibold).foregroundStyle(Theme.text)
+                Text(reply.author?.displayName ?? "Deleted user").font(.app(.footnote, weight: .semibold)).foregroundStyle(Theme.text)
                 Text(reply.content).lineLimit(1)
             }
         }
-        .font(.footnote)
+        .font(.app(.footnote))
         .foregroundStyle(Theme.muted)
         .padding(.top, 10)
         .padding(.bottom, 2)
@@ -122,7 +122,7 @@ struct MessageRow: View {
     private var edited: AttributedString {
         guard message.editedAt != nil else { return "" }
         var text = AttributedString(" (edited)")
-        text.font = .caption
+        text.font = .app(.caption)
         text.foregroundColor = Theme.faint
         return text
     }
@@ -142,7 +142,7 @@ struct MessageRow: View {
         return out
     }
 
-    /// Inline Markdown (bold, italics, code, links) with @mentions as blurple chips.
+    /// Inline Markdown (bold, italics, code, links) with @mentions@mentions as chips.
     private func rendered(_ text: String) -> AttributedString {
         var result = (try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(text)
         for run in result.runs where run.inlinePresentationIntent?.contains(.code) == true {
@@ -155,9 +155,9 @@ struct MessageRow: View {
             let length = plain.distance(from: match.range.lowerBound, to: match.range.upperBound)
             let lower = result.characters.index(result.startIndex, offsetBy: start)
             let upper = result.characters.index(lower, offsetBy: length)
-            result[lower ..< upper].foregroundColor = Color(hex: "C9CDFB")!
+            result[lower ..< upper].foregroundColor = Theme.heading
             result[lower ..< upper].backgroundColor = Theme.accent.opacity(0.3)
-            result[lower ..< upper].font = .callout.weight(.medium)
+            result[lower ..< upper].font = .app(.callout, weight: .medium)
         }
         return result
     }
@@ -191,9 +191,9 @@ struct ReactionPill: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 4) {
-                Text(reaction.emoji).font(.subheadline)
-                Text("\(reaction.count)").font(.subheadline.weight(.semibold))
-                    .foregroundStyle(reaction.me ? Color(hex: "C9CDFB")! : Theme.muted)
+                Text(reaction.emoji).font(.app(.subheadline))
+                Text("\(reaction.count)").font(.app(.subheadline, weight: .semibold))
+                    .foregroundStyle(reaction.me ? Theme.heading : Theme.muted)
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
@@ -220,11 +220,11 @@ struct PendingRow: View {
             }
             VStack(alignment: .leading, spacing: 4) {
                 if !grouped, let me {
-                    Text(me.displayName).font(.callout.weight(.semibold)).foregroundStyle(Theme.heading)
+                    Text(me.displayName).font(.app(.callout, weight: .semibold)).foregroundStyle(Theme.heading)
                 }
-                Text(pending.content).font(.callout).foregroundStyle(Theme.faint)
+                Text(pending.content).font(.app(.callout)).foregroundStyle(Theme.faint)
                 if pending.failed {
-                    Button("Message failed to send. Tap to retry.", action: retry).font(.caption.weight(.medium)).foregroundStyle(Theme.danger)
+                    Button("Message failed to send. Tap to retry.", action: retry).font(.app(.caption, weight: .medium)).foregroundStyle(Theme.danger)
                 }
             }
             Spacer(minLength: 0)

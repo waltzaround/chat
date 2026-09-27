@@ -25,11 +25,11 @@ struct ProfileSheet: View {
                             }
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(account.host).foregroundStyle(Theme.heading)
-                                Text(account.me.map { "@\($0.username)" } ?? "").font(.caption).foregroundStyle(Theme.muted)
+                                Text(account.me.map { "@\($0.username)" } ?? "").font(.app(.caption)).foregroundStyle(Theme.muted)
                             }
                             Spacer()
                             Button("Log Out") { confirmSignOut = account }
-                                .font(.subheadline.weight(.medium))
+                                .font(.app(.subheadline, weight: .medium))
                                 .foregroundStyle(Theme.danger)
                         }
                         .padding(.horizontal, 16)
@@ -42,7 +42,7 @@ struct ProfileSheet: View {
                     }
                 }
                 Text("Profile, notification and privacy settings open that server's settings page.")
-                    .font(.caption)
+                    .font(.app(.caption))
                     .foregroundStyle(Theme.faint)
                     .padding(.horizontal, 4)
             }
@@ -59,7 +59,7 @@ struct ProfileSheet: View {
 
     private func profile(_ account: Account) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            Theme.accent.frame(height: 80)
+            Theme.hover.frame(height: 80)
             VStack(alignment: .leading, spacing: 12) {
                 if let me = account.me {
                     Avatar(user: UserSummary(id: me.id, username: me.username, displayName: me.displayName, avatarUrl: me.avatarUrl), size: 76, server: account.server)
@@ -67,8 +67,8 @@ struct ProfileSheet: View {
                         .background(Circle().fill(Theme.panel))
                         .padding(.top, -46)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(me.displayName).font(.title2.bold()).foregroundStyle(Theme.heading)
-                        Text("@\(me.username) · \(account.host)").font(.subheadline).foregroundStyle(Theme.text)
+                        Text(me.displayName).font(.app(.title2, weight: .bold)).foregroundStyle(Theme.heading)
+                        Text("@\(me.username) · \(account.host)").font(.app(.subheadline)).foregroundStyle(Theme.text)
                     }
                     HStack(spacing: 10) {
                         Button { webPage = account.server.appending(path: "settings") } label: { Label("Edit Profile", systemImage: "pencil") }
@@ -89,7 +89,7 @@ struct ProfileSheet: View {
     }
 
     private func sectionTitle(_ text: String) -> some View {
-        Text(text.uppercased()).font(.caption.weight(.bold)).foregroundStyle(Theme.muted).padding(.horizontal, 4).padding(.bottom, -12)
+        Text(text.uppercased()).font(.app(.caption, weight: .bold)).foregroundStyle(Theme.muted).padding(.horizontal, 4).padding(.bottom, -12)
     }
 
     private func group<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {

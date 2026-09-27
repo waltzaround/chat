@@ -6,6 +6,7 @@ import { Toaster } from "sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { router } from "@/app/router";
 import { isApiError } from "@/lib/api";
+import "@fontsource-variable/public-sans";
 import "@/styles/globals.css";
 import { registerServiceWorker } from "@/lib/push";
 import { isDesktopApp, openExternalLinksInBrowser } from "@/lib/desktop";

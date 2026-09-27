@@ -22,7 +22,7 @@ struct SignInView: View {
                 ServerCard(server: server, branding: branding)
                     .padding(.top, 12)
                 Text("Log in to continue")
-                    .font(.subheadline)
+                    .font(.app(.subheadline))
                     .foregroundStyle(Theme.muted)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.bottom, -8)
@@ -48,20 +48,20 @@ struct SignInView: View {
                         .onSubmit(signIn)
                         .filledField()
                     Button("Forgot your password?") { webPage = server.appending(path: "forgot-password") }
-                        .font(.footnote.weight(.medium))
+                        .font(.app(.footnote, weight: .medium))
                         .foregroundStyle(Theme.link)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
 
                 if let error {
                     Text(error)
-                        .font(.footnote)
+                        .font(.app(.footnote))
                         .foregroundStyle(Theme.danger)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
 
                 Button(action: signIn) {
-                    if busy { ProgressView().tint(.white) } else { Text("Log In") }
+                    if busy { ProgressView().tint(Theme.onAccent) } else { Text("Log In") }
                 }
                 .buttonStyle(PrimaryButtonStyle())
                 .disabled(busy || email.isEmpty || password.isEmpty)
@@ -71,7 +71,7 @@ struct SignInView: View {
                     Button("Register") { webPage = server.appending(path: "register") }
                         .foregroundStyle(Theme.link)
                 }
-                .font(.footnote.weight(.medium))
+                .font(.app(.footnote, weight: .medium))
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(.horizontal, 20)
@@ -118,12 +118,12 @@ struct ServerCard: View {
                 Group {
                     if let named = branding?.name {
                         Text(named.split(separator: " ").prefix(2).compactMap(\.first).map(String.init).joined().uppercased())
-                            .font(.headline)
+                            .font(.app(.headline))
                     } else {
                         Image(systemName: "bubble.left.and.bubble.right.fill").font(.title3)
                     }
                 }
-                .foregroundStyle(.white)
+                .foregroundStyle(Theme.onAccent)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Theme.accent)
             }
@@ -133,17 +133,17 @@ struct ServerCard: View {
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(name)
-                    .font(.headline)
+                    .font(.app(.headline))
                     .foregroundStyle(Theme.heading)
                 if let description = branding?.description {
                     Text(description)
-                        .font(.subheadline)
+                        .font(.app(.subheadline))
                         .foregroundStyle(Theme.text)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 if branding?.name != nil {
                     Text(host)
-                        .font(.caption)
+                        .font(.app(.caption))
                         .foregroundStyle(Theme.faint)
                 }
             }

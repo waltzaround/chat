@@ -117,7 +117,7 @@ private fun ServerPicker(state: AppState, adding: Boolean, onChosen: (String) ->
 
     AuthScaffold(onBack = if (adding) onCancel else null, backLabel = "Cancel") {
         Box(Modifier.size(88.dp).background(Palette.accent, RoundedCornerShape(28.dp)), contentAlignment = Alignment.Center) {
-            Icon(Icons.Filled.Forum, contentDescription = null, tint = Color.White, modifier = Modifier.size(40.dp))
+            Icon(Icons.Filled.Forum, contentDescription = null, tint = Palette.onAccent, modifier = Modifier.size(40.dp))
         }
         Spacer(Modifier.height(28.dp))
         Text(if (adding) "Add a server" else "Welcome to Chat", color = Palette.heading, fontSize = 28.sp, fontWeight = FontWeight.Bold)
@@ -211,8 +211,8 @@ private fun ServerCard(server: String, branding: chat.beacon.android.net.ServerB
     ) {
         val placeholder = @Composable {
             Box(Modifier.size(56.dp).background(Palette.accent, RoundedCornerShape(17.dp)), contentAlignment = Alignment.Center) {
-                if (branding?.name != null) Text(initials(branding.name), color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = fixedSp(20f))
-                else Icon(Icons.Filled.Forum, contentDescription = null, tint = Color.White)
+                if (branding?.name != null) Text(initials(branding.name), color = Palette.onAccent, fontWeight = FontWeight.SemiBold, fontSize = fixedSp(20f))
+                else Icon(Icons.Filled.Forum, contentDescription = null, tint = Palette.onAccent)
             }
         }
         RemoteImage(branding?.iconUrl, chat.beacon.android.net.ApiClient(server, null), Modifier.size(56.dp).clip(RoundedCornerShape(17.dp))) { placeholder() }
@@ -246,7 +246,7 @@ fun FilledField(
         value = value,
         onValueChange = onChange,
         singleLine = true,
-        textStyle = TextStyle(color = Palette.heading, fontSize = 17.sp),
+        textStyle = TextStyle(color = Palette.heading, fontSize = 17.sp, fontFamily = PublicSans),
         cursorBrush = SolidColor(Palette.accent),
         keyboardOptions = KeyboardOptions(keyboardType = keyboardType, imeAction = imeAction, autoCorrectEnabled = false),
         keyboardActions = KeyboardActions(onAny = { onIme() }),
@@ -262,7 +262,7 @@ fun FilledField(
     if (autoFocus) androidx.compose.runtime.LaunchedEffect(Unit) { runCatching { focusRequester.requestFocus() } }
 }
 
-/** Full-width blurple button; a null label shows a spinner. */
+/** Full-width accent button; a null label shows a spinner. */
 @Composable
 fun PrimaryButton(label: String?, enabled: Boolean = true, onClick: () -> Unit) {
     Button(onClick = onClick, enabled = enabled, colors = primaryButtonColors, shape = RoundedCornerShape(8.dp), modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) {

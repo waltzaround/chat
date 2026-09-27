@@ -115,7 +115,7 @@ struct HomeView: View {
                 } content: { selected in
                     Image(systemName: "bubble.left.fill")
                         .font(.system(size: 22, weight: .semibold))
-                        .foregroundStyle(selected ? .white : Theme.text)
+                        .foregroundStyle(selected ? Theme.onAccent : Theme.text)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .background(selected ? Theme.accent : Theme.raised)
                 }
@@ -296,8 +296,8 @@ struct WorkspaceIcon: View {
     var body: some View {
         RemoteImage(path: workspace.iconUrl, api: model.api(for: server)) {
             Text(initials)
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(.white)
+                .font(.app(size: 16, weight: .semibold))
+                .foregroundStyle(selected ? Theme.onAccent : .white)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(selected ? Theme.accent : Theme.raised)
         }
@@ -333,12 +333,12 @@ struct ProfilePill: View {
                     VStack(alignment: .leading, spacing: 1) {
                         HStack(spacing: 4) {
                             Text(account.me?.displayName ?? " ")
-                                .font(.callout.weight(.semibold))
+                                .font(.app(.callout, weight: .semibold))
                                 .foregroundStyle(Theme.heading)
                                 .lineLimit(1)
                             Image(systemName: "chevron.down").font(.caption2.weight(.bold)).foregroundStyle(Theme.muted)
                         }
-                        Text("Online").font(.caption).foregroundStyle(Theme.muted)
+                        Text("Online").font(.app(.caption)).foregroundStyle(Theme.muted)
                     }
                     Spacer(minLength: 0)
                 }
@@ -406,7 +406,7 @@ struct ChannelListPanel: View {
 
                 if detail == nil {
                     if let error {
-                        Text(error).font(.footnote).foregroundStyle(Theme.danger).padding(16)
+                        Text(error).font(.app(.footnote)).foregroundStyle(Theme.danger).padding(16)
                     } else {
                         ProgressView().tint(Theme.muted).frame(maxWidth: .infinity).padding(.top, 40)
                     }
@@ -420,7 +420,7 @@ struct ChannelListPanel: View {
                             }
                         } label: {
                             HStack(spacing: 6) {
-                                Text(section.title).font(.subheadline.weight(.semibold))
+                                Text(section.title).font(.app(.subheadline, weight: .semibold))
                                 Image(systemName: "chevron.down")
                                     .font(.caption2.weight(.bold))
                                     .rotationEffect(.degrees(collapsed.contains(section.id) ? -90 : 0))
@@ -474,7 +474,7 @@ struct ChannelListPanel: View {
             Button { webPage = server.appending(path: "w/\(workspace.id)/settings") } label: {
                 HStack(spacing: 6) {
                     Text(workspace.name)
-                        .font(.title3.weight(.bold))
+                        .font(.app(.title3, weight: .bold))
                         .foregroundStyle(Theme.heading)
                         .lineLimit(1)
                     Image(systemName: "chevron.right").font(.footnote.weight(.bold)).foregroundStyle(Theme.muted)
@@ -486,7 +486,7 @@ struct ChannelListPanel: View {
             HStack(spacing: 10) {
                 Button { searching = true } label: {
                     Label("Search", systemImage: "magnifyingglass")
-                        .font(.callout.weight(.medium))
+                        .font(.app(.callout, weight: .medium))
                         .foregroundStyle(Theme.text)
                         .frame(maxWidth: .infinity, minHeight: 40)
                         .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.field))
@@ -547,7 +547,7 @@ struct ChannelRow: View {
                     .foregroundStyle(selected || channel.isUnread ? Theme.heading : Theme.faint)
                     .frame(width: 24)
                 Text(channel.name)
-                    .font(.body.weight(channel.isUnread || selected ? .semibold : .regular))
+                    .font(.app(.body, weight: channel.isUnread || selected ? .semibold : .regular))
                     .foregroundStyle(selected || channel.isUnread ? Theme.heading : Theme.muted)
                     .lineLimit(1)
                 Spacer(minLength: 4)
@@ -600,7 +600,7 @@ struct DirectMessagesPanel: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 Text("Messages")
-                    .font(.title3.weight(.bold))
+                    .font(.app(.title3, weight: .bold))
                     .foregroundStyle(Theme.heading)
                     .padding(.horizontal, 16)
                     .padding(.top, 24)
@@ -624,7 +624,7 @@ struct DirectMessagesPanel: View {
                         CircleButton(icon: "magnifyingglass", label: "Find a conversation") { searching = true }
                         Button { newMessage = true } label: {
                             Label("New Message", systemImage: "square.and.pencil")
-                                .font(.callout.weight(.semibold))
+                                .font(.app(.callout, weight: .semibold))
                                 .foregroundStyle(Theme.heading)
                                 .frame(maxWidth: .infinity, minHeight: 40)
                                 .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.field))
@@ -640,9 +640,9 @@ struct DirectMessagesPanel: View {
                 } else if items.isEmpty {
                     VStack(spacing: 8) {
                         Image(systemName: "bubble.left.and.bubble.right").font(.largeTitle).foregroundStyle(Theme.faint)
-                        Text("No messages yet").font(.headline).foregroundStyle(Theme.heading)
+                        Text("No messages yet").font(.app(.headline)).foregroundStyle(Theme.heading)
                         Text("Start a conversation with someone from one of your workspaces.")
-                            .font(.footnote)
+                            .font(.app(.footnote))
                             .foregroundStyle(Theme.muted)
                             .multilineTextAlignment(.center)
                     }
@@ -688,17 +688,17 @@ struct DMRow: View {
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(alignment: .firstTextBaseline) {
                         Text(item.dm.peer.displayName)
-                            .font(.body.weight(unread ? .bold : .medium))
+                            .font(.app(.body, weight: unread ? .bold : .medium))
                             .foregroundStyle(unread ? Theme.heading : Theme.text)
                             .lineLimit(1)
                         Spacer(minLength: 4)
                         if let at = item.dm.lastMessageAt {
-                            Text(ChatDate.relative(at)).font(.caption).foregroundStyle(Theme.muted)
+                            Text(ChatDate.relative(at)).font(.app(.caption)).foregroundStyle(Theme.muted)
                         }
                     }
                     HStack {
                         Text(preview)
-                            .font(.subheadline.weight(unread ? .semibold : .regular))
+                            .font(.app(.subheadline, weight: unread ? .semibold : .regular))
                             .foregroundStyle(unread ? Theme.text : Theme.muted)
                             .lineLimit(1)
                         Spacer(minLength: 4)

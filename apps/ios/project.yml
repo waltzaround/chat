@@ -28,6 +28,7 @@ targets:
         CFBundleDisplayName: Chat
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UIAppFonts: [PublicSans-Regular.ttf, PublicSans-Italic.ttf, PublicSans-Medium.ttf, PublicSans-SemiBold.ttf, PublicSans-Bold.ttf]
         UILaunchScreen:
           UIColorName: LaunchBackground
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]

@@ -11,7 +11,8 @@ struct ChatApp: App {
         nav.configureWithOpaqueBackground()
         nav.backgroundColor = UIColor(Theme.chat)
         nav.shadowColor = UIColor(Theme.rail)
-        nav.titleTextAttributes = [.foregroundColor: UIColor(Theme.heading)]
+        nav.titleTextAttributes = [.foregroundColor: UIColor(Theme.heading), .font: PublicSans.uiFont(.semibold, size: 17)]
+        nav.largeTitleTextAttributes = [.foregroundColor: UIColor(Theme.heading), .font: PublicSans.uiFont(.bold, size: 34)]
         let back = UIBarButtonItemAppearance()
         back.normal.titleTextAttributes = [.foregroundColor: UIColor.clear]
         back.highlighted.titleTextAttributes = [.foregroundColor: UIColor.clear]
@@ -33,6 +34,7 @@ struct ChatApp: App {
         WindowGroup {
             RootView()
                 .environment(model)
+                .environment(\.font, .app(.body))
                 // chat://invite/CODE: open the invite on the server's web page, where
                 // signing up and joining are handled.
                 .onOpenURL { url in model.pendingLink = url }

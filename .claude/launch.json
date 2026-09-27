@@ -1,6 +1,7 @@
 {
   "version": "0.0.1",
   "configurations": [
-    { "name": "website", "runtimeExecutable": "npx", "runtimeArgs": ["vite", "--config", "apps/website/vite.config.ts", "--port", "5190", "--strictPort"], "port": 5190 }
+    { "name": "website", "runtimeExecutable": "npx", "runtimeArgs": ["vite", "--config", "apps/website/vite.config.ts", "--port", "5190", "--strictPort"], "port": 5190 },
+    { "name": "app", "runtimeExecutable": "npx", "runtimeArgs": ["vite", "--port", "5174", "--strictPort"], "port": 5174 }
   ]
 }

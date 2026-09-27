@@ -17,10 +17,10 @@ struct ServerPickerView: View {
                 AppMark(size: 88)
                 VStack(spacing: 8) {
                     Text(adding ? "Add a server" : "Welcome to Chat")
-                        .font(.title.bold())
+                        .font(.app(.title, weight: .bold))
                         .foregroundStyle(Theme.heading)
                     Text(adding ? "Belong to another Chat server? Its workspaces join your server list." : "Chat runs on servers that communities host themselves. Enter the address of yours to get started.")
-                        .font(.subheadline)
+                        .font(.app(.subheadline))
                         .foregroundStyle(Theme.muted)
                         .multilineTextAlignment(.center)
                 }
@@ -36,12 +36,12 @@ struct ServerPickerView: View {
                         .onSubmit(connect)
                         .filledField()
                     Text(error ?? "The address you use for Chat in your browser. Ask whoever invited you if you're not sure.")
-                        .font(.caption)
+                        .font(.app(.caption))
                         .foregroundStyle(error == nil ? Theme.muted : Theme.danger)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 Button(action: connect) {
-                    if checking { ProgressView().tint(.white) } else { Text("Continue") }
+                    if checking { ProgressView().tint(Theme.onAccent) } else { Text("Continue") }
                 }
                 .buttonStyle(PrimaryButtonStyle())
                 .disabled(checking || address.trimmingCharacters(in: .whitespaces).isEmpty)
