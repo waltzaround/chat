@@ -48,6 +48,7 @@ export const MessageItem = memo(function MessageItem({
   const emojis = useEmojiMap(workspace.id);
   const customEmojis = useEmojis(workspace.id).data ?? [];
   const [emojiOpen, setEmojiOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const canReact = hasPermission(channel.permissions, Permission.ADD_REACTIONS);
@@ -134,7 +135,8 @@ export const MessageItem = memo(function MessageItem({
       <div className="flex gap-3">
         <div className="w-10 shrink-0">
           {compact ? (
-            <span className="block pt-1 text-right text-[10px] leading-5 text-muted-foreground opacity-0 group-hover:opacity-100" aria-hidden>
+            // One line, right-aligned: a long time ("11:04 AM") spills into the gutter, not the text.
+            <span className="flex justify-end pt-1 text-[10px] leading-5 whitespace-nowrap text-muted-foreground tabular-nums opacity-0 group-hover:opacity-100" aria-hidden>
               {formatTime(message.createdAt)}
             </span>
           ) : (
@@ -197,7 +199,7 @@ export const MessageItem = memo(function MessageItem({
       <div
         className={cn(
           "absolute -top-3 right-4 hidden items-center rounded-md border bg-popover shadow-sm group-hover:flex group-focus-within:flex",
-          emojiOpen && "flex",
+          (emojiOpen || menuOpen) && "flex",
         )}
         role="toolbar"
         aria-label="Message actions"
@@ -229,7 +231,7 @@ export const MessageItem = memo(function MessageItem({
             <Pencil className="size-4" aria-hidden />
           </ToolbarButton>
         ) : null}
-        <DropdownMenu>
+        <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
           <DropdownMenuTrigger asChild>
             <ToolbarButton label="More actions">
               <MoreHorizontal className="size-4" aria-hidden />
