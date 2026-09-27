@@ -50,6 +50,8 @@ export interface DirectMessage {
   peer: UserSummary;
   lastMessageAt: string | null;
   unreadCount: number;
+  /** The latest message, for the preview line. Null for linked servers' rails. */
+  lastMessage: { authorId: string; content: string; hasAttachments: boolean } | null;
 }
 
 export interface Category {

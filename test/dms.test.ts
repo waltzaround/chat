@@ -39,7 +39,12 @@ describe("direct messages", () => {
 
     const list = await api<DirectMessage[]>(b.cookie, "/api/dms");
     expect(list).toHaveLength(1);
-    expect(list[0]).toMatchObject({ workspaceId: dm.workspaceId, unreadCount: 1, peer: { id: a.user.id } });
+    expect(list[0]).toMatchObject({ workspaceId: dm.workspaceId, unreadCount: 1, peer: { id: a.user.id }, lastMessage: { authorId: a.user.id, content: "psst" } });
+
+    // Another server's rail (a linked session) gets the counts but not the text.
+    const { token } = await api<{ token: string }>(b.cookie, "/api/me/linked-sessions", { method: "POST", json: { linkedTo: "https://other.example" } });
+    const linked = await apiRaw(null, "/api/dms", { headers: { Authorization: `Bearer ${token}` } });
+    expect(((await linked.json()) as DirectMessage[])[0]).toMatchObject({ unreadCount: 1, lastMessage: null });
     const sent = await api<{ messages: Array<{ sequence: number }> }>(b.cookie, `/api/channels/${dm.channelId}/messages`);
     await api(b.cookie, `/api/channels/${dm.channelId}/read`, { method: "POST", json: { sequence: sent.messages.at(-1)!.sequence } });
     expect((await api<DirectMessage[]>(b.cookie, "/api/dms"))[0]?.unreadCount).toBe(0);

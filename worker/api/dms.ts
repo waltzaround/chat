@@ -13,6 +13,7 @@ import { Permission } from "@shared/permissions";
 import { openDmSchema } from "@shared/schemas";
 import type { DirectMessage, UserSummary } from "@shared/types";
 import { chunked } from "../lib/chunks";
+import { LINKED_SCOPE } from "../auth/linked";
 
 /**
  * Direct messages. Each conversation is a small workspace (kind "dm") with the two
@@ -44,6 +45,28 @@ dmRoutes.get("/", async (c) => {
   ]);
   const peerBy = new Map(peers.map((u) => [u.id, u]));
   const channelBy = new Map(channels.map((ch) => [ch.id, ch]));
+  // Preview lines. A linked server's rail only gets counts, never message text.
+  const withPreview = c.get("sessionScope") !== LINKED_SCOPE;
+  const latest = withPreview
+    ? await chunked(channelIds, (ids) =>
+        db
+          .select({ channelId: schema.messages.channelId, authorId: schema.messages.authorUserId, content: schema.messages.content, id: schema.messages.id })
+          .from(schema.messages)
+          .where(
+            and(
+              inArray(schema.messages.channelId, ids),
+              isNull(schema.messages.deletedAt),
+              sql`${schema.messages.channelSequence} = (SELECT max(m2.channel_sequence) FROM messages m2 WHERE m2.channel_id = ${schema.messages.channelId} AND m2.deleted_at IS NULL)`,
+            ),
+          ),
+      )
+    : [];
+  const attachmentIds = new Set(
+    latest.length
+      ? (await chunked(latest.map((m) => m.id), (ids) => db.select({ id: schema.messageAttachments.messageId }).from(schema.messageAttachments).where(inArray(schema.messageAttachments.messageId, ids)))).map((a) => a.id)
+      : [],
+  );
+  const latestBy = new Map(latest.map((m) => [m.channelId, m]));
   const readBy = new Map(reads.map((r) => [r.channelId, r.lastReadSequence]));
 
   const list: DirectMessage[] = [];
@@ -60,6 +83,10 @@ dmRoutes.get("/", async (c) => {
       peer: toUserSummary(peer),
       lastMessageAt: iso(channel.lastMessageAt),
       unreadCount: Math.max(0, channel.lastSequence - (readBy.get(channel.id) ?? 0)),
+      lastMessage: (() => {
+        const m = latestBy.get(channel.id);
+        return m ? { authorId: m.authorId, content: m.content.slice(0, 200), hasAttachments: attachmentIds.has(m.id) } : null;
+      })(),
     });
   }
   list.sort((a, b) => (b.lastMessageAt ?? "").localeCompare(a.lastMessageAt ?? ""));
