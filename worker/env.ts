@@ -30,6 +30,8 @@ export interface Env {
   BETTER_AUTH_SECRET?: string;
   /** Optional. While no owner exists, only sign-ups carrying this token (from npm run setup's link) are accepted. */
   OWNER_CLAIM_TOKEN?: string;
+  /** Optional comma-separated push relay origins this server will call. Blank allows any https relay. */
+  PUSH_RELAYS?: string;
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
   GITHUB_CLIENT_ID?: string;

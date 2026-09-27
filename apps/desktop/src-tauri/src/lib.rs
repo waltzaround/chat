@@ -141,6 +141,7 @@ fn allow_server(app: &AppHandle, server: &Url) {
         .permission("allow-linked-servers")
         .permission("allow-save-linked-server")
         .permission("allow-remove-linked-server")
+        .permission("allow-linked-fetch")
         .permission("allow-switch-server");
     // Adding the same server twice is harmless; ignore "already exists".
     let _ = app.add_capability(capability);
@@ -190,10 +191,62 @@ fn connect(app: AppHandle, server: tauri::State<Server>, origin: String) -> Resu
     main_window(&app)?.navigate(url).map_err(|e| e.to_string())
 }
 
-/// Every server in the rail, with the tokens their pages use to read each other's summaries.
+/// A server in the rail, as pages see it: never its token.
+#[derive(Serialize)]
+struct LinkedOrigin {
+    origin: String,
+}
+
+/// Every server in the rail. Tokens stay in the app: pages read other servers through
+/// linked_fetch, so a server you add can't collect the others' tokens.
 #[tauri::command]
-fn linked_servers(accounts: tauri::State<Accounts>) -> Vec<Account> {
-    accounts.list()
+fn linked_servers(accounts: tauri::State<Accounts>) -> Vec<LinkedOrigin> {
+    accounts.list().into_iter().map(|a| LinkedOrigin { origin: a.origin }).collect()
+}
+
+/// What a linked session may do (worker/auth/linked.ts): the rail summary and images.
+fn linked_path_allowed(method: &str, path: &str) -> bool {
+    if path.contains("..") || path.contains("//") || path.contains('\\') || path.contains('?') || path.contains('#') {
+        return false;
+    }
+    match method {
+        "GET" => {
+            path == "/api/me/workspaces"
+                || path == "/api/dms"
+                || path.strip_prefix("/api/files/avatars/").is_some_and(|rest| !rest.is_empty())
+                || path.strip_prefix("/api/files/workspace-icons/").is_some_and(|rest| !rest.is_empty())
+        }
+        _ => false,
+    }
+}
+
+#[derive(Serialize)]
+struct LinkedResponse {
+    status: u16,
+    content_type: String,
+    /// Base64, so images survive the trip to the page.
+    body: String,
+}
+
+/// Reads one of your other servers' rail data with its token, for the page on show.
+#[tauri::command]
+async fn linked_fetch(accounts: tauri::State<'_, Accounts>, origin: String, path: String) -> Result<LinkedResponse, String> {
+    if !linked_path_allowed("GET", &path) {
+        return Err("Not allowed".into());
+    }
+    let token = accounts.list().into_iter().find(|a| a.origin == origin).map(|a| a.token).ok_or("Unknown server")?;
+    let response = reqwest::Client::new()
+        .get(format!("{origin}{path}"))
+        .bearer_auth(token)
+        .timeout(std::time::Duration::from_secs(15))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    let status = response.status().as_u16();
+    let content_type = response.headers().get("content-type").and_then(|v| v.to_str().ok()).unwrap_or("").to_string();
+    let bytes = response.bytes().await.map_err(|e| e.to_string())?;
+    use base64::Engine;
+    Ok(LinkedResponse { status, content_type, body: base64::engine::general_purpose::STANDARD.encode(bytes) })
 }
 
 /// A server registers itself (never another server: the origin must be the caller's).
@@ -213,12 +266,31 @@ fn save_linked_server(app: AppHandle, webview: tauri::Webview, accounts: tauri::
     Ok(())
 }
 
-/// Takes a server out of the rail.
+/// Takes a server out of the rail, revoking its linked session there first.
 #[tauri::command]
-fn remove_linked_server(app: AppHandle, accounts: tauri::State<Accounts>, origin: String) -> Result<(), String> {
+async fn remove_linked_server(app: AppHandle, accounts: tauri::State<'_, Accounts>, origin: String) -> Result<(), String> {
+    let token = accounts.list().into_iter().find(|a| a.origin == origin).map(|a| a.token);
+    if let Some(token) = token {
+        let _ = reqwest::Client::new()
+            .delete(format!("{origin}/api/me/linked-session"))
+            .bearer_auth(token)
+            .timeout(std::time::Duration::from_secs(10))
+            .send()
+            .await;
+    }
     let mut list = accounts.0.lock().unwrap();
     list.retain(|a| a.origin != origin);
     store_accounts(&app, &list)
+}
+
+/// A path on `server`, refusing anything that would resolve to another host
+/// ("//evil.com", "/\\evil.com").
+fn same_origin_join(server: &Url, path: &str) -> Option<Url> {
+    if path.starts_with("//") || path.contains('\\') {
+        return None;
+    }
+    let target = server.join(path).ok()?;
+    (origin_of(&target) == origin_of(server)).then_some(target)
 }
 
 /// Opens a page on another server: one from the rail, or a new one being added (which
@@ -228,7 +300,7 @@ async fn switch_server(app: AppHandle, origin: String, path: String) -> Result<(
     let known = app.state::<Accounts>().contains(&origin);
     let origin = if known { origin } else { verify_server(&origin).await? };
     let url = Url::parse(&origin).map_err(|e| e.to_string())?;
-    let target = url.join(if path.starts_with('/') { &path } else { "/" }).map_err(|e| e.to_string())?;
+    let target = same_origin_join(&url, if path.starts_with('/') { &path } else { "/" }).ok_or("Not a page on that server")?;
     save(&app, &url)?;
     app.state::<Server>().set(Some(url.clone()));
     allow_server(&app, &url);
@@ -280,7 +352,7 @@ fn open_deep_link(app: &AppHandle, link: &Url) {
     show(app);
     let Some(server) = app.state::<Server>().get() else { return };
     let path = format!("{}{}", link.host_str().unwrap_or_default(), link.path());
-    if let (Ok(target), Ok(window)) = (server.join(&path), main_window(app)) {
+    if let (Some(target), Ok(window)) = (same_origin_join(&server, &path), main_window(app)) {
         let _ = window.navigate(target);
     }
 }
@@ -328,6 +400,7 @@ pub fn run() {
             linked_servers,
             save_linked_server,
             remove_linked_server,
+            linked_fetch,
             switch_server
         ])
         .setup(|app| {
@@ -456,6 +529,26 @@ mod tests {
         assert!(!allowed("https://chat.example.com.evil.net"));
         assert!(!allowed("https://chat.example.com:8443"));
         assert!(!is_allowed(&url("https://chat.example.com"), None, &none));
+    }
+
+    #[test]
+    fn linked_fetch_only_reaches_the_rail_routes() {
+        assert!(linked_path_allowed("GET", "/api/me/workspaces"));
+        assert!(linked_path_allowed("GET", "/api/files/avatars/u/1"));
+        assert!(!linked_path_allowed("GET", "/api/me"));
+        assert!(!linked_path_allowed("GET", "/api/channels/x/messages"));
+        assert!(!linked_path_allowed("GET", "/api/files/avatars/../../api/me"));
+        assert!(!linked_path_allowed("GET", "/api/files/attachments/x"));
+        assert!(!linked_path_allowed("POST", "/api/dms"));
+    }
+
+    #[test]
+    fn switching_never_leaves_the_server() {
+        let server = url("https://chat.example.com");
+        assert_eq!(same_origin_join(&server, "/w/1").unwrap().as_str(), "https://chat.example.com/w/1");
+        assert!(same_origin_join(&server, "//evil.com/x").is_none());
+        assert!(same_origin_join(&server, "/\\evil.com").is_none());
+        assert!(same_origin_join(&server, "https://evil.com/").is_none());
     }
 
     #[test]

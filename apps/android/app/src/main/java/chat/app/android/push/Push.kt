@@ -55,17 +55,21 @@ object Push {
         context.getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
     }
 
-    /** Registers with every signed-in server that doesn't know this phone yet. */
+    /**
+     * Registers with every signed-in server that doesn't know this phone yet. Each server
+     * gets its own push key, which the relay only honours for that server.
+     */
     fun sync(context: Context, accounts: List<Pair<String, String>>) {
         if (!enabled || FirebaseApp.getApps(context).isEmpty()) return
         scope.launch {
             val token = runCatching { FirebaseMessaging.getInstance().token.await() }.getOrNull() ?: return@launch
-            val key = pushKey(context, token) ?: return@launch
-            val known = prefs(context).getStringSet("servers", emptySet())!!.toMutableSet()
-            val servers = accounts.map { it.first }.toSet()
-            known.retainAll(servers)
+            val p = prefs(context)
+            if (p.getString("token", null) != token) p.edit().putString("token", token).remove("servers").apply()
+            val known = p.getStringSet("servers", emptySet())!!.toMutableSet()
+            known.retainAll(accounts.map { it.first }.toSet())
             for ((server, sessionToken) in accounts) {
                 if (server in known) continue
+                val key = pushKey(token, server) ?: continue
                 val body = buildJsonObject {
                     put("platform", "android")
                     put("relay", BuildConfig.PUSH_RELAY)
@@ -73,29 +77,25 @@ object Push {
                 }
                 runCatching { ApiClient(server, sessionToken).raw("/api/push/devices", "POST", body.toString()) }.onSuccess { known += server }
             }
-            prefs(context).edit().putStringSet("servers", known).apply()
+            p.edit().putStringSet("servers", known).apply()
         }
     }
 
-    /** A new FCM token: every server needs the new key. */
+    /** A new FCM token: every server needs a new key. */
     fun tokenChanged(context: Context) {
-        prefs(context).edit().remove("key").remove("servers").apply()
+        prefs(context).edit().remove("token").remove("servers").apply()
     }
 
-    private suspend fun pushKey(context: Context, token: String): String? {
-        val p = prefs(context)
-        if (p.getString("token", null) == token) p.getString("key", null)?.let { return it }
+    private fun pushKey(token: String, server: String): String? {
         val request = Request.Builder()
             .url("${BuildConfig.PUSH_RELAY}/v1/register")
-            .post(buildJsonObject { put("platform", "android"); put("token", token) }.toString().toRequestBody("application/json".toMediaType()))
+            .post(buildJsonObject { put("platform", "android"); put("token", token); put("server", server) }.toString().toRequestBody("application/json".toMediaType()))
             .build()
-        val key = runCatching {
+        return runCatching {
             ApiClient.http.newCall(request).execute().use { res ->
                 if (!res.isSuccessful) null else json.decodeFromString<Registered>(res.body!!.string()).pushKey
             }
-        }.getOrNull() ?: return null
-        p.edit().putString("token", token).putString("key", key).remove("servers").apply()
-        return key
+        }.getOrNull()
     }
 
     @Serializable

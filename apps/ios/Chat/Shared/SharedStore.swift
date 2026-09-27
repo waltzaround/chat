@@ -12,10 +12,10 @@ enum SharedStore {
         set { defaults.set(newValue, forKey: "chat.pushDevices") }
     }
 
-    /// The push key the relay issued for this phone, so a new token re-registers.
-    static var pushKey: String? {
-        get { defaults.string(forKey: "chat.pushKey") }
-        set { defaults.set(newValue, forKey: "chat.pushKey") }
+    /// This phone's APNs token, so a new token re-registers with every server.
+    static var pushToken: String? {
+        get { defaults.string(forKey: "chat.pushToken") }
+        set { defaults.set(newValue, forKey: "chat.pushToken") }
     }
 }
 

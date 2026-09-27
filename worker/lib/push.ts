@@ -95,6 +95,7 @@ async function pushToDevices(env: Env, userId: string, fetcher: typeof fetch): P
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ pushKey: device.pushKey, server: device.origin, device: device.id }),
+        signal: AbortSignal.timeout(10_000),
       }).catch(() => null);
       if (res?.status === 410) await env.DB.prepare("DELETE FROM push_devices WHERE id = ?").bind(device.id).run();
       else if (res?.ok) sent += 1;

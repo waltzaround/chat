@@ -37,31 +37,29 @@ final class PushManager: NSObject, UNUserNotificationCenterDelegate {
     }
 
     func didRegister(deviceToken: Data) {
-        guard let relay else { return }
         let hex = deviceToken.map { String(format: "%02x", $0) }.joined()
-        Task {
-            var request = URLRequest(url: relay.appending(path: "v1/register"))
-            request.httpMethod = "POST"
-            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            request.httpBody = try? JSONEncoder().encode(["platform": "ios", "token": hex])
-            guard let (data, _) = try? await URLSession.shared.data(for: request),
-                  let key = (try? JSONDecoder().decode([String: String].self, from: data))?["pushKey"] else { return }
-            if key != SharedStore.pushKey {
-                // A new token: every server needs the new key.
-                SharedStore.pushKey = key
-                SharedStore.pushDevices = [:]
-            }
-            await syncAccounts()
+        if hex != SharedStore.pushToken {
+            // A new token: every server needs a new key.
+            SharedStore.pushToken = hex
+            SharedStore.pushDevices = [:]
         }
+        Task { await syncAccounts() }
     }
 
-    /// Registers this phone with any signed-in server that doesn't know it yet.
+    /// Registers this phone with any signed-in server that doesn't know it yet. Each
+    /// server gets its own push key, which the relay only honours for that server.
     func syncAccounts() async {
-        guard let relay, let key = SharedStore.pushKey, let model else { return }
+        guard let relay, let token = SharedStore.pushToken, let model else { return }
         var devices = SharedStore.pushDevices
         let servers = Set(model.accounts.map(\.server.absoluteString))
         devices = devices.filter { servers.contains($0.key) }
         for account in model.accounts where devices[account.server.absoluteString] == nil {
+            var request = URLRequest(url: relay.appending(path: "v1/register"))
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = try? JSONEncoder().encode(["platform": "ios", "token": token, "server": account.server.absoluteString])
+            guard let (data, _) = try? await URLSession.shared.data(for: request),
+                  let key = (try? JSONDecoder().decode([String: String].self, from: data))?["pushKey"] else { continue }
             struct Body: Encodable { let platform = "ios"; let relay: String; let pushKey: String }
             struct Created: Decodable { let id: String }
             let api = account.api

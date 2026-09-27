@@ -49,7 +49,8 @@ function writeLocal(servers: LinkedServer[]) {
 
 /** Every linked server except this one. */
 export async function loadLinkedServers(): Promise<LinkedServer[]> {
-  const all = isDesktopApp() ? await desktopInvoke<LinkedServer[]>("linked_servers").catch(() => []) : readLocal();
+  // The desktop app only tells pages which servers exist, not their tokens.
+  const all = isDesktopApp() ? (await desktopInvoke<Array<{ origin: string }>>("linked_servers").catch(() => [])).map((s) => ({ origin: s.origin, token: "" })) : readLocal();
   return all.filter((s) => s.origin !== window.location.origin);
 }
 
@@ -76,6 +77,14 @@ async function forgetLinkedServer(origin: string): Promise<void> {
 export class LinkRevokedError extends Error {}
 
 async function remoteFetch(server: LinkedServer, path: string, init: RequestInit = {}): Promise<Response> {
+  // In the desktop app the tokens never reach this page: the app fetches for us.
+  if (isDesktopApp()) {
+    const r = await desktopInvoke<{ status: number; content_type: string; body: string }>("linked_fetch", { origin: server.origin, path });
+    const bytes = Uint8Array.from(atob(r.body), (c) => c.charCodeAt(0));
+    if (r.status === 401) throw new LinkRevokedError(`${new URL(server.origin).host} signed this link out`);
+    if (r.status < 200 || r.status >= 300) throw new Error(`${new URL(server.origin).host} answered ${r.status}`);
+    return new Response(bytes, { status: r.status, headers: { "Content-Type": r.content_type } });
+  }
   const res = await fetch(`${server.origin}${path}`, {
     ...init,
     credentials: "omit",
@@ -192,7 +201,8 @@ export function useUnlinkServer() {
     mutationFn: async (server: LinkedServer) => {
       // Revoke it on the other server too. If that fails (offline, already revoked),
       // forget it here anyway; it also shows under that account's sessions.
-      await remoteFetch(server, "/api/me/linked-session", { method: "DELETE" }).catch(() => undefined);
+      // (The desktop app revokes it itself when removing it.)
+      if (!isDesktopApp()) await remoteFetch(server, "/api/me/linked-session", { method: "DELETE" }).catch(() => undefined);
       await forgetLinkedServer(server.origin);
     },
     onSuccess: (_, server) => {
@@ -281,7 +291,7 @@ export async function completeBrowserLink(hash: string): Promise<string> {
  */
 export async function registerWithDesktopApp(): Promise<void> {
   if (!isDesktopApp()) return;
-  const all = await desktopInvoke<LinkedServer[]>("linked_servers").catch(() => null);
+  const all = await desktopInvoke<Array<{ origin: string }>>("linked_servers").catch(() => null);
   if (!all || all.some((s) => s.origin === window.location.origin)) return;
   const { token } = await mintLinkedSession("desktop");
   await desktopInvoke("save_linked_server", { origin: window.location.origin, token });

@@ -39,7 +39,7 @@ app.use("*", withServices);
 // so "*" is safe, and only the routes linked sessions may call are opened up.
 app.use("/api/*", async (c, next) => {
   const requestOrigin = c.req.header("origin");
-  if (!requestOrigin || requestOrigin === c.get("origin")) return next();
+  if (!requestOrigin || requestOrigin === c.get("origin") || requestOrigin === new URL(c.req.url).origin) return next();
   if (c.req.method === "OPTIONS") {
     const method = c.req.header("access-control-request-method") ?? "GET";
     if (!allowsCrossOrigin(method, c.req.path)) return c.body(null, 204);
@@ -49,6 +49,11 @@ app.use("/api/*", async (c, next) => {
       "Access-Control-Allow-Headers": "Authorization",
       "Access-Control-Max-Age": "600",
     });
+  }
+  // Any other cross-origin write is refused outright. SameSite=lax cookies still ride
+  // along from sibling subdomains, and a text/plain POST needs no preflight.
+  if (c.req.method !== "GET" && c.req.method !== "HEAD" && !allowsCrossOrigin(c.req.method, c.req.path)) {
+    return c.json({ error: { code: "forbidden", message: "Cross-origin requests aren't allowed here" } }, 403);
   }
   await next();
   if (allowsCrossOrigin(c.req.method, c.req.path)) {

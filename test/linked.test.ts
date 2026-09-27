@@ -56,3 +56,20 @@ describe("linked sessions (other servers' rails)", () => {
     expect((await link(s.cookie, "javascript:alert(1)")).status).toBe(400);
   });
 });
+
+describe("cross-origin writes", () => {
+  it("are refused, even with the session cookie (sibling subdomains share lax cookies)", async () => {
+    const s = await signUp("csrfvictim");
+    const res = await SELF.fetch(`${ORIGIN}/api/workspaces`, { method: "POST", headers: { Origin: "https://evil.localhost", Cookie: s.cookie, "Content-Type": "text/plain" }, body: JSON.stringify({ name: "Pwned" }) });
+    expect(res.status).toBe(403);
+    // Native apps send no Origin and aren't affected.
+    const native = await SELF.fetch(`${ORIGIN}/api/instance`);
+    expect(native.status).toBe(200);
+  });
+
+  it("don't let a linked server read your profile", async () => {
+    const s = await signUp("linkprofile");
+    const { token } = (await (await link(s.cookie, OTHER)).json()) as { token: string };
+    expect((await fromOther("/api/me", token)).status).toBe(403);
+  });
+});

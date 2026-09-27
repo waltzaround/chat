@@ -11,6 +11,7 @@ fn main() {
             "linked_servers",
             "save_linked_server",
             "remove_linked_server",
+            "linked_fetch",
             "switch_server",
         ]),
     ))

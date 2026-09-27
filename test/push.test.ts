@@ -103,3 +103,15 @@ describe("phone push (through a push relay)", () => {
     expect(left.results.map((r) => r.push_key)).toEqual(["phone-key-0123456789"]);
   });
 });
+
+describe("phone push hardening", () => {
+  it("won't hand a device registered to one account to another", async () => {
+    const a = await signUp();
+    const b = await signUp();
+    const body = { platform: "android", relay: "https://push.example.org", pushKey: "shared-key-0123456789" };
+    expect((await apiRaw(a.cookie, "/api/push/devices", { method: "POST", json: body })).status).toBe(201);
+    expect((await apiRaw(b.cookie, "/api/push/devices", { method: "POST", json: body })).status).toBe(409);
+    const row = await env.DB.prepare("SELECT user_id FROM push_devices WHERE push_key = ?").bind(body.pushKey).first<{ user_id: string }>();
+    expect(row?.user_id).toBe(a.user.id);
+  });
+});

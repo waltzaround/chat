@@ -10,7 +10,6 @@ export const LINKED_SCOPE = "linked";
 
 /** Everything a linked session may call. All read-only, apart from revoking itself. */
 const LINKED_ROUTES: { method: string; path: RegExp }[] = [
-  { method: "GET", path: /^\/api\/me$/ },
   { method: "GET", path: /^\/api\/me\/workspaces$/ },
   { method: "GET", path: /^\/api\/dms$/ },
   { method: "GET", path: /^\/api\/files\/(avatars|workspace-icons)\/[^?]+$/ },

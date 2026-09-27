@@ -25,8 +25,8 @@ const env: Env = {
 
 const post = (path: string, body: unknown) => new Request(`https://relay.test${path}`, { method: "POST", body: JSON.stringify(body) });
 
-async function register(platform: string, token: string): Promise<string> {
-  const res = await handle(post("/v1/register", { platform, token }), env);
+async function register(platform: string, token: string, server = "https://chat.example.com"): Promise<string> {
+  const res = await handle(post("/v1/register", { platform, token, server }), env);
   return ((await res.json()) as { pushKey: string }).pushKey;
 }
 
@@ -45,7 +45,7 @@ describe("push keys", () => {
 
 describe("relay", () => {
   it("wakes an iPhone through APNs with a signed token and no message text", async () => {
-    const pushKey = await register("ios", "a1b2c3d4e5f6");
+    const pushKey = await register("ios", "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4");
     const calls: Array<{ url: string; init: RequestInit }> = [];
     const fetcher = (async (url: string, init: RequestInit) => {
       calls.push({ url, init });
@@ -53,7 +53,7 @@ describe("relay", () => {
     }) as unknown as typeof fetch;
     const res = await handle(post("/v1/notify", { pushKey, server: "https://chat.example.com", device: "dev1" }), env, fetcher);
     expect(res.status).toBe(202);
-    expect(calls[0]!.url).toBe("https://api.sandbox.push.apple.com/3/device/a1b2c3d4e5f6");
+    expect(calls[0]!.url).toBe("https://api.sandbox.push.apple.com/3/device/a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4");
     const headers = calls[0]!.init.headers as Record<string, string>;
     expect(headers["apns-topic"]).toBe("chat.app.ios");
     const [h, p, s] = headers.authorization!.replace("bearer ", "").split(".");
@@ -65,7 +65,7 @@ describe("relay", () => {
   });
 
   it("wakes an Android phone through FCM with a data message", async () => {
-    const pushKey = await register("android", "fcm-token-xyz");
+    const pushKey = await register("android", "fcm-token-xyz-0123456789");
     const urls: string[] = [];
     let message: unknown;
     const fetcher = (async (url: string, init: RequestInit) => {
@@ -77,22 +77,30 @@ describe("relay", () => {
     }) as unknown as typeof fetch;
     expect((await handle(post("/v1/notify", { pushKey, server: "https://chat.example.com", device: "dev2" }), env, fetcher)).status).toBe(202);
     expect(urls).toEqual(["https://oauth2.googleapis.com/token", "https://fcm.googleapis.com/v1/projects/proj/messages:send"]);
-    expect(message).toEqual({ message: { token: "fcm-token-xyz", data: { server: "https://chat.example.com", device: "dev2" }, android: { priority: "HIGH", ttl: "86400s" } } });
+    expect(message).toEqual({ message: { token: "fcm-token-xyz-0123456789", data: { server: "https://chat.example.com", device: "dev2" }, android: { priority: "HIGH", ttl: "86400s" } } });
   });
 
   it("tells servers to forget phones that are gone, and keys it didn't issue", async () => {
-    const pushKey = await register("ios", "deadbeef00");
+    const pushKey = await register("ios", "deadbeef00deadbeef00deadbeef00dead");
     const gone = (async () => Response.json({ reason: "Unregistered" }, { status: 410 })) as unknown as typeof fetch;
-    expect((await handle(post("/v1/notify", { pushKey, server: "https://a", device: "d" }), env, gone)).status).toBe(410);
+    expect((await handle(post("/v1/notify", { pushKey, server: "https://chat.example.com", device: "d" }), env, gone)).status).toBe(410);
     expect((await handle(post("/v1/notify", { pushKey: "forged-key-000000000000", server: "https://a", device: "d" }), env)).status).toBe(410);
+  });
+
+  it("only wakes the phone for the server its key was made for", async () => {
+    const pushKey = await register("ios", "abcdefabcdefabcdefabcdefabcdefab", "https://mine.example");
+    const ok = (async () => new Response(null, { status: 200 })) as unknown as typeof fetch;
+    expect((await handle(post("/v1/notify", { pushKey, server: "https://someone-else.example", device: "d" }), env, ok)).status).toBe(403);
+    expect((await handle(post("/v1/notify", { pushKey, server: "https://mine.example", device: "d" }), env, ok)).status).toBe(202);
+    expect((await handle(post("/v1/register", { platform: "ios", token: "not/hex", server: "https://mine.example" }), env)).status).toBe(400);
   });
 
   it("rejects bad input and limits floods", async () => {
     expect((await handle(post("/v1/register", { platform: "windows", token: "x" }), env)).status).toBe(400);
-    const pushKey = await register("ios", "flood-token-1");
+    const pushKey = await register("ios", "f100d0000000000000000000000000000001");
     const ok = (async () => new Response(null, { status: 200 })) as unknown as typeof fetch;
     const statuses: number[] = [];
-    for (let i = 0; i < 32; i++) statuses.push((await handle(post("/v1/notify", { pushKey, server: "https://a", device: "d" }), env, ok)).status);
+    for (let i = 0; i < 32; i++) statuses.push((await handle(post("/v1/notify", { pushKey, server: "https://chat.example.com", device: "d" }), env, ok)).status);
     expect(statuses.filter((s) => s === 429).length).toBe(2);
   });
 });

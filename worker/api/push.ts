@@ -43,14 +43,23 @@ pushRoutes.delete("/subscriptions", async (c) => {
 pushRoutes.post("/devices", async (c) => {
   const input = await parseBody(c, pushDeviceSchema);
   const relay = new URL(input.relay).origin;
-  const existing = await c.env.DB.prepare("SELECT id FROM push_devices WHERE push_key = ?").bind(input.pushKey).first<{ id: string }>();
+  // Owners can pin which relays their server will call (comma-separated origins).
+  const allowed = c.env.PUSH_RELAYS?.split(",").map((r) => r.trim()).filter(Boolean);
+  if (allowed?.length && !allowed.includes(relay)) throw ApiError.validation(undefined, "This server doesn't use that push relay");
+  const me = c.get("user").id;
+  const existing = await c.env.DB.prepare("SELECT id, user_id FROM push_devices WHERE push_key = ?").bind(input.pushKey).first<{ id: string; user_id: string }>();
+  // A key already registered to someone else stays theirs: knowing a key isn't owning the phone.
+  if (existing && existing.user_id !== me) throw ApiError.conflict("That device is registered to another account");
   const id = existing?.id ?? newId();
   await c.env.DB.prepare(
     `INSERT INTO push_devices (id, user_id, session_id, platform, relay, push_key, origin, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT (push_key) DO UPDATE SET user_id = excluded.user_id, session_id = excluded.session_id, relay = excluded.relay, origin = excluded.origin`,
+     ON CONFLICT (push_key) DO UPDATE SET session_id = excluded.session_id, relay = excluded.relay, origin = excluded.origin WHERE push_devices.user_id = excluded.user_id`,
   )
-    .bind(id, c.get("user").id, c.get("sessionId"), input.platform, relay, input.pushKey, c.get("origin"), Date.now())
+    // The address the app itself uses: it finds its session by it, and the relay checks it.
+    .bind(id, me, c.get("sessionId"), input.platform, relay, input.pushKey, new URL(c.req.url).origin, Date.now())
     .run();
+  // Keep the newest 10 phones per account.
+  await c.env.DB.prepare("DELETE FROM push_devices WHERE user_id = ? AND id NOT IN (SELECT id FROM push_devices WHERE user_id = ? ORDER BY created_at DESC LIMIT 10)").bind(me, me).run();
   return c.json({ id }, 201);
 });
 

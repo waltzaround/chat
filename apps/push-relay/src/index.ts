@@ -4,7 +4,7 @@ import { apnsConfigured, fcmConfigured, send, type Env } from "./senders";
 /**
  * Chat push relay.
  *
- *   POST /v1/register {platform, token}        from the app: returns {pushKey}
+ *   POST /v1/register {platform, token, server} from the app: returns {pushKey}
  *   POST /v1/notify   {pushKey, server, device} from a Chat server: wakes the phone
  *
  * Phones register their APNs/FCM token and get back a push key (the token, sealed
@@ -39,11 +39,13 @@ export async function handle(request: Request, env: Env, fetcher: typeof fetch =
   if (!body) return json({ error: "Expected JSON" }, 400);
 
   if (url.pathname === "/v1/register") {
-    const { platform, token } = body;
-    if ((platform !== "ios" && platform !== "android") || typeof token !== "string" || token.length < 8 || token.length > 4096) {
-      return json({ error: "Expected platform (ios or android) and token" }, 400);
-    }
-    return json({ pushKey: await sealDevice(env.RELAY_KEY, { platform, token }) });
+    const { platform, token, server } = body;
+    // APNs tokens are hex; FCM tokens are URL-safe base64 with colons.
+    const valid = platform === "ios" ? typeof token === "string" && /^[0-9a-f]{32,200}$/i.test(token) : platform === "android" && typeof token === "string" && /^[A-Za-z0-9_:-]{20,4096}$/.test(token);
+    if (!valid) return json({ error: "Expected platform (ios or android) and a valid token" }, 400);
+    if (typeof server !== "string" || !/^https?:\/\/[^/]+$/.test(server)) return json({ error: "Expected the server's origin" }, 400);
+    // One key per server: a server you've left can't keep waking your phone with it.
+    return json({ pushKey: await sealDevice(env.RELAY_KEY, { platform, token: token as string, server }) });
   }
 
   if (url.pathname === "/v1/notify") {
@@ -54,6 +56,7 @@ export async function handle(request: Request, env: Env, fetcher: typeof fetch =
     const target = await openDevice(env.RELAY_KEY, pushKey);
     // Not ours (or the relay key changed): tell the server to forget it.
     if (!target) return json({ error: "Unknown push key" }, 410);
+    if (target.server && target.server !== server) return json({ error: "This key is for another server" }, 403);
     if (limited(pushKey)) return json({ error: "Too many pushes" }, 429);
     const result = await send(env, target, { server, device }, fetcher);
     if (result === "gone") return json({ error: "Device is gone" }, 410);

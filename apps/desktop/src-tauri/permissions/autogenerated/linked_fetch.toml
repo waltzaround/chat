@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-linked-fetch"
+description = "Enables the linked_fetch command without any pre-configured scope."
+commands.allow = ["linked_fetch"]
+
+[[permission]]
+identifier = "deny-linked-fetch"
+description = "Denies the linked_fetch command without any pre-configured scope."
+commands.deny = ["linked_fetch"]

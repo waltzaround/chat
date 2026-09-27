@@ -6,6 +6,8 @@
 export interface Device {
   platform: "ios" | "android";
   token: string;
+  /** The one Chat server this key works for (keys made before this have none). */
+  server?: string;
 }
 
 const AAD = new TextEncoder().encode("chat-push-v1");
@@ -18,7 +20,7 @@ async function aesKey(secret: string): Promise<CryptoKey> {
 
 export async function sealDevice(secret: string, device: Device): Promise<string> {
   const iv = crypto.getRandomValues(new Uint8Array(12));
-  const data = new TextEncoder().encode(JSON.stringify({ p: device.platform, t: device.token }));
+  const data = new TextEncoder().encode(JSON.stringify({ p: device.platform, t: device.token, s: device.server }));
   const sealed = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv, additionalData: AAD }, await aesKey(secret), data));
   const out = new Uint8Array(iv.length + sealed.length);
   out.set(iv);
@@ -31,8 +33,9 @@ export async function openDevice(secret: string, pushKey: string): Promise<Devic
   try {
     const bytes = fromBase64url(pushKey);
     const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: bytes.slice(0, 12), additionalData: AAD }, await aesKey(secret), bytes.slice(12));
-    const { p, t } = JSON.parse(new TextDecoder().decode(plain)) as { p: string; t: string };
-    return (p === "ios" || p === "android") && typeof t === "string" ? { platform: p, token: t } : null;
+    const { p, t, s } = JSON.parse(new TextDecoder().decode(plain)) as { p: string; t: string; s?: string };
+    if ((p !== "ios" && p !== "android") || typeof t !== "string") return null;
+    return typeof s === "string" ? { platform: p, token: t, server: s } : { platform: p, token: t };
   } catch {
     return null;
   }
