@@ -17,12 +17,13 @@ struct RemoteImage<Placeholder: View>: View {
         }
         .task(id: path) {
             guard let path, let api else { return }
-            if let cached = ImageCache.shared.object(forKey: path as NSString) {
+            let key = "\(api.server.absoluteString)\(path)" as NSString
+            if let cached = ImageCache.shared.object(forKey: key) {
                 image = cached
                 return
             }
             if let data = try? await api.loadImageData(path), let loaded = UIImage(data: data) {
-                ImageCache.shared.setObject(loaded, forKey: path as NSString)
+                ImageCache.shared.setObject(loaded, forKey: key)
                 image = loaded
             }
         }
@@ -37,13 +38,20 @@ enum ImageCache {
     }()
 }
 
+extension EnvironmentValues {
+    /// The server the views below belong to (a channel's), for loading its images.
+    @Entry var chatServer: URL?
+}
+
 struct Avatar: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.chatServer) private var environmentServer
     let user: UserSummary
     let size: CGFloat
+    var server: URL?
 
     var body: some View {
-        RemoteImage(path: user.avatarUrl, api: model.api) {
+        RemoteImage(path: user.avatarUrl, api: (server ?? environmentServer).flatMap { model.api(for: $0) }) {
             Circle().fill(Self.colour(for: user.id))
                 .overlay(Text(initials).font(.system(size: size * 0.38, weight: .semibold)).foregroundStyle(.white))
         }

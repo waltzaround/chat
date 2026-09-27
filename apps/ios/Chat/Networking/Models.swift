@@ -39,6 +39,7 @@ struct Category: Decodable, Hashable, Identifiable {
 }
 
 struct Channel: Decodable, Hashable, Identifiable {
+    var isVoice: Bool { kind == "voice" }
     let id: String
     let workspaceId: String
     let categoryId: String?
@@ -72,7 +73,30 @@ struct DirectMessage: Decodable, Hashable, Identifiable {
     let peer: UserSummary
     let lastMessageAt: String?
     let unreadCount: Int
+    let lastMessage: LastMessage?
     var id: String { workspaceId }
+
+    struct LastMessage: Decodable, Hashable {
+        let authorId: String
+        let content: String
+        let hasAttachments: Bool
+    }
+}
+
+struct SearchResult: Decodable, Identifiable {
+    let message: Message
+    let channelName: String
+    let snippet: String
+    var id: String { message.id }
+}
+
+struct SearchResponse: Decodable {
+    let results: [SearchResult]
+}
+
+struct Invite: Decodable {
+    let code: String
+    let url: String
 }
 
 struct MessageAuthor: Codable, Hashable {
@@ -151,15 +175,18 @@ enum ChatDate {
 
     static func parse(_ iso: String) -> Date? { parser.date(from: iso) }
 
-    /// "5m", "3h", "Yesterday" or a short date, for lists.
+    /// "now", "5m", "3h", "4d", "2mo", like Discord's DM list.
     static func relative(_ iso: String) -> String {
         guard let date = parse(iso) else { return "" }
-        let seconds = Date.now.timeIntervalSince(date)
-        if seconds < 60 { return "Just now" }
-        if seconds < 3600 { return "\(Int(seconds / 60))m ago" }
-        if Calendar.current.isDateInToday(date) { return "\(Int(seconds / 3600))h ago" }
-        if Calendar.current.isDateInYesterday(date) { return "Yesterday" }
-        return date.formatted(.dateTime.day().month(.abbreviated))
+        let seconds = max(0, Date.now.timeIntervalSince(date))
+        switch seconds {
+        case ..<60: return "now"
+        case ..<3600: return "\(Int(seconds / 60))m"
+        case ..<86400: return "\(Int(seconds / 3600))h"
+        case ..<(86400 * 30): return "\(Int(seconds / 86400))d"
+        case ..<(86400 * 365): return "\(Int(seconds / (86400 * 30)))mo"
+        default: return "\(Int(seconds / (86400 * 365)))y"
+        }
     }
 
     /// "September 27, 2026", for the line between days in a channel.

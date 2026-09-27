@@ -4,6 +4,8 @@ import SwiftUI
 /// the server's web pages, which handle invites, confirmation email and bot checks.
 struct SignInView: View {
     @Environment(AppModel.self) private var model
+    let server: URL
+    var onDone: () -> Void = {}
     @State private var email = ""
     @State private var password = ""
     @State private var busy = false
@@ -22,7 +24,7 @@ struct SignInView: View {
                         .foregroundStyle(Theme.heading)
                     Text("We're so excited to see you again!")
                         .foregroundStyle(Theme.muted)
-                    if let host = model.server?.host() {
+                    if let host = server.host().map({ h in server.port.map { "\(h):\($0)" } ?? h }) {
                         Label(host, systemImage: "server.rack")
                             .font(.footnote.weight(.medium))
                             .foregroundStyle(Theme.text)
@@ -32,7 +34,7 @@ struct SignInView: View {
                             .padding(.top, 4)
                     }
                 }
-                .padding(.top, 40)
+                .padding(.top, 16)
 
                 VStack(spacing: 8) {
                     FieldLabel(text: "Email")
@@ -54,7 +56,7 @@ struct SignInView: View {
                         .focused($field, equals: .password)
                         .onSubmit(signIn)
                         .filledField()
-                    Button("Forgot your password?") { webPage = model.server?.appending(path: "forgot-password") }
+                    Button("Forgot your password?") { webPage = server.appending(path: "forgot-password") }
                         .font(.footnote.weight(.medium))
                         .foregroundStyle(Theme.link)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -75,7 +77,7 @@ struct SignInView: View {
 
                 HStack(spacing: 4) {
                     Text("Need an account?").foregroundStyle(Theme.muted)
-                    Button("Register") { webPage = model.server?.appending(path: "register") }
+                    Button("Register") { webPage = server.appending(path: "register") }
                         .foregroundStyle(Theme.link)
                 }
                 .font(.footnote.weight(.medium))
@@ -87,17 +89,7 @@ struct SignInView: View {
         }
         .scrollDismissesKeyboard(.interactively)
         .background(Theme.chat.ignoresSafeArea())
-        .safeAreaInset(edge: .top) {
-            HStack {
-                Button { model.forgetServer() } label: {
-                    Image(systemName: "chevron.left").font(.body.weight(.semibold)).frame(width: 44, height: 44)
-                }
-                .foregroundStyle(Theme.heading)
-                .accessibilityLabel("Use a different server")
-                Spacer()
-            }
-            .padding(.horizontal, 8)
-        }
+        .navigationBarTitleDisplayMode(.inline)
         .sheet(item: $webPage) { url in SafariView(url: url).ignoresSafeArea() }
     }
 
@@ -106,7 +98,8 @@ struct SignInView: View {
         busy = true
         Task {
             do {
-                try await model.signIn(email: email.trimmingCharacters(in: .whitespaces), password: password)
+                try await model.signIn(server: server, email: email.trimmingCharacters(in: .whitespaces), password: password)
+                onDone()
             } catch {
                 self.error = (error as? LocalizedError)?.errorDescription ?? "Sign in failed."
             }

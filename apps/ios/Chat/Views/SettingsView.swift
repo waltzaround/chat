@@ -1,39 +1,47 @@
 import SafariServices
 import SwiftUI
 
-/// The You tab: your profile card and account actions, like Discord's.
-struct YouView: View {
+/// Opened from the profile pill: your accounts on each server, and settings.
+struct ProfileSheet: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    let selected: URL?
+    let addServer: () -> Void
     @State private var webPage: URL?
-    @State private var confirmSignOut = false
+    @State private var confirmSignOut: Account?
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                profile
-                group {
-                    row("Notifications", icon: "bell.fill") { webPage = model.server?.appending(path: "settings") }
-                    divider
-                    row("Privacy and safety", icon: "shield.fill") { webPage = model.server?.appending(path: "settings") }
+                if let account = model.account(for: selected ?? model.accounts.first?.server ?? URL(string: "about:blank")!) {
+                    profile(account)
                 }
-                sectionTitle("Server")
+                sectionTitle("Your servers")
                 group {
-                    HStack(spacing: 12) {
-                        Image(systemName: "server.rack").frame(width: 24).foregroundStyle(Theme.muted)
-                        Text(model.server?.host() ?? "").foregroundStyle(Theme.text)
-                        Spacer()
+                    ForEach(model.accounts) { account in
+                        HStack(spacing: 12) {
+                            if let me = account.me {
+                                Avatar(user: UserSummary(id: me.id, username: me.username, displayName: me.displayName, avatarUrl: me.avatarUrl), size: 36, server: account.server)
+                            }
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(account.host).foregroundStyle(Theme.heading)
+                                Text(account.me.map { "@\($0.username)" } ?? "").font(.caption).foregroundStyle(Theme.muted)
+                            }
+                            Spacer()
+                            Button("Log Out") { confirmSignOut = account }
+                                .font(.subheadline.weight(.medium))
+                                .foregroundStyle(Theme.danger)
+                        }
+                        .padding(.horizontal, 16)
+                        .frame(minHeight: 56)
+                        Rectangle().fill(Theme.raised).frame(height: 0.5).padding(.leading, 64)
                     }
-                    .padding(.horizontal, 16)
-                    .frame(minHeight: 50)
-                    divider
-                    row("Switch server", icon: "arrow.left.arrow.right") {
-                        Task { await model.signOut(); model.forgetServer() }
+                    row("Add a server", icon: "plus.circle.fill") {
+                        dismiss()
+                        addServer()
                     }
                 }
-                group {
-                    row("Log Out", icon: "rectangle.portrait.and.arrow.right", tint: Theme.danger) { confirmSignOut = true }
-                }
-                Text("Profile, notification and privacy settings open your server's settings page.")
+                Text("Profile, notification and privacy settings open that server's settings page.")
                     .font(.caption)
                     .foregroundStyle(Theme.faint)
                     .padding(.horizontal, 4)
@@ -42,35 +50,34 @@ struct YouView: View {
         }
         .background(Theme.rail.ignoresSafeArea())
         .sheet(item: $webPage) { url in SafariView(url: url).ignoresSafeArea() }
-        .confirmationDialog("Log out of \(model.server?.host() ?? "this server")?", isPresented: $confirmSignOut, titleVisibility: .visible) {
-            Button("Log Out", role: .destructive) { Task { await model.signOut() } }
+        .confirmationDialog("Log out of \(confirmSignOut?.host ?? "this server")?", isPresented: Binding(get: { confirmSignOut != nil }, set: { if !$0 { confirmSignOut = nil } }), titleVisibility: .visible) {
+            Button("Log Out", role: .destructive) {
+                if let account = confirmSignOut { Task { await model.signOut(account.server) } }
+            }
         }
     }
 
-    private var profile: some View {
+    private func profile(_ account: Account) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            Theme.accent.frame(height: 96)
+            Theme.accent.frame(height: 80)
             VStack(alignment: .leading, spacing: 12) {
-                if let me = model.me {
-                    Avatar(user: UserSummary(id: me.id, username: me.username, displayName: me.displayName, avatarUrl: me.avatarUrl), size: 80)
+                if let me = account.me {
+                    Avatar(user: UserSummary(id: me.id, username: me.username, displayName: me.displayName, avatarUrl: me.avatarUrl), size: 76, server: account.server)
                         .padding(5)
                         .background(Circle().fill(Theme.panel))
-                        .padding(.top, -48)
+                        .padding(.top, -46)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(me.displayName).font(.title2.bold()).foregroundStyle(Theme.heading)
-                        Text("@\(me.username)").font(.subheadline).foregroundStyle(Theme.text)
+                        Text("@\(me.username) · \(account.host)").font(.subheadline).foregroundStyle(Theme.text)
                     }
-                    Button { webPage = model.server?.appending(path: "settings") } label: {
-                        Label("Edit Profile", systemImage: "pencil")
+                    HStack(spacing: 10) {
+                        Button { webPage = account.server.appending(path: "settings") } label: { Label("Edit Profile", systemImage: "pencil") }
+                            .buttonStyle(PrimaryButtonStyle())
+                        Button { webPage = account.server.appending(path: "settings/notifications") } label: { Image(systemName: "gearshape.fill") }
+                            .buttonStyle(SecondaryButtonStyle())
+                            .frame(width: 56)
+                            .accessibilityLabel("Settings")
                     }
-                    .buttonStyle(PrimaryButtonStyle())
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("EMAIL").font(.caption.weight(.bold)).foregroundStyle(Theme.muted)
-                        Text(me.email).font(.subheadline).foregroundStyle(Theme.text)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(12)
-                    .background(RoundedRectangle(cornerRadius: 8).fill(Theme.rail))
                 } else {
                     ProgressView().tint(Theme.muted).frame(maxWidth: .infinity).padding(.vertical, 24)
                 }
@@ -91,20 +98,15 @@ struct YouView: View {
             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
-    private var divider: some View {
-        Rectangle().fill(Theme.raised).frame(height: 0.5).padding(.leading, 52)
-    }
-
-    private func row(_ title: String, icon: String, tint: Color = Theme.text, action: @escaping () -> Void) -> some View {
+    private func row(_ title: String, icon: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 12) {
-                Image(systemName: icon).frame(width: 24).foregroundStyle(tint == Theme.text ? Theme.muted : tint)
-                Text(title).foregroundStyle(tint)
+                Image(systemName: icon).font(.title3).frame(width: 36).foregroundStyle(Color(hex: "23A55A")!)
+                Text(title).foregroundStyle(Theme.heading)
                 Spacer()
-                if tint == Theme.text { Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(Theme.faint) }
             }
             .padding(.horizontal, 16)
-            .frame(minHeight: 50)
+            .frame(minHeight: 52)
             .contentShape(Rectangle())
         }
         .buttonStyle(ChannelRowStyle())

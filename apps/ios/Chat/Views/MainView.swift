@@ -1,45 +1,34 @@
 import SwiftUI
 
 enum Route: Hashable {
-    case channel(workspaceId: String, channelId: String, title: String, peer: UserSummary?)
+    case channel(server: URL, workspaceId: String, channelId: String, title: String, peer: UserSummary?)
 }
 
-/// Signed-in shell: Home (servers, channels, DMs) and You, as tabs like Discord mobile.
+/// Signed-in shell: the Discord-style home, with channels pushed on top.
 struct MainView: View {
     @Environment(AppModel.self) private var model
-    @State private var tab = Tab.home
     @State private var path = NavigationPath()
     @State private var webPage: URL?
 
-    enum Tab { case home, you }
-
     var body: some View {
-        TabView(selection: $tab) {
-            NavigationStack(path: $path) {
-                HomeView(path: $path)
-                    .navigationDestination(for: Route.self) { route in
-                        switch route {
-                        case let .channel(workspaceId, channelId, title, peer):
-                            ChannelView(workspaceId: workspaceId, channelId: channelId, title: title, peer: peer)
-                        }
+        NavigationStack(path: $path) {
+            HomeView(path: $path)
+                .navigationDestination(for: Route.self) { route in
+                    switch route {
+                    case let .channel(server, workspaceId, channelId, title, peer):
+                        ChannelView(server: server, workspaceId: workspaceId, channelId: channelId, title: title, peer: peer)
                     }
-            }
-            .tint(Theme.heading)
-            .tabItem { Label("Home", systemImage: "house.fill") }
-            .tag(Tab.home)
-
-            YouView()
-                .tabItem { Label("You", systemImage: "person.crop.circle") }
-                .tag(Tab.you)
+                }
         }
+        .tint(Theme.heading)
         .sheet(item: $webPage) { url in SafariView(url: url).ignoresSafeArea() }
         .onChange(of: model.pendingLink, initial: true) { _, link in openLink(link) }
-        .task { if model.me == nil { await model.loadMe() } }
+        .task { await model.loadProfiles() }
     }
 
-    /// chat://invite/CODE opens that invite's page on the server.
+    /// chat://invite/CODE opens that invite's page on your first server.
     private func openLink(_ link: URL?) {
-        guard let link, let server = model.server else { return }
+        guard let link, let server = model.accounts.first?.server else { return }
         model.pendingLink = nil
         webPage = server.appending(path: "\(link.host() ?? "")\(link.path())")
     }

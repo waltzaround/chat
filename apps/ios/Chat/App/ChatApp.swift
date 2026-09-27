@@ -44,17 +44,14 @@ struct RootView: View {
 
     var body: some View {
         Group {
-            if model.server == nil {
-                ServerPickerView()
-            } else if model.token == nil {
-                SignInView()
+            if model.accounts.isEmpty {
+                AddAccountFlow()
             } else {
                 MainView()
             }
         }
         .preferredColorScheme(.dark)
         .tint(Theme.accent)
-        .animation(.default, value: model.server)
-        .animation(.default, value: model.token)
+        .animation(.default, value: model.accounts.isEmpty)
     }
 }

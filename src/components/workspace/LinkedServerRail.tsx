@@ -19,9 +19,6 @@ export function LinkedServerRail() {
         return (
           <li key={server.origin} className="flex w-full flex-col items-center gap-2" aria-label={`Workspaces on ${host}`}>
             <span className="h-px w-8 bg-sidebar-border" aria-hidden />
-            <span className="w-14 truncate text-center text-[10px] font-medium text-muted-foreground" title={host}>
-              {host}
-            </span>
             {q?.error ? (
               <Tooltip>
                 <TooltipTrigger asChild>

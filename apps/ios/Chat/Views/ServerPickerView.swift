@@ -1,8 +1,10 @@
 import SwiftUI
 
-/// First screen: a welcome, then which Chat server to use.
+/// A welcome, then which Chat server to use. `onChosen` gets the checked origin.
 struct ServerPickerView: View {
     @Environment(AppModel.self) private var model
+    var adding = false
+    let onChosen: (URL) -> Void
     @State private var address = ""
     @State private var checking = false
     @State private var error: String?
@@ -14,10 +16,10 @@ struct ServerPickerView: View {
                 Spacer(minLength: 48)
                 AppMark(size: 88)
                 VStack(spacing: 8) {
-                    Text("Welcome to Chat")
+                    Text(adding ? "Add a server" : "Welcome to Chat")
                         .font(.title.bold())
                         .foregroundStyle(Theme.heading)
-                    Text("Chat runs on servers that communities host themselves. Enter the address of yours to get started.")
+                    Text(adding ? "Belong to another Chat server? Its workspaces join your server list." : "Chat runs on servers that communities host themselves. Enter the address of yours to get started.")
                         .font(.subheadline)
                         .foregroundStyle(Theme.muted)
                         .multilineTextAlignment(.center)
@@ -57,7 +59,12 @@ struct ServerPickerView: View {
         checking = true
         Task {
             do {
-                try await model.chooseServer(address)
+                let url = try await model.checkServer(address)
+                if model.account(for: url) != nil {
+                    self.error = "You're already signed in to \(url.host() ?? "that server")."
+                } else {
+                    onChosen(url)
+                }
             } catch {
                 self.error = (error as? LocalizedError)?.errorDescription ?? "Couldn't reach that server. Check the address and your connection."
             }

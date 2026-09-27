@@ -1,6 +1,8 @@
 # Chat for iOS
 
-A native SwiftUI client (iOS 17+), laid out like Discord mobile: a server rail and channel list on Home, a You tab, and dark channels with replies, reactions and live updates.
+A native SwiftUI client (iOS 17+), laid out like Discord mobile: a rail of workspaces beside the channel list or your messages, a floating profile pill, and dark channels with replies, reactions and live updates.
+
+You can sign in to several Chat servers (different domains) at once. All their workspaces share the rail, and their DMs share the Messages list. Add one with **+** in the rail; log out of one from the profile pill.
 
 It talks to any Chat server over the same API as the web app. It signs in with a bearer token (kept in the Keychain) and receives live updates over the workspace WebSocket. Signing up, resetting a password and profile settings open the server's own web pages in an in-app browser.
 

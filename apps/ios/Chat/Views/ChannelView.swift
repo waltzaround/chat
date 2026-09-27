@@ -3,6 +3,7 @@ import SwiftUI
 /// A channel or DM: live messages, older history on scroll, and a composer.
 struct ChannelView: View {
     @Environment(AppModel.self) private var model
+    let server: URL
     let workspaceId: String
     let channelId: String
     let title: String
@@ -27,7 +28,6 @@ struct ChannelView: View {
         // Chevron-only back button, as on Discord.
         .toolbarRole(.editor)
         .toolbar(.visible, for: .navigationBar)
-        .toolbar(.hidden, for: .tabBar)
         .toolbarBackground(Theme.chat, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
         .toolbar {
@@ -44,13 +44,14 @@ struct ChannelView: View {
             }
         }
         .task {
-            guard store == nil, let api = model.api else { return }
+            guard store == nil, let api = model.api(for: server) else { return }
             let s = ChannelStore(api: api, workspaceId: workspaceId, channelId: channelId)
-            s.onSignedOut = { model.handleSignedOut() }
+            s.onSignedOut = { model.handleSignedOut(server) }
             store = s
             await s.start()
         }
         .onDisappear { store?.stop() }
+        .environment(\.chatServer, server)
     }
 
     private var placeholder: String { peer != nil ? "Message @\(title)" : "Message #\(title)" }
@@ -75,8 +76,8 @@ struct ChannelView: View {
                         MessageRow(
                             message: message,
                             grouped: isGrouped(store.messages, index),
-                            me: model.me,
-                            api: model.api,
+                            me: model.account(for: server)?.me,
+                            api: model.api(for: server),
                             react: { emoji in store.toggleReaction(emoji, on: message.id) }
                         )
                         .id(message.id)
@@ -86,7 +87,7 @@ struct ChannelView: View {
                         }
                     }
                     ForEach(store.pending) { p in
-                        PendingRow(pending: p, me: model.me, grouped: store.messages.last?.author.id == model.me?.id) { store.retry(p.id) }.id(p.id)
+                        PendingRow(pending: p, me: model.account(for: server)?.me, grouped: store.messages.last?.author.id == model.account(for: server)?.me?.id) { store.retry(p.id) }.id(p.id)
                     }
                     Color.clear.frame(height: 1).id("bottom")
                         .onAppear { store.markRead() }
