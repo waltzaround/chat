@@ -1,5 +1,9 @@
 {
   "extends": "../../tsconfig.app.json",
-  "compilerOptions": { "baseUrl": ".", "paths": { "@/*": ["./src/*"] }, "noEmit": true },
+  "compilerOptions": {
+    "tsBuildInfoFile": "../../node_modules/.tmp/tsconfig.website.tsbuildinfo",
+    "baseUrl": ".",
+    "paths": { "@/*": ["./src/*"] }
+  },
   "include": ["src"]
 }

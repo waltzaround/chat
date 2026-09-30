@@ -1,10 +1,14 @@
 # Chat
 
-Repository: https://github.com/waltzaround/beacon
+Repository: https://github.com/waltzaround/chat
 
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/waltzaround/beacon)
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/waltzaround/chat)
 
-A Discord-style community chat application you can run yourself, built entirely on Cloudflare: Workers, Durable Objects (WebSocket Hibernation), D1, R2, Queues, RealtimeKit, Turnstile and Workers Analytics Engine — with a Vite + React front end served from Workers Static Assets.
+Open-source Discord-style chat you deploy to your own Cloudflare account.
+
+Channels, DMs, voice and video for your community, with your database and files in your account.
+
+Built on Cloudflare: Workers, Durable Objects (WebSocket Hibernation), D1, R2, Queues, RealtimeKit, Turnstile and Workers Analytics Engine — with a Vite + React front end served from Workers Static Assets.
 
 Workspaces contain categories, text channels, voice channels (with their own chat), members, roles with a permission bitfield, channel permission overwrites, invites, bans and an audit log. Text chat is realtime over one WebSocket per workspace; voice, video and screen sharing run on Cloudflare RealtimeKit with a fully custom media UI.
 
@@ -20,7 +24,7 @@ You need a Cloudflare account (the free plan is enough). If you don't have one, 
 
 ### Option 1: Deploy button (nothing to install)
 
-1. Click [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/waltzaround/beacon). Log in, or choose **Sign up**.
+1. Click [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/waltzaround/chat). Log in, or choose **Sign up**.
 2. Connect GitHub or GitLab. Cloudflare copies this repo into your account there and creates the database, storage bucket, and queue in your Cloudflare account.
 3. Leave every setting blank except `OWNER_CLAIM_TOKEN`: put any long random phrase there. Click **Deploy**.
 4. Open `https://….workers.dev/register?claim=<your phrase>`. Create your owner account, name your workspace, and share the invite link it gives you.
@@ -34,7 +38,7 @@ If the deploy stops with an R2 error, open **R2** in the Cloudflare dashboard on
 Needs Node.js 22 or newer and git.
 
 ```bash
-git clone https://github.com/waltzaround/beacon.git chat && cd chat
+git clone https://github.com/waltzaround/chat.git chat && cd chat
 npm install
 npm run setup
 ```
@@ -102,7 +106,7 @@ apps/website/   Project website: setup guide, FAQ and troubleshooting
 ## Local development
 
 ```bash
-git clone https://github.com/waltzaround/beacon.git chat && cd chat
+git clone https://github.com/waltzaround/chat.git chat && cd chat
 npm install
 npm run db:migrate                  # applies db/migrations to the local D1
 npm run db:seed                     # optional demo data (see below)

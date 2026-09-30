@@ -1,23 +1,24 @@
 import type { ReactNode } from "react";
-import { ChevronDown, Code2, MessageSquare, Mic, Server, Shield, Smartphone } from "lucide-react";
+import { Demo } from "./Demo";
+import { ArrowUpRight, ChevronDown, ChevronRight, Code2, MessageSquare, Mic, Monitor, Server, Shield, Smartphone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-const REPO = "https://github.com/waltzaround/beacon";
+const REPO = "https://github.com/waltzaround/chat";
 const DEPLOY = `https://deploy.workers.cloudflare.com/?url=${REPO}`;
 
-function Section({ id, eyebrow, title, intro, children }: { id: string; eyebrow: string; title: string; intro?: string; children: ReactNode }) {
+function Section({ id, title, intro, children }: { id: string; title: string; intro?: string; children: ReactNode }) {
   return (
-    <section id={id} className="mx-auto max-w-3xl scroll-mt-20 px-4 py-16">
-      <p className="font-mono text-xs tracking-widest text-muted-foreground uppercase">{eyebrow}</p>
-      <h2 className="mt-2 text-3xl font-semibold tracking-tight">{title}</h2>
-      {intro ? <p className="mt-2 text-muted-foreground">{intro}</p> : null}
-      <div className="mt-8">{children}</div>
+    <section id={id} className="documentation-section">
+      <div className="documentation-heading">
+      <h2 className="section-title">{title}</h2>
+      {intro ? <p className="mt-2 text-muted-foreground">{intro}</p> : null}</div>
+      <div className="documentation-content">{children}</div>
     </section>
   );
 }
 
 function Code({ children }: { children: string }) {
-  return <pre className="mt-3 overflow-x-auto rounded-lg border border-border bg-muted p-4 text-sm"><code className="bg-transparent p-0">{children}</code></pre>;
+  return <pre className="mt-3 overflow-x-auto border border-border bg-muted p-5 text-sm"><code className="bg-transparent p-0">{children}</code></pre>;
 }
 
 function Step({ n, title, children }: { n: number; title: string; children: ReactNode }) {
@@ -35,7 +36,7 @@ function Step({ n, title, children }: { n: number; title: string; children: Reac
 /** Native <details>: keyboard and screen-reader friendly with no script. */
 function Question({ q, children }: { q: string; children: ReactNode }) {
   return (
-    <details className="group rounded-lg border border-border bg-card px-4 [&_p]:text-muted-foreground">
+    <details className="question group border-b border-border bg-card [&_p]:text-muted-foreground">
       <summary className="flex cursor-pointer list-none items-center justify-between gap-4 py-4 font-medium">
         {q}
         <ChevronDown className="size-4 shrink-0 transition-transform group-open:rotate-180" aria-hidden />
@@ -48,7 +49,7 @@ function Question({ q, children }: { q: string; children: ReactNode }) {
 const features = [
   { icon: MessageSquare, title: "Workspaces and DMs", text: "Channels, threads, replies, reactions, pins, search, roles and permissions." },
   { icon: Mic, title: "Voice and video", text: "Voice rooms with video and screen sharing, powered by Cloudflare RealtimeKit." },
-  { icon: Smartphone, title: "Every platform", text: "Web, installable PWA, Windows and macOS apps, and native iOS and Android apps." },
+  { icon: Smartphone, title: "Every platform", text: "Use the web app or install it as a PWA. Desktop, iOS and Android clients are available to build from source." },
   { icon: Shield, title: "Yours", text: "Your data lives in your own Cloudflare account. Moderation, backups and exports built in." },
 ];
 
@@ -61,21 +62,16 @@ const phones = [
 
 function Screenshots() {
   return (
-    <section id="screenshots" className="mx-auto max-w-5xl scroll-mt-20 px-4 py-16" aria-labelledby="screenshots-title">
-      <p className="font-mono text-xs tracking-widest text-muted-foreground uppercase">Everywhere</p>
-      <h2 id="screenshots-title" className="mt-2 text-3xl font-semibold tracking-tight">Desktop, iOS and Android</h2>
-      <p className="mt-2 text-muted-foreground">The same server on every device. Sign in to several servers and they share one list.</p>
-
-      <figure className="mt-8">
-        <img src="/screenshots/desktop.jpg" alt="Chat on the desktop: channels, a conversation and the member list" className="block w-full rounded-xl border border-border" width={2000} height={1250} loading="lazy" />
-        <figcaption className="mt-2 font-mono text-xs text-muted-foreground">Windows · macOS · Web</figcaption>
-      </figure>
-
-      <div className="mt-12 grid grid-cols-2 gap-6 lg:grid-cols-4">
-        {phones.map((p) => (
+    <section id="screenshots" className="devices-section" aria-labelledby="screenshots-title">
+      <div className="section-heading">
+        <div><h2 id="screenshots-title">One server.<br /><mark>Every screen.</mark></h2></div>
+        <p>Web and PWA are ready to use on your server. Desktop, iOS and Android clients can be built from source. Mobile voice, video and pinning are still in development.</p>
+      </div>
+      <div className="phone-grid">
+        {phones.map((p, i) => (
           <figure key={p.src}>
-            <img src={p.src} alt={p.alt} className="block aspect-[9/19.5] w-full rounded-xl border border-border object-cover object-top" loading="lazy" />
-            <figcaption className="mt-2 font-mono text-xs text-muted-foreground">{p.label}</figcaption>
+            <figcaption><span>{p.label}</span><span>0{i + 1} <ArrowUpRight size={13} aria-hidden /></span></figcaption>
+            <img src={p.src} alt={p.alt} width={900} height={1950} loading="lazy" />
           </figure>
         ))}
       </div>
@@ -85,50 +81,89 @@ function Screenshots() {
 
 export function App() {
   return (
-    <div className="min-h-dvh">
-      <header className="sticky top-0 z-10 border-b border-border bg-background/90 backdrop-blur">
-        <nav className="mx-auto flex max-w-5xl items-center gap-6 px-4 py-3 text-sm" aria-label="Main">
-          <a href="#" className="flex items-center gap-2 font-semibold"><Server className="size-5" aria-hidden />Chat</a>
-          <div className="ml-auto flex items-center gap-5 font-mono text-xs text-muted-foreground max-sm:hidden">
-            <a href="#screenshots" className="hover:text-foreground">Screenshots</a>
-            <a href="#setup" className="hover:text-foreground">Setup</a>
-            <a href="#faq" className="hover:text-foreground">FAQ</a>
-            <a href="#troubleshooting" className="hover:text-foreground">Troubleshooting</a>
+    <div className="site-shell" id="top">
+      <header className="site-header">
+        <nav className="navigation" aria-label="Main">
+          <a href="#top" className="wordmark"><MessageSquare strokeWidth={2.5} aria-hidden />Chat<span className="brand-dot" /></a>
+          <div className="nav-links">
+            <a href="#demo">Try it</a>
+            <a href="#screenshots">Apps</a>
+            <a href="#setup">Developers <ChevronDown size={12} aria-hidden /></a>
+            <a href="#faq">FAQ</a>
           </div>
-          <Button asChild size="sm" variant="secondary" className="max-sm:ml-auto"><a href={REPO}><Code2 aria-hidden />GitHub</a></Button>
+          <div className="nav-actions">
+            <a href={REPO} className="github-link"><Code2 size={17} aria-hidden /><span>Open source</span></a>
+            <Button asChild className="nav-cta"><a href={DEPLOY}>Deploy your server <ArrowUpRight aria-hidden /></a></Button>
+          </div>
+          <details className="mobile-menu" onClick={(event) => { if ((event.target as HTMLElement).closest("a")) event.currentTarget.open = false; }}><summary aria-label="Open navigation"><ChevronDown size={20} /></summary><div><a href="#demo">Try it</a><a href="#screenshots">Apps</a><a href="#setup">Setup guide</a><a href="#faq">FAQ</a><a href={REPO}>GitHub</a></div></details>
         </nav>
       </header>
 
       <main>
-        <section className="mx-auto max-w-3xl px-4 pt-20 pb-12 text-center">
-          <p className="font-mono text-xs tracking-widest text-muted-foreground uppercase">Self-hosted · Open source · Cloudflare</p>
-          <h1 className="mt-4 text-4xl font-semibold tracking-tight sm:text-6xl">Your own community chat</h1>
-          <p className="mx-auto mt-5 max-w-xl text-lg text-muted-foreground">
-            A Discord-style chat server you run yourself on Cloudflare. It fits in the free plan, and there's nothing to configure.
-          </p>
-          <div className="mt-8 flex flex-wrap justify-center gap-3">
-            <Button asChild size="lg"><a href={DEPLOY}>Deploy to Cloudflare</a></Button>
-            <Button asChild size="lg" variant="secondary"><a href="#setup">Read the setup guide</a></Button>
+        <section className="hero">
+
+          <h1>Discord-style chat.<br /><mark>Your Cloudflare account.</mark></h1>
+          <div className="hero-bottom">
+            <p>Open-source community chat with channels, DMs, voice and video. Deploy it to your own Cloudflare account and invite your people.</p>
+            <div className="hero-actions">
+              <Button asChild size="lg"><a href={DEPLOY}>Deploy your server <ArrowUpRight aria-hidden /></a></Button>
+              <Button asChild size="lg" variant="outline"><a href="#demo"><ChevronRight aria-hidden /> Try the preview</a></Button>
+            </div>
           </div>
+          <div className="hero-preview">
+            <div className="preview-image"><img src="/screenshots/desktop.jpg" alt="Chat desktop app showing workspace channels, a conversation, and members" width={2000} height={1250} fetchPriority="high" /></div>
+          </div>
+          <div className="platform-strip"><div><Monitor aria-hidden /> Windows & macOS</div><div><Smartphone aria-hidden /> iOS & Android</div><div><MessageSquare aria-hidden /> Web & PWA</div></div>
         </section>
 
-        <section className="mx-auto grid max-w-5xl gap-4 px-4 pb-8 sm:grid-cols-2 lg:grid-cols-4" aria-label="Features">
-          {features.map(({ icon: Icon, title, text }) => (
-            <div key={title} className="rounded-xl border border-border bg-card p-5">
-              <Icon className="size-5 text-muted-foreground" aria-hidden />
-              <h3 className="mt-3 font-semibold">{title}</h3>
-              <p className="mt-1 text-sm text-muted-foreground">{text}</p>
-            </div>
-          ))}
+        <Demo />
+
+        <section className="manifesto"><h2>Your community.<br />Your rules. <mark>Your server.</mark></h2><p>For project groups, developer communities and friends who want to run their own place to talk. Your database and files live in your Cloudflare account; the source is available under AGPL-3.0.</p></section>
+
+        <section id="features" className="features-section">
+          <div className="feature-intro"><h2>Everything your community needs.<br /><mark>All in one place.</mark></h2><p>From the everyday check-in to the late-night voice room.<br />Make space for the way your people connect.</p><a href="#setup" className="text-link">Explore the setup guide <ArrowUpRight size={16} aria-hidden /></a></div>
+          <div className="feature-grid">{features.map(({ icon: Icon, title, text }, i) => <article key={title}><div className="feature-number"><Icon size={22} aria-hidden /><span>0{i + 1}</span></div><h3>{title}</h3><p>{text}</p></article>)}</div>
+          <div className="ownership-banner"><Server size={30} aria-hidden /><div><h3>Your data stays with you.</h3><p>Your Cloudflare account. Your database. Backups and exports built in.</p></div><a href={REPO} className="text-link">Explore the source <ArrowUpRight size={16} aria-hidden /></a></div>
         </section>
+
+        <Section id="walkthrough" title="See the real app" intro="A short recording of the web app with sample conversations.">
+          <video controls preload="none" poster="/screenshots/desktop.jpg" className="walkthrough-video" aria-label="Chat web app walkthrough">
+            <source src="/chat-walkthrough.mp4" type="video/mp4" />
+            <track default kind="captions" src="/chat-walkthrough.vtt" srcLang="en" label="English" />
+          </video>
+          <p className="mt-3 text-muted-foreground">Browse channels, send a message and explore community roles. The recording uses fictional demo accounts.</p>
+        </Section>
 
         <Screenshots />
 
-        <Section id="setup" eyebrow="Setup" title="How to set it up" intro="You need a Cloudflare account. The free plan is enough, and you can sign up along the way.">
+        <Section id="availability" title="Choose your app" intro="Start in your browser. Build the other clients when you need them.">
+          <ul className="list-disc space-y-3 pl-5">
+            <li><strong>Web / PWA:</strong> included with every deployment. Install from your browser.</li>
+            <li><a className="link" href={`${REPO}/tree/main/apps/desktop`}>Windows / macOS build instructions</a></li>
+            <li><a className="link" href={`${REPO}/tree/main/apps/ios`}>iOS build instructions</a></li>
+            <li><a className="link" href={`${REPO}/tree/main/apps/android`}>Android build instructions</a></li>
+          </ul>
+        </Section>
+
+        <Section id="costs" title="What does it cost?" intro="The source is free. Hosting is billed by Cloudflare to your account.">
+          <p>Text chat can run within Cloudflare’s free allowances. Your bill depends on requests, database usage, file storage and background jobs. We have not yet published measured costs for an active community.</p>
+          <p className="mt-3">Voice and video use RealtimeKit and are metered separately. Email requires a paid Workers plan. Check the current allowances before deploying:</p>
+          <div className="pricing-links">
+            <a className="link" href="https://developers.cloudflare.com/workers/platform/pricing/">Workers pricing</a>
+            <a className="link" href="https://developers.cloudflare.com/durable-objects/platform/pricing/">Durable Objects</a>
+            <a className="link" href="https://developers.cloudflare.com/d1/platform/pricing/">D1</a>
+            <a className="link" href="https://developers.cloudflare.com/r2/pricing/">R2</a>
+            <a className="link" href="https://developers.cloudflare.com/queues/platform/pricing/">Queues</a>
+            <a className="link" href="https://developers.cloudflare.com/realtime/realtimekit/pricing/">Voice and video</a>
+          </div>
+        </Section>
+
+        <Section id="setup" title="How to set it up" intro="You need a Cloudflare account. The free plan is enough, and you can sign up along the way.">
           <h3 className="mb-6 text-lg font-semibold">Option 1: the deploy button (nothing to install)</h3>
           <ol>
             <Step n={1} title="Click Deploy to Cloudflare">
               <p>Log in to Cloudflare, or choose <strong>Sign up</strong>.</p>
+              <Button asChild className="mt-2"><a href={DEPLOY}>Deploy to Cloudflare <ArrowUpRight aria-hidden /></a></Button>
             </Step>
             <Step n={2} title="Connect GitHub or GitLab">
               <p>Cloudflare copies the project into your account and creates the database, file storage and queue.</p>
@@ -164,10 +199,10 @@ npm run deploy   # build, migrate the database and deploy
 npm run backup   # save the database to backups/`}</Code>
         </Section>
 
-        <Section id="faq" eyebrow="Questions" title="FAQ">
+        <Section id="faq" title="FAQ">
           <div className="space-y-3">
             <Question q="How much does it cost?">
-              <p>Nothing for most communities: it runs on Cloudflare's free plan. Email needs the Workers Paid plan ($5 a month). Voice and video are billed by RealtimeKit usage.</p>
+              <p>The source is free, and text chat can run within Cloudflare’s free allowances. Hosting costs depend on usage; email needs a paid Workers plan and voice/video are metered separately. See the hosting costs above.</p>
             </Question>
             <Question q="Who becomes the owner?">
               <p>The first account created. With a claim phrase set, only your claim link can create it. Without one, whoever signs up first becomes owner, so open the link straight away.</p>
@@ -193,7 +228,7 @@ npm run backup   # save the database to backups/`}</Code>
           </div>
         </Section>
 
-        <Section id="troubleshooting" eyebrow="Help" title="Troubleshooting">
+        <Section id="troubleshooting" title="Troubleshooting">
           <div className="space-y-3">
             <Question q="The deploy stops with an R2 error">
               <p>Open <strong>R2</strong> in the Cloudflare dashboard once to enable it. The free tier is enough, but Cloudflare asks for a payment method. Then retry the deploy.</p>
@@ -223,9 +258,8 @@ npm run backup   # save the database to backups/`}</Code>
         </Section>
       </main>
 
-      <footer className="border-t border-border py-8 text-center text-sm text-muted-foreground">
-        Open source. <a href={REPO} className="link hover:text-foreground">View on GitHub</a>
-      </footer>
+      <section className="closing-cta"><h2>Start a conversation.<br /><mark>Make it yours.</mark></h2><div className="hero-actions"><Button asChild size="lg"><a href={DEPLOY}>Deploy your server <ArrowUpRight aria-hidden /></a></Button><Button asChild size="lg" variant="outline"><a href="#setup">Read the setup guide <ChevronRight aria-hidden /></a></Button></div></section>
+      <footer className="site-footer"><div><a href="#top" className="wordmark"><MessageSquare strokeWidth={2.5} aria-hidden />Chat<span className="brand-dot" /></a><p>Open source. Built for your people.</p></div><div><a href="#setup">Setup guide</a><a href="#troubleshooting">Troubleshooting</a><a href={REPO}>GitHub <ArrowUpRight size={14} aria-hidden /></a></div><span className="footer-license">AGPL-3.0</span></footer>
     </div>
   );
 }

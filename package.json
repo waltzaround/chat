@@ -25,7 +25,8 @@
     "cf-typegen": "wrangler types worker/env.d.ts",
     "realtimekit:presets": "tsx scripts/realtimekit-presets.ts",
     "website": "vite --config apps/website/vite.config.ts",
-    "website:build": "vite build --config apps/website/vite.config.ts"
+    "website:build": "vite build --config apps/website/vite.config.ts",
+    "website:deploy": "npm run website:build && cd apps/website && wrangler deploy --config wrangler.jsonc"
   },
   "dependencies": {
     "@cloudflare/realtimekit": "^2.0.2",

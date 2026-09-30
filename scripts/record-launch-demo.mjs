@@ -1,0 +1,48 @@
+/** Record the real local app after db:migrate and db:seed. Output is a silent, captioned 40s clip. */
+import { chromium } from "playwright";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+const base = process.argv[2] ?? "http://127.0.0.1:5176";
+if (!["localhost", "127.0.0.1"].includes(new URL(base).hostname)) throw new Error("Record against a local seeded server only.");
+const out = "apps/website/public";
+mkdirSync("/tmp/chat-launch-recording", { recursive: true });
+const browser = await chromium.launch();
+try {
+  const login = await browser.newContext();
+  const page = await login.newPage();
+  await page.goto(`${base}/login`);
+  await page.getByLabel("Email", { exact: true }).fill("walter@example.com");
+  await page.getByLabel("Password", { exact: true }).fill("password123");
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await page.waitForURL(/\/w\//, { timeout: 30000 });
+  await page.getByRole("heading", { name: "general", exact: true }).waitFor();
+  const state = await login.storageState();
+  const url = page.url();
+  await login.close();
+  const context = await browser.newContext({ storageState: state, viewport: { width: 1440, height: 900 }, colorScheme: "dark", recordVideo: { dir: "/tmp/chat-launch-recording", size: { width: 1440, height: 900 } } });
+  const demo = await context.newPage();
+  await demo.goto(url);
+  await demo.getByRole("heading", { name: "general", exact: true }).waitFor();
+  const start = Date.now();
+  await demo.waitForTimeout(6000);
+  await demo.getByPlaceholder("Message #general", { exact: true }).fill("Welcome! This is our space for weekend projects.");
+  await demo.waitForTimeout(2000);
+  await demo.getByPlaceholder("Message #general", { exact: true }).press("Enter");
+  await demo.waitForTimeout(5000);
+  await demo.getByRole("button", { name: /engineering/ }).click();
+  await demo.getByRole("heading", { name: "engineering", exact: true }).waitFor();
+  await demo.waitForTimeout(7000);
+  await demo.getByRole("button", { name: /design/ }).click();
+  await demo.waitForTimeout(6000);
+  await demo.goto(url.replace(/\/c\/.*$/, "/settings/roles"));
+  await demo.waitForTimeout(6000);
+  await demo.goto(url);
+  await demo.waitForTimeout(Math.max(1000, 40000 - (Date.now() - start)));
+  const video = demo.video();
+  await context.close();
+  const raw = await video.path();
+  const result = spawnSync("ffmpeg", ["-y", "-i", raw, "-t", "45", "-c:v", "libx264", "-crf", "25", "-pix_fmt", "yuv420p", "-movflags", "+faststart", `${out}/chat-walkthrough.mp4`], { encoding: "utf8" });
+  if (result.status !== 0) throw new Error(result.stderr);
+  writeFileSync(`${out}/chat-walkthrough.vtt`, `WEBVTT\n\n00:00.000 --> 00:07.000\nChat: your community, in your Cloudflare account.\n\n00:07.000 --> 00:15.000\nSend messages to your community.\n\n00:15.000 --> 00:22.000\nKeep different projects in their own channels.\n\n00:22.000 --> 00:28.000\nBrowse conversations across your workspace.\n\n00:28.000 --> 00:34.000\nManage community roles and permissions.\n\n00:34.000 --> 00:45.000\nOpen source. Deploy your own at chat.walt.online.\n`);
+  console.log(`Recorded ${out}/chat-walkthrough.mp4`);
+} finally { await browser.close(); }

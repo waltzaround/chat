@@ -6,6 +6,7 @@ import tailwindcss from "@tailwindcss/vite";
 // The project website. Uses the repo's own dependencies: `npm run website`.
 export default defineConfig({
   root: fileURLToPath(new URL(".", import.meta.url)),
+  cacheDir: "../../node_modules/.vite-website",
   plugins: [react(), tailwindcss()],
   resolve: { alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) } },
   build: { outDir: "dist", emptyOutDir: true },
