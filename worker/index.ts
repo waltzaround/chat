@@ -18,6 +18,11 @@ import { reportQueueRoutes, reportRoutes } from "./api/reports";
 import { dmGuard, dmRoutes } from "./api/dms";
 import { searchRoutes } from "./api/search";
 import { pushRoutes } from "./api/push";
+import { mediaRoutes } from "./api/media";
+import { webhookAdminRoutes, webhookRoutes } from "./api/webhooks";
+import { botOwnerRoutes, botSelfRoutes, workspaceBotRoutes } from "./api/bots";
+import { interactionRoutes } from "./api/interactions";
+import { githubRoutes, githubSubscriptionRoutes } from "./api/github";
 import { loadMemberContext } from "./permissions/resolve";
 import { hubFor } from "./lib/hub";
 import { handleQueue } from "./queues/consumer";
@@ -143,9 +148,21 @@ app.route("/api/invites", inviteRoutes);
 app.route("/api/uploads", uploadRoutes);
 app.route("/api/files", fileRoutes);
 app.route("/api/channels", voiceRoutes);
+app.route("/api/server/bots", botOwnerRoutes);
 app.route("/api/server", serverRoutes);
 app.route("/api/channels", reportRoutes);
 app.route("/api/workspaces", reportQueueRoutes);
+
+// Integrations: webhooks, bots, slash commands and buttons, GitHub, and the image proxy.
+// Routers under /api/workspaces sign people in for their own paths only; the rest check per route.
+app.route("/api/webhooks", webhookRoutes);
+app.route("/api/workspaces", webhookAdminRoutes);
+app.route("/api/workspaces", workspaceBotRoutes);
+app.route("/api/workspaces", githubSubscriptionRoutes);
+app.route("/api/bots", botSelfRoutes);
+app.route("/api", interactionRoutes);
+app.route("/api/github", githubRoutes);
+app.route("/api/media", mediaRoutes);
 
 app.get("/api/health", (c) => c.json({ ok: true, time: new Date().toISOString() }));
 
@@ -191,6 +208,7 @@ export default {
     await env.BACKGROUND_QUEUE.sendBatch([
       { body: { type: "invites.expire" } },
       { body: { type: "attachment.cleanup", olderThanMs: 24 * 60 * 60 * 1000 } },
+      { body: { type: "interactions.expire" } },
     ]);
   },
 } satisfies ExportedHandler<Env>;

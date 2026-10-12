@@ -191,11 +191,19 @@ Uploaded files live in R2 and are not in these backups. To copy the bucket elsew
 - **Search** uses an FTS5 table maintained by triggers and filters by the requester's visible channel ids.
 - **Voice**: each voice channel maps to a long-lived RealtimeKit meeting. `POST /voice/join` checks `CONNECT`, picks the preset from `SPEAK`, adds the participant with our user id as `custom_participant_id` and returns only the participant token. Voice state (muted, camera, sharing) is mirrored to the hub so the sidebar shows who is in each room.
 
+## Integrations
+
+Webhooks, apps (bots) with slash commands and buttons, link previews, and a built-in GitHub integration. See [docs/integrations.md](docs/integrations.md), and [examples/bot-worker](examples/bot-worker) for a complete app that runs as a Cloudflare Worker.
+
+- **Webhooks** take Discord's, Slack's and GitHub's formats, so tools with Discord support work by pasting the URL.
+- **Apps** are accounts your own code controls, created by the server owner and added to workspaces by admins. Roles decide what they read and where they post.
+- **GitHub**: the owner creates this server's own GitHub App in one step. Channels then follow repositories with `/github subscribe owner/repo`, and GitHub links get previews.
+
 ## Protocol
 
 Client → server events: `channel.subscribe`, `message.create`, `message.edit`, `message.delete`, `reaction.add`, `reaction.remove`, `typing.start`, `typing.stop`, `channel.read`, `presence.set`, `voice.state`, `ping`.
 
-Server → client events: `ready`, `channel.sync`, `message.created`, `message.updated`, `message.deleted`, `reaction.updated`, `typing.updated`, `presence.updated`, `channel.activity`, `read.updated`, `voice.updated`, `workspace.updated`, `member.removed`, `ack`, `error`, `pong`.
+Server → client events: `ready`, `channel.sync`, `message.created`, `message.updated`, `message.ephemeral`, `message.deleted`, `reaction.updated`, `typing.updated`, `presence.updated`, `channel.activity`, `read.updated`, `voice.updated`, `workspace.updated`, `member.removed`, `ack`, `error`, `pong`.
 
 Both are Zod-validated discriminated unions in `shared/events.ts`.
 
@@ -204,4 +212,4 @@ Both are Zod-validated discriminated unions in `shared/events.ts`.
 - Voice and video in the iOS and Android apps (they use the web app or desktop app for now).
 - Group direct messages (DMs are one-to-one).
 - Passkeys (Better Auth plugin can be added without schema changes to the app tables).
-- Link unfurling and automated moderation (queue job types are typed but not implemented).
+- Automated moderation.

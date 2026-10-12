@@ -8,7 +8,8 @@ import { toUserSummary } from "../lib/serialize";
 import { resetPasswordUrl } from "../auth/auth";
 import { emailEnabled } from "../email";
 import { parseBody } from "../lib/validate";
-import { registrationPolicy, serverIconUrl, serverOwnerId, serverPolicies, serverProfile, setServerPolicies, setServerProfile, setRegistrationPolicy, setVerifiedEmailRequired, setWorkspaceCreationPolicy, verifiedEmailRequiredSince, workspaceCreationPolicy } from "../instance";
+import { linkPreviewsEnabled } from "../integrations/link-previews";
+import { setSetting, registrationPolicy, serverIconUrl, serverOwnerId, serverPolicies, serverProfile, setServerPolicies, setServerProfile, setRegistrationPolicy, setVerifiedEmailRequired, setWorkspaceCreationPolicy, verifiedEmailRequiredSince, workspaceCreationPolicy } from "../instance";
 import { hubFor } from "../lib/hub";
 import { userHub } from "../lib/notify";
 import { WS_CLOSE } from "@shared/events";
@@ -31,12 +32,13 @@ serverRoutes.use("*", async (c, next) => {
 });
 
 async function settings(env: AppEnv["Bindings"]): Promise<ServerSettings> {
-  const [registration, workspaceCreation, since, profile, policies] = await Promise.all([
+  const [registration, workspaceCreation, since, profile, policies, previews] = await Promise.all([
     registrationPolicy(env.DB),
     workspaceCreationPolicy(env.DB),
     verifiedEmailRequiredSince(env.DB),
     serverProfile(env.DB),
     serverPolicies(env.DB),
+    linkPreviewsEnabled(env.DB),
   ]);
   return {
     registration,
@@ -48,6 +50,7 @@ async function settings(env: AppEnv["Bindings"]): Promise<ServerSettings> {
     iconUrl: serverIconUrl(profile),
     privacyPolicy: policies.privacyPolicy,
     terms: policies.terms,
+    linkPreviews: previews,
   };
 }
 
@@ -61,6 +64,7 @@ serverRoutes.patch("/", async (c) => {
     if (input.requireVerifiedEmail && !emailEnabled(c.env)) throw ApiError.validation(undefined, "Set up email first: verification needs the Workers Paid plan and a sender address");
     await setVerifiedEmailRequired(c.env.DB, input.requireVerifiedEmail);
   }
+  if (input.linkPreviews !== undefined) await setSetting(c.env.DB, "link_previews", input.linkPreviews ? "on" : "off");
   if (input.iconKey && !input.iconKey.startsWith(`workspace-icons/${c.get("user").id}/`)) throw ApiError.validation(undefined, "Upload the icon first");
   await setServerProfile(c.env.DB, { name: input.name, description: input.description, iconKey: input.iconKey });
   await setServerPolicies(c.env.DB, { privacyPolicy: input.privacyPolicy, terms: input.terms });
@@ -75,7 +79,8 @@ serverRoutes.get("/users", async (c) => {
   const rows = await db
     .select()
     .from(schema.users)
-    .where(and(isNull(schema.users.deletedAt), q ? or(like(schema.users.username, pattern), like(schema.users.displayName, pattern), like(schema.users.email, pattern)) : undefined))
+    // Bots are managed under Bots; webhooks under each workspace's Integrations.
+    .where(and(isNull(schema.users.deletedAt), eq(schema.users.kind, "human"), q ? or(like(schema.users.username, pattern), like(schema.users.displayName, pattern), like(schema.users.email, pattern)) : undefined))
     .orderBy(desc(schema.users.createdAt))
     .limit(25);
   const ownerId = await serverOwnerId(c.env.DB);
@@ -96,7 +101,8 @@ serverRoutes.get("/users", async (c) => {
 serverRoutes.post("/users/:userId/password-reset", async (c) => {
   const db = c.get("db");
   const user = await db.query.users.findFirst({ where: eq(schema.users.id, c.req.param("userId")) });
-  if (!user) throw ApiError.notFound("User");
+  // Apps have no password and never sign in.
+  if (!user || user.kind !== "human") throw ApiError.notFound("User");
   const token = randomToken();
   const expiresAt = new Date(Date.now() + RESET_LINK_TTL_MS);
   // Same record Better Auth writes for emailed resets, so its reset endpoint accepts it.
@@ -140,7 +146,7 @@ serverRoutes.delete("/users/:userId", async (c) => {
   const userId = c.req.param("userId");
   if (userId === c.get("user").id) throw ApiError.validation(undefined, "Delete your own account from your profile settings");
   const target = await c.get("db").query.users.findFirst({ where: eq(schema.users.id, userId) });
-  if (!target || target.deletedAt) throw ApiError.notFound("User");
+  if (!target || target.deletedAt || target.kind !== "human") throw ApiError.notFound("User");
   const input = await parseBody(c, deleteServerUserSchema);
   await deleteAccount(c.env, c.get("db"), userId, { deleteMessages: input.deleteMessages });
   return c.body(null, 204);

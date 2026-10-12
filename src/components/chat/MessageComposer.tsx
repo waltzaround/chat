@@ -15,6 +15,11 @@ import { Progress } from "@/components/ui/progress";
 import { EmojiPicker } from "./EmojiPicker";
 import { EmojiAutocomplete, findShortcodeAtCaret, useAutocompleteResults, type ShortcodeMatch } from "./EmojiAutocomplete";
 import { MentionAutocomplete, findMentionAtCaret, useMentionSuggestions, type MentionOption } from "./MentionAutocomplete";
+import { CommandAutocomplete, commandQueryOf, parseCommand, useCommandSuggestions } from "./CommandAutocomplete";
+import { integrationKeys, runCommand, useCommands } from "@/lib/integrations";
+import { useQueryClient } from "@tanstack/react-query";
+import type { AvailableCommand } from "@shared/types";
+import { apiGet } from "@/lib/api";
 import { MAX_ATTACHMENTS_PER_MESSAGE, MAX_UPLOAD_BYTES, MESSAGE_MAX_LENGTH } from "@shared/schemas";
 import type { Attachment, Channel, Message, ReplyContext } from "@shared/types";
 
@@ -77,8 +82,19 @@ export function MessageComposer({
   const members = useMembers(channel.workspaceId).data;
   const meId = useMe().data?.id;
   const mentionOptions = useMentionSuggestions(mention, members, hasPermission(channel.permissions, Permission.MENTION_EVERYONE), meId);
-  const emojiActive = !!match && suggestions.length > 0;
-  const mentionActive = !emojiActive && !!mention && mentionOptions.length > 0;
+  // Slash commands, in the channel composer only (a bot's answer goes to the channel).
+  const commandsAllowed = !editing && !threadRootId;
+  const commandQuery = commandsAllowed ? commandQueryOf(value) : null;
+  const [commandDismissed, setCommandDismissed] = useState(false);
+  const commands = useCommands(channel.workspaceId, commandsAllowed && value.startsWith("/"));
+  const commandOptions = useCommandSuggestions(commandDismissed ? null : commandQuery, commands.data);
+  /** The bot picked from the list, for commands two bots both have. */
+  const pickedBot = useRef<{ name: string; botId: string | undefined } | null>(null);
+  const [running, setRunning] = useState(false);
+  const qc = useQueryClient();
+  const commandActive = commandOptions.length > 0;
+  const emojiActive = !commandActive && !!match && suggestions.length > 0;
+  const mentionActive = !commandActive && !emojiActive && !!mention && mentionOptions.length > 0;
 
   // Enter/leave edit mode.
   useEffect(() => {
@@ -209,8 +225,60 @@ export function MessageComposer({
     });
   };
 
+  const insertCommand = (command: AvailableCommand) => {
+    const insertion = `/${command.name} `;
+    pickedBot.current = { name: command.name, botId: command.bot?.id };
+    setValue(insertion);
+    requestAnimationFrame(() => {
+      const el = textareaRef.current;
+      el?.focus();
+      el?.setSelectionRange(insertion.length, insertion.length);
+    });
+  };
+
+  /** Runs "/name text" when it names a command here. Returns false to send it as a message instead. */
+  const tryCommand = async (content: string): Promise<boolean> => {
+    const parsed = commandsAllowed ? parseCommand(content) : null;
+    if (!parsed) return false;
+    const fetchFresh = () =>
+      qc.fetchQuery({ queryKey: integrationKeys.commands(channel.workspaceId), queryFn: () => apiGet<AvailableCommand[]>(`/api/workspaces/${channel.workspaceId}/commands`), staleTime: 0 }).catch(() => [] as AvailableCommand[]);
+    let list = commands.data ?? (await fetchFresh());
+    // A command an app registered moments ago may not be in the cached list yet.
+    if (!list.some((c) => c.name === parsed.name) && commands.data) list = await fetchFresh();
+    const matching = list.filter((c) => c.name === parsed.name);
+    if (matching.length === 0) return false;
+    const picked = pickedBot.current?.name === parsed.name ? matching.find((c) => (c.bot?.id ?? undefined) === pickedBot.current?.botId) : undefined;
+    const command = picked ?? matching[0]!;
+    setValue("");
+    localStorage.removeItem(draftKey(draftId));
+    setRunning(true);
+    try {
+      const result = await runCommand(channel.id, { name: command.name, text: parsed.text, botId: command.bot?.id });
+      if (result.message?.ephemeral) rt.addEphemeral(result.message);
+      else if (result.deferred) toast.message(`${command.bot?.displayName ?? "The command"} is working on it…`);
+    } catch (err) {
+      toast.error(errorMessage(err));
+      setValue(content);
+    } finally {
+      setRunning(false);
+      pickedBot.current = null;
+    }
+    return true;
+  };
+
   const send = () => {
     const content = value.trim();
+    if (!editing && uploads.length === 0 && content.startsWith("/") && commandsAllowed) {
+      if (running) return;
+      void tryCommand(content).then((ran) => {
+        if (!ran) sendMessageNow(content);
+      });
+      return;
+    }
+    sendMessageNow(content);
+  };
+
+  const sendMessageNow = (content: string) => {
     if (editing) {
       if (!content) return;
       if (content !== editing.content) rt.send({ type: "message.edit", messageId: editing.id, content });
@@ -241,6 +309,24 @@ export function MessageComposer({
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     // Autocomplete navigation takes precedence while suggestions are showing.
+    if (commandActive) {
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        const step = e.key === "ArrowDown" ? 1 : -1;
+        setSelected((i) => (i + step + commandOptions.length) % commandOptions.length);
+        return;
+      }
+      if (e.key === "Enter" || e.key === "Tab") {
+        e.preventDefault();
+        insertCommand(commandOptions[selected] ?? commandOptions[0]!);
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setCommandDismissed(true);
+        return;
+      }
+    }
     if (mentionActive && mention) {
       if (e.key === "ArrowDown" || e.key === "ArrowUp") {
         e.preventDefault();
@@ -296,6 +382,8 @@ export function MessageComposer({
 
   const onChange = (v: string, caret: number) => {
     setValue(v);
+    if (!v.startsWith("/")) setCommandDismissed(false);
+    if (commandQueryOf(v) !== commandQuery) setSelected(0);
     refreshMatch(v, caret);
     if (!editing && v.trim()) rt.startTyping(channel.id);
     if (!v.trim()) rt.stopTyping(channel.id);
@@ -332,6 +420,7 @@ export function MessageComposer({
       onDragLeave={() => setDragging(false)}
       onDrop={onDrop}
     >
+      {commandActive ? <CommandAutocomplete options={commandOptions} selected={selected} onSelectedChange={setSelected} onPick={insertCommand} /> : null}
       {mentionActive && mention ? (
         <MentionAutocomplete options={mentionOptions} selected={selected} onSelectedChange={setSelected} onPick={(o) => insertMention(o, mention)} />
       ) : null}
@@ -420,8 +509,8 @@ export function MessageComposer({
           maxLength={MESSAGE_MAX_LENGTH + 200}
           aria-label={placeholder}
           aria-autocomplete="list"
-          aria-controls={mentionActive ? "mention-autocomplete" : emojiActive ? "emoji-autocomplete" : undefined}
-          aria-activedescendant={mentionActive ? `mention-option-${selected}` : emojiActive ? `emoji-option-${selected}` : undefined}
+          aria-controls={commandActive ? "command-autocomplete" : mentionActive ? "mention-autocomplete" : emojiActive ? "emoji-autocomplete" : undefined}
+          aria-activedescendant={commandActive ? `command-option-${selected}` : mentionActive ? `mention-option-${selected}` : emojiActive ? `emoji-option-${selected}` : undefined}
           className="max-h-80 min-h-[36px] flex-1 resize-none bg-transparent px-1 py-1.5 text-[0.95rem] leading-snug outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed"
         />
         {remaining < 200 ? (
@@ -454,6 +543,7 @@ export function MessageComposer({
           </PopoverContent>
         </Popover>
         {uploads.some((u) => !u.attachment && !u.error) ? <Loader2 className="mb-2 size-4 animate-spin text-muted-foreground" aria-label="Uploading" /> : null}
+        {running ? <Loader2 className="mb-2 size-4 animate-spin text-muted-foreground" aria-label="Running command" /> : null}
       </div>
       {dragging ? (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-lg bg-background/80 text-sm font-medium text-primary" aria-hidden>

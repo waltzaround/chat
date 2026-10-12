@@ -1,7 +1,7 @@
 /**
  * Permission bitfield shared by the Worker and the browser.
  *
- * 19 flags fit comfortably in a JS number (< 2^53), so permissions are stored
+ * 20 flags fit comfortably in a JS number (< 2^53), so permissions are stored
  * as plain integers in D1 and compared with bitwise operators.
  */
 export const Permission = {
@@ -26,6 +26,8 @@ export const Permission = {
   MANAGE_LAYOUT: 1 << 17,
   /** Notify a whole channel with @everyone or @here. Off for @everyone by default. */
   MENTION_EVERYONE: 1 << 18,
+  /** Create webhooks, add or remove bots, and subscribe channels to GitHub. Off for @everyone by default. */
+  MANAGE_INTEGRATIONS: 1 << 19,
 } as const;
 
 export type PermissionName = keyof typeof Permission;
@@ -72,6 +74,7 @@ export const PERMISSION_LABELS: Record<PermissionName, { label: string; descript
   MANAGE_ROLES: { label: "Manage roles", description: "Create and edit roles below their own highest role.", group: "general" },
   MANAGE_MESSAGES: { label: "Manage messages", description: "Delete other members' messages.", group: "text" },
   MENTION_EVERYONE: { label: "Mention @everyone and @here", description: "Notify everyone in a channel, or everyone active in it.", group: "text" },
+  MANAGE_INTEGRATIONS: { label: "Manage integrations", description: "Create webhooks, add or remove apps, and connect channels to GitHub.", group: "general" },
   KICK_MEMBERS: { label: "Kick members", description: "Remove members from the workspace.", group: "general" },
   BAN_MEMBERS: { label: "Ban members", description: "Permanently remove members and block them from re-joining.", group: "general" },
   CREATE_INVITES: { label: "Create invites", description: "Generate invite links.", group: "general" },

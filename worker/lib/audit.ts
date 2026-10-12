@@ -27,7 +27,15 @@ export type AuditAction =
   | "emoji.deleted"
   | "report.removed"
   | "report.dismissed"
-  | "workspace.owner_transferred";
+  | "workspace.owner_transferred"
+  | "webhook.created"
+  | "webhook.updated"
+  | "webhook.deleted"
+  | "bot.added"
+  | "bot.removed"
+  | "github.subscribed"
+  | "github.updated"
+  | "github.unsubscribed";
 
 export async function audit(
   db: Db,

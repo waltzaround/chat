@@ -79,6 +79,8 @@ export type ServerEvent =
   | { type: "channel.sync"; channelId: string; messages: Message[]; complete: boolean; lastSequence: number }
   | { type: "message.created"; message: Message; clientMessageId?: string }
   | { type: "message.updated"; message: Message }
+  /** Only for you: a bot's private answer to your slash command or button press. */
+  | { type: "message.ephemeral"; message: Message }
   | { type: "message.deleted"; channelId: string; messageId: string; sequence: number }
   | { type: "reaction.updated"; channelId: string; messageId: string; reactions: ReactionSummary[] }
   | { type: "typing.updated"; channelId: string; userIds: string[] }
@@ -86,7 +88,7 @@ export type ServerEvent =
   | { type: "channel.activity"; channelId: string; lastSequence: number; authorUserId: string }
   | { type: "read.updated"; channelId: string; sequence: number }
   | { type: "voice.updated"; channelId: string; participants: VoiceParticipantState[] }
-  | { type: "workspace.updated"; reason: "channels" | "roles" | "members" | "workspace" | "emojis" | "reports" }
+  | { type: "workspace.updated"; reason: "channels" | "roles" | "members" | "workspace" | "emojis" | "reports" | "integrations" }
   | { type: "member.removed"; userId: string; reason: "kicked" | "banned" | "left" }
   | { type: "ack"; clientMessageId: string; messageId: string; sequence: number }
   | { type: "error"; code: string; message: string; clientMessageId?: string }

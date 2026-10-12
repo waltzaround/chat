@@ -2,6 +2,7 @@
 import type { WorkspaceHub } from "./durable-objects/workspace-hub";
 import type { UserHub } from "./durable-objects/user-hub";
 import type { NotificationPayload } from "@shared/events";
+import type { BotEvent } from "./integrations/bot-events";
 
 export interface Env {
   // Bindings
@@ -56,4 +57,10 @@ export type BackgroundJob =
   /** A deleted account asked for its messages to go too. Processed in batches. */
   | { type: "user.messages.delete"; userId: string }
   /** Deliver a notification to many people (e.g. @everyone). */
-  | { type: "notify.users"; userIds: string[]; notification: NotificationPayload };
+  | { type: "notify.users"; userIds: string[]; notification: NotificationPayload }
+  /** POST one event to a bot's events URL. */
+  | { type: "bot.event"; botUserId: string; event: BotEvent }
+  /** Build preview cards for the links in a message. */
+  | { type: "links.preview"; messageId: string }
+  /** Forget slash commands and button presses too old to answer. */
+  | { type: "interactions.expire" };

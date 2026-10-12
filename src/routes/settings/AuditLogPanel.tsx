@@ -33,6 +33,14 @@ function formatAction(entry: AuditEntry): string {
     case "report.removed": return `removed a reported message`;
     case "report.dismissed": return `dismissed a report`;
     case "workspace.owner_transferred": return `transferred ownership of the workspace`;
+    case "webhook.created": return `created webhook${name ? ` "${name}"` : ""}`;
+    case "webhook.updated": return d["regenerated"] ? `replaced a webhook's URL` : `updated a webhook`;
+    case "webhook.deleted": return `deleted a webhook`;
+    case "bot.added": return `added the app${name ? ` ${name}` : ""}`;
+    case "bot.removed": return `removed the app${name ? ` ${name}` : ""}`;
+    case "github.subscribed": return `subscribed a channel to ${String(d["repo"] ?? "a GitHub repository")}`;
+    case "github.updated": return `changed a channel's GitHub subscription to ${String(d["repo"] ?? "a repository")}`;
+    case "github.unsubscribed": return `unsubscribed a channel from ${String(d["repo"] ?? "a GitHub repository")}`;
     default: return entry.action.replace(/\./g, " ");
   }
 }

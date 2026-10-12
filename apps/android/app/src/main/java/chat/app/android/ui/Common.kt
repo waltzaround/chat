@@ -204,21 +204,24 @@ fun openInBrowser(context: Context, url: String) {
 
 /**
  * Inline Markdown the way the web app shows it: **bold**, *italic*, `code`, ~~strike~~,
- * links, and @mentions as chips.
+ * links (bare, or [text](url) as bots and webhooks write them), @mentions as chips, and
+ * backslash escapes like \* for a literal *.
  */
 fun renderMarkdown(text: String): AnnotatedString = buildAnnotatedString {
-    val pattern = Regex("""\*\*(.+?)\*\*|__(.+?)__|\*(.+?)\*|_(.+?)_|~~(.+?)~~|`([^`]+)`|(https?://[^\s<]+[^\s<.,:;"')\]])|(@[A-Za-z0-9_.]+)""")
+    val pattern = Regex("""\\([!-/:-@\[-`{-~])|\[([^\]\n]+)\]\((https?://[^\s)]+)\)|\*\*(.+?)\*\*|__(.+?)__|\*(.+?)\*|_(.+?)_|~~(.+?)~~|`([^`]+)`|(https?://[^\s<]+[^\s<.,:;"')\]])|(@[A-Za-z0-9_.]+)""")
     var index = 0
     for (match in pattern.findAll(text)) {
         append(text.substring(index, match.range.first))
         val g = match.groupValues
         when {
-            g[1].isNotEmpty() || g[2].isNotEmpty() -> withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(g[1].ifEmpty { g[2] }) }
-            g[3].isNotEmpty() || g[4].isNotEmpty() -> withStyle(SpanStyle(fontStyle = FontStyle.Italic)) { append(g[3].ifEmpty { g[4] }) }
-            g[5].isNotEmpty() -> withStyle(SpanStyle(textDecoration = TextDecoration.LineThrough)) { append(g[5]) }
-            g[6].isNotEmpty() -> withStyle(SpanStyle(fontFamily = FontFamily.Monospace, background = Palette.rail, fontSize = 14.sp)) { append(g[6]) }
-            g[7].isNotEmpty() -> withLink(LinkAnnotation.Url(g[7], TextLinkStyles(SpanStyle(color = Palette.link)))) { append(g[7]) }
-            g[8].isNotEmpty() -> withStyle(SpanStyle(color = Palette.heading, background = Palette.accent.copy(alpha = 0.3f), fontWeight = FontWeight.Medium)) { append(g[8]) }
+            g[1].isNotEmpty() -> append(g[1])
+            g[2].isNotEmpty() -> withLink(LinkAnnotation.Url(g[3], TextLinkStyles(SpanStyle(color = Palette.link)))) { append(renderMarkdown(g[2])) }
+            g[4].isNotEmpty() || g[5].isNotEmpty() -> withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(g[4].ifEmpty { g[5] }) }
+            g[6].isNotEmpty() || g[7].isNotEmpty() -> withStyle(SpanStyle(fontStyle = FontStyle.Italic)) { append(g[6].ifEmpty { g[7] }) }
+            g[8].isNotEmpty() -> withStyle(SpanStyle(textDecoration = TextDecoration.LineThrough)) { append(g[8]) }
+            g[9].isNotEmpty() -> withStyle(SpanStyle(fontFamily = FontFamily.Monospace, background = Palette.rail, fontSize = 14.sp)) { append(g[9]) }
+            g[10].isNotEmpty() -> withLink(LinkAnnotation.Url(g[10], TextLinkStyles(SpanStyle(color = Palette.link)))) { append(g[10]) }
+            g[11].isNotEmpty() -> withStyle(SpanStyle(color = Palette.heading, background = Palette.accent.copy(alpha = 0.3f), fontWeight = FontWeight.Medium)) { append(g[11]) }
         }
         index = match.range.last + 1
     }

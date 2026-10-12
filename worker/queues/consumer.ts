@@ -3,6 +3,9 @@ import type { BackgroundJob, Env } from "../env";
 import { createDb, schema } from "../db";
 import { deleteUserMessagesBatch } from "../lib/accounts";
 import { deliver } from "../lib/notify";
+import { deliverBotEvent } from "../integrations/bot-events";
+import { buildLinkPreviews } from "../integrations/link-previews";
+import { expireInteractions } from "../api/interactions";
 
 /**
  * Background work that must not delay the request path. Every job is
@@ -12,7 +15,7 @@ export async function handleQueue(batch: MessageBatch<BackgroundJob>, env: Env):
   const db = createDb(env.DB);
   for (const msg of batch.messages) {
     try {
-      await handleJob(msg.body, env, db);
+      await handleJob(msg.body, env, db, msg.attempts);
       msg.ack();
     } catch (err) {
       console.error("queue job failed", msg.body.type, err);
@@ -21,8 +24,20 @@ export async function handleQueue(batch: MessageBatch<BackgroundJob>, env: Env):
   }
 }
 
-async function handleJob(job: BackgroundJob, env: Env, db: ReturnType<typeof createDb>): Promise<void> {
+async function handleJob(job: BackgroundJob, env: Env, db: ReturnType<typeof createDb>, attempt: number): Promise<void> {
   switch (job.type) {
+    case "bot.event": {
+      await deliverBotEvent(env, db, job.botUserId, job.event, attempt);
+      return;
+    }
+    case "links.preview": {
+      await buildLinkPreviews(env, db, job.messageId);
+      return;
+    }
+    case "interactions.expire": {
+      await expireInteractions(db);
+      return;
+    }
     case "attachment.process": {
       // Verify the object exists and record its real size/type from R2 metadata.
       const row = await db.query.messageAttachments.findFirst({ where: eq(schema.messageAttachments.id, job.attachmentId) });

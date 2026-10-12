@@ -22,6 +22,8 @@ struct ChannelView: View {
     @State private var revealed: Set<String> = []
     @State private var photo: PhotosPickerItem?
     @State private var notice: String?
+    /// The command last picked from the suggestions, to tell apart two bots' commands with one name.
+    @State private var pickedCommand: AvailableCommand?
     @FocusState private var composing: Bool
 
     var body: some View {
@@ -84,7 +86,11 @@ struct ChannelView: View {
                             .onAppear { Task { await store.loadOlder() } }
                     } else if !store.loading {
                         if let threadRoot {
-                            MessageRow(message: threadRoot, grouped: false, me: me, api: model.api(for: server), react: { _ in })
+                            MessageRow(
+                                message: threadRoot, grouped: false, me: me, api: model.api(for: server), react: { _ in },
+                                press: { store.press($0, on: threadRoot) },
+                                pressing: { store.isPressing($0, on: threadRoot) }
+                            )
                             DaySeparator(label: "\(store.messages.count) \(store.messages.count == 1 ? "reply" : "replies")")
                         } else {
                             welcome
@@ -103,7 +109,9 @@ struct ChannelView: View {
                                 me: me,
                                 api: model.api(for: server),
                                 react: { emoji in store.toggleReaction(emoji, on: message.id) },
-                                openThread: threadRoot == nil ? { openThread(message) } : nil
+                                openThread: threadRoot == nil ? { openThread(message) } : nil,
+                                press: { store.press($0, on: message) },
+                                pressing: { store.isPressing($0, on: message) }
                             )
                             .id(message.id)
                             .onLongPressGesture(minimumDuration: 0.35) {
@@ -112,8 +120,20 @@ struct ChannelView: View {
                             }
                         }
                     }
+                    // Apps' answers only you can see, until dismissed or the app restarts.
+                    ForEach(store.ephemeral) { message in
+                        MessageRow(
+                            message: message,
+                            grouped: false,
+                            me: me,
+                            api: model.api(for: server),
+                            react: { _ in },
+                            dismiss: { store.dismissEphemeral(message.id) }
+                        )
+                        .id("ephemeral-\(message.id)")
+                    }
                     ForEach(store.pending) { p in
-                        PendingRow(pending: p, me: model.account(for: server)?.me, grouped: store.messages.last?.author.id == model.account(for: server)?.me?.id) { store.retry(p.id) }.id(p.id)
+                        PendingRow(pending: p, me: model.account(for: server)?.me, grouped: store.ephemeral.isEmpty && store.messages.last?.author.id == model.account(for: server)?.me?.id) { store.retry(p.id) }.id(p.id)
                     }
                     Color.clear.frame(height: 1).id("bottom")
                         .onAppear { store.markRead() }
@@ -127,6 +147,7 @@ struct ChannelView: View {
                 store.markRead()
             }
             .onChange(of: store.pending.count) { _, _ in scrollToBottom(proxy) }
+            .onChange(of: store.ephemeral.last?.id) { _, id in if id != nil { scrollToBottom(proxy) } }
             .safeAreaInset(edge: .bottom, spacing: 0) { composer(store) }
             .sheet(item: $actionsFor) { message in
                 let mine = message.author.id == me?.id
@@ -205,7 +226,11 @@ struct ChannelView: View {
 
     private func composer(_ store: ChannelStore) -> some View {
         let empty = draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let suggestions = commandSuggestions(store)
         return VStack(spacing: 0) {
+            if !suggestions.isEmpty {
+                commandList(suggestions)
+            }
             if editing != nil {
                 HStack(spacing: 6) {
                     Text("Editing message").foregroundStyle(Theme.muted)
@@ -271,10 +296,12 @@ struct ChannelView: View {
                             store.edit(editing.id, to: draft)
                             self.editing = nil
                         } else {
-                            store.send(draft, replyTo: replyingTo?.id)
+                            // A known "/command" runs; anything else is sent as a message.
+                            store.submit(draft, replyTo: replyingTo?.id, preferring: pickedCommand)
                         }
                         draft = ""
                         replyingTo = nil
+                        pickedCommand = nil
                     } label: {
                         Image(systemName: "paperplane.fill")
                             .font(.system(size: 16, weight: .semibold))
@@ -291,6 +318,48 @@ struct ChannelView: View {
             .padding(.vertical, 8)
             .background(Theme.chat)
         }
+        .onChange(of: draft) { _, text in
+            // Slash commands are fetched the first time the composer sees a "/".
+            if text.hasPrefix("/") && editing == nil { store.loadCommands() }
+        }
+    }
+
+    /// Commands matching what's typed after "/", until the first space.
+    private func commandSuggestions(_ store: ChannelStore) -> [AvailableCommand] {
+        guard editing == nil, draft.hasPrefix("/"), !draft.contains(where: \.isWhitespace), let commands = store.commands else { return [] }
+        let prefix = draft.dropFirst().lowercased()
+        return commands.filter { $0.name.hasPrefix(prefix) }
+    }
+
+    /// Discord's command picker above the composer.
+    private func commandList(_ commands: [AvailableCommand]) -> some View {
+        let rows = VStack(spacing: 0) {
+            ForEach(commands) { command in
+                Button {
+                    pickedCommand = command
+                    draft = "/\(command.name) "
+                    composing = true
+                } label: {
+                    CommandRow(command: command)
+                }
+                .buttonStyle(ChannelRowStyle())
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.bottom, 6)
+        return VStack(alignment: .leading, spacing: 0) {
+            FieldLabel(text: "Commands")
+                .padding(.horizontal, 16)
+                .padding(.top, 10)
+                .padding(.bottom, 4)
+            if commands.count > 4 {
+                ScrollView { rows }.frame(height: 256)
+            } else {
+                rows
+            }
+        }
+        .background(Theme.panel)
+        .overlay(alignment: .top) { Rectangle().fill(Theme.rail).frame(height: 1) }
     }
 
     private func openThread(_ message: Message) {
@@ -331,8 +400,41 @@ struct ChannelView: View {
     private func isGrouped(_ messages: [Message], _ index: Int) -> Bool {
         guard index > 0 else { return false }
         let prev = messages[index - 1], m = messages[index]
-        guard m.replyTo == nil, prev.author.id == m.author.id, let a = ChatDate.parse(prev.createdAt), let b = ChatDate.parse(m.createdAt) else { return false }
+        guard m.replyTo == nil, m.interaction == nil, prev.author.id == m.author.id, let a = ChatDate.parse(prev.createdAt), let b = ChatDate.parse(m.createdAt) else { return false }
         return b.timeIntervalSince(a) < 300 && Calendar.current.isDate(a, inSameDayAs: b)
+    }
+}
+
+/// One suggestion in the command picker: "/name usage", what it does, and whose it is.
+struct CommandRow: View {
+    let command: AvailableCommand
+
+    var body: some View {
+        HStack(spacing: 12) {
+            if let bot = command.bot {
+                Avatar(user: bot, size: 28)
+            } else {
+                Image(systemName: "slash.circle.fill")
+                    .font(.system(size: 24))
+                    .foregroundStyle(Theme.muted)
+                    .frame(width: 28, height: 28)
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                (Text("/\(command.name)").font(.app(.subheadline, weight: .semibold)).foregroundStyle(Theme.heading)
+                    + Text(command.usage.map { " \($0)" } ?? "").font(.app(.subheadline)).foregroundStyle(Theme.muted))
+                    .lineLimit(1)
+                Text(command.description).font(.app(.caption)).foregroundStyle(Theme.muted).lineLimit(1)
+            }
+            Spacer(minLength: 8)
+            Text(command.bot?.displayName ?? "Built-in")
+                .font(.app(.caption, weight: .medium))
+                .foregroundStyle(Theme.faint)
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 8)
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
     }
 }
 

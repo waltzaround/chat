@@ -110,6 +110,8 @@ dmRoutes.get("/people", async (c) => {
         ne(schema.users.id, me),
         isNull(schema.users.deletedAt),
         isNull(schema.users.suspendedAt),
+        // People only: apps don't take direct messages.
+        eq(schema.users.kind, "human"),
         // Nobody you've blocked, and nobody who has blocked you.
         sql`${schema.users.id} NOT IN (SELECT blocked_user_id FROM user_blocks WHERE blocker_user_id = ${me} UNION SELECT blocker_user_id FROM user_blocks WHERE blocked_user_id = ${me})`,
         q ? or(like(schema.users.username, `%${q}%`), like(schema.users.displayName, `%${q}%`)) : undefined,
@@ -129,6 +131,7 @@ dmRoutes.post("/", async (c) => {
   if (userId === me) throw ApiError.validation(undefined, "You can't message yourself");
   const peer = await db.query.users.findFirst({ where: eq(schema.users.id, userId) });
   if (!peer || peer.deletedAt || peer.suspendedAt) throw ApiError.notFound("User");
+  if (peer.kind !== "human") throw ApiError.forbidden("Apps don't take direct messages");
 
   const key = pairKey(me, userId);
   const existing = await db.query.dmPairs.findFirst({ where: and(eq(schema.dmPairs.userA, key.userA), eq(schema.dmPairs.userB, key.userB)) });
@@ -203,7 +206,7 @@ export const dmGuard: MiddlewareHandler<AppEnv> = async (c, next) => {
     const row = await c.env.DB.prepare("SELECT kind FROM workspaces WHERE id = ?").bind(workspaceId).first<{ kind: string }>();
     if (row?.kind === "dm") {
       const rest = c.req.path.split(`/api/workspaces/${workspaceId}`)[1] ?? "";
-      const readOnly = c.req.method === "GET" && ["", "/members", "/search", "/emojis"].includes(rest);
+      const readOnly = c.req.method === "GET" && ["", "/members", "/search", "/emojis", "/commands"].includes(rest);
       if (!readOnly) throw ApiError.forbidden("That isn't available in direct messages");
     }
   }

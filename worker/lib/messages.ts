@@ -95,7 +95,18 @@ export async function hydrateMessages(db: Db, rows: MessageRow[], viewerUserId: 
   const authorFor = (userId: string): MessageAuthor => {
     const u = userById.get(userId);
     const base: UserSummary = u ? toUserSummary(u) : { id: userId, username: "unknown", displayName: "Unknown user", avatarUrl: null };
-    return { ...base, nickname: nicknameByUser.get(userId) ?? null, roleColour: colourByUser.get(userId) ?? null };
+    return { ...base, nickname: nicknameByUser.get(userId) ?? null, roleColour: colourByUser.get(userId) ?? null, bot: !!u && u.kind !== "human" };
+  };
+
+  // People who ran the slash commands these messages answer.
+  const interactionUserIds = [...new Set(rows.map((r) => r.interaction?.userId).filter((id): id is string => !!id && !userById.has(id)))];
+  if (interactionUserIds.length) {
+    for (const u of await chunked(interactionUserIds, (chunk) => db.select().from(schema.users).where(inArray(schema.users.id, chunk)))) userById.set(u.id, u);
+  }
+  /** A webhook may choose its name and avatar per message. */
+  const shownAuthor = (row: MessageRow): MessageAuthor => {
+    const author = authorFor(row.authorUserId);
+    return row.authorName || row.authorAvatarUrl ? { ...author, displayName: row.authorName ?? author.displayName, nickname: row.authorName ? null : author.nickname, avatarUrl: row.authorAvatarUrl ?? author.avatarUrl } : author;
   };
 
   const replyById = new Map(replyRows.map((r) => [r.id, r]));
@@ -125,7 +136,7 @@ export async function hydrateMessages(db: Db, rows: MessageRow[], viewerUserId: 
     if (row.replyToMessageId) {
       const target = replyById.get(row.replyToMessageId);
       replyTo = target
-        ? { id: target.id, author: authorFor(target.authorUserId), content: target.deletedAt ? "" : target.content, deleted: !!target.deletedAt }
+        ? { id: target.id, author: shownAuthor(target), content: target.deletedAt ? "" : target.content, deleted: !!target.deletedAt }
         : { id: row.replyToMessageId, author: null, content: "", deleted: true };
     }
     return {
@@ -133,7 +144,7 @@ export async function hydrateMessages(db: Db, rows: MessageRow[], viewerUserId: 
       workspaceId: row.workspaceId,
       channelId: row.channelId,
       sequence: row.channelSequence,
-      author: authorFor(row.authorUserId),
+      author: shownAuthor(row),
       content: row.content,
       replyTo,
       attachments: attachmentsByMessage.get(row.id) ?? [],
@@ -142,6 +153,10 @@ export async function hydrateMessages(db: Db, rows: MessageRow[], viewerUserId: 
       pinnedAt: iso(row.pinnedAt),
       threadRootId: row.threadRootId,
       thread: row.threadReplyCount > 0 ? { replyCount: row.threadReplyCount, lastReplyAt: iso(row.threadLastReplyAt) } : null,
+      embeds: [...(row.embeds ?? []), ...(row.linkEmbeds ?? [])],
+      components: row.components ?? [],
+      interaction: row.interaction ? { name: row.interaction.name, user: userById.has(row.interaction.userId) ? toUserSummary(userById.get(row.interaction.userId)!) : null } : null,
+      webhookId: row.webhookId ?? null,
       createdAt: isoRequired(row.createdAt),
     } satisfies Message;
   });

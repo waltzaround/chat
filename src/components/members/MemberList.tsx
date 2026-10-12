@@ -5,6 +5,7 @@ import { memberDisplayName, roleColour } from "@/lib/permissions";
 import { Skeleton } from "@/components/ui/skeleton";
 import { UserAvatar } from "@/components/common/UserAvatar";
 import { MemberPopover } from "./MemberPopover";
+import { AppBadge } from "@/components/chat/Embeds";
 import type { Member, PresenceStatus } from "@shared/types";
 import { cn } from "@/lib/utils";
 
@@ -17,9 +18,12 @@ export function MemberList({ workspaceId }: { workspaceId: string }) {
     const list = members.data ?? [];
     const roles = workspace.data?.roles ?? [];
     const byName = (a: Member, b: Member) => memberDisplayName(a).localeCompare(memberDisplayName(b));
-    const online = list.filter((m) => (presence[m.userId] ?? "offline") !== "offline").sort(byName);
-    const offline = list.filter((m) => (presence[m.userId] ?? "offline") === "offline").sort(byName);
-    return { online, offline, roles };
+    // Apps have no presence; they get a group of their own.
+    const apps = list.filter((m) => m.bot).sort(byName);
+    const people = list.filter((m) => !m.bot);
+    const online = people.filter((m) => (presence[m.userId] ?? "offline") !== "offline").sort(byName);
+    const offline = people.filter((m) => (presence[m.userId] ?? "offline") === "offline").sort(byName);
+    return { online, offline, apps, roles };
   }, [members.data, workspace.data?.roles, presence]);
 
   return (
@@ -39,6 +43,7 @@ export function MemberList({ workspaceId }: { workspaceId: string }) {
           <>
             <Group title={`Online — ${groups.online.length}`} members={groups.online} presence={presence} roles={groups.roles} workspaceId={workspaceId} />
             <Group title={`Offline — ${groups.offline.length}`} members={groups.offline} presence={presence} roles={groups.roles} workspaceId={workspaceId} dim />
+            <Group title={`Apps — ${groups.apps.length}`} members={groups.apps} presence={presence} roles={groups.roles} workspaceId={workspaceId} app />
           </>
         )}
       </div>
@@ -46,7 +51,7 @@ export function MemberList({ workspaceId }: { workspaceId: string }) {
   );
 }
 
-function Group({ title, members, presence, roles, workspaceId, dim }: { title: string; members: Member[]; presence: Record<string, PresenceStatus>; roles: { id: string; colour: string | null; position: number }[]; workspaceId: string; dim?: boolean }) {
+function Group({ title, members, presence, roles, workspaceId, dim, app }: { title: string; members: Member[]; presence: Record<string, PresenceStatus>; roles: { id: string; colour: string | null; position: number }[]; workspaceId: string; dim?: boolean; app?: boolean }) {
   if (members.length === 0) return null;
   return (
     <section className="mb-4" aria-label={title}>
@@ -61,10 +66,11 @@ function Group({ title, members, presence, roles, workspaceId, dim }: { title: s
                   type="button"
                   className={cn("flex h-10 w-full items-center gap-2.5 rounded-md px-2 text-left transition-colors hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none", dim && "opacity-50 hover:opacity-100")}
                 >
-                  <UserAvatar user={m} size="md" status={presence[m.userId] ?? "offline"} />
+                  <UserAvatar user={m} size="md" status={app ? undefined : (presence[m.userId] ?? "offline")} />
                   <span className="min-w-0 flex-1 truncate text-sm font-medium" style={colour ? { color: colour } : undefined}>
                     {memberDisplayName(m)}
                   </span>
+                  {app ? <AppBadge /> : null}
                 </button>
               </MemberPopover>
             </li>

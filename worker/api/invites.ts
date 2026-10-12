@@ -9,6 +9,7 @@ import { fileUrl, iso, toUserSummary } from "../lib/serialize";
 import { checkRateLimit } from "../security/ratelimit";
 import { clientIp } from "../security/turnstile";
 import type { InvitePreview } from "@shared/types";
+import { dispatchMemberEvent } from "../integrations/dispatch";
 
 export const inviteRoutes = new Hono<AppEnv>();
 
@@ -66,5 +67,6 @@ inviteRoutes.post("/:code/accept", requireUser, async (c) => {
     db.update(schema.invites).set({ uses: sql`${schema.invites.uses} + 1` }).where(eq(schema.invites.code, invite.code)),
   ]);
   await notifyWorkspace(c.env, invite.workspaceId, { type: "workspace.updated", reason: "members" });
+  c.executionCtx.waitUntil(dispatchMemberEvent(c.env, db, invite.workspaceId, user.id, "joined"));
   return c.json({ workspaceId: invite.workspaceId, alreadyMember: false });
 });

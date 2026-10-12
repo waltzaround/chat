@@ -27,6 +27,7 @@ import { errorMessage } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { PreferredStatus } from "@shared/types";
 import { DEFAULT_PRIVACY, DEFAULT_TERMS } from "@shared/policies";
+import { GitHubAccountSection, GitHubAppSection, LinkPreviewsSetting, ServerBotsSection } from "./ServerIntegrations";
 
 const TABS = [
   { id: "profile", label: "Profile", icon: <User className="size-3.5" /> },
@@ -87,6 +88,7 @@ export function UserSettingsPage() {
         <div className="grid gap-10">
           <ProfileTab />
           {me?.hasPassword ? <ChangePassword /> : null}
+          <GitHubAccountSection />
           <LinkedServersSection />
           <AccountSection />
         </div>
@@ -324,6 +326,9 @@ function ServerTab() {
         <p className="text-sm font-medium">Who can create workspaces</p>
         <WorkspaceCreationPicker />
       </div>
+      <LinkPreviewsSetting />
+      <ServerBotsSection />
+      <GitHubAppSection />
       <div className="grid gap-2">
         <p className="text-sm font-medium">Accounts</p>
         <EmailStatus />

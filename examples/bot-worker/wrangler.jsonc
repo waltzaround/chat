@@ -1,0 +1,9 @@
+{
+  "name": "chat-example-bot",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-22",
+  // Your Chat server. Set the token and signing secret as secrets:
+  //   npx wrangler secret put BOT_TOKEN
+  //   npx wrangler secret put SIGNING_SECRET
+  "vars": { "CHAT_URL": "https://chat.example.com" }
+}

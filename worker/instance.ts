@@ -200,11 +200,11 @@ export function serverIconUrl(profile: ServerProfile): string | null {
   return profile.iconKey ? `/api/instance/icon?v=${encodeURIComponent(profile.iconKey.split("/").pop() ?? "")}` : null;
 }
 
-async function setSetting(db: D1Database, key: string, value: string): Promise<void> {
+export async function setSetting(db: D1Database, key: string, value: string): Promise<void> {
   await db.prepare("INSERT INTO instance_settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value").bind(key, value).run();
 }
 
-async function getSetting(db: D1Database, key: string): Promise<string | null> {
+export async function getSetting(db: D1Database, key: string): Promise<string | null> {
   const row = await db.prepare("SELECT value FROM instance_settings WHERE key = ?").bind(key).first<{ value: string }>();
   return row?.value ?? null;
 }
@@ -220,4 +220,8 @@ async function loadOrCreateSetting(db: D1Database, key: string, create: () => st
 function randomSecret(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(32));
   return btoa(String.fromCharCode(...bytes));
+}
+
+export async function deleteSetting(db: D1Database, key: string): Promise<void> {
+  await db.prepare("DELETE FROM instance_settings WHERE key = ?").bind(key).run();
 }

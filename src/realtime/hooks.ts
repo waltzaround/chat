@@ -1,5 +1,5 @@
 import { useStore } from "@/lib/store";
-import type { PresenceStatus } from "@shared/types";
+import type { Message, PresenceStatus } from "@shared/types";
 import { useRealtime, useRealtimeOptional, type PendingMessage } from "./RealtimeProvider";
 
 const EMPTY: never[] = [];
@@ -43,6 +43,11 @@ export function usePendingMessages(channelId: string): PendingMessage[] {
   return useStore(rt.store, (s) => s.pending[channelId] ?? EMPTY);
 }
 
+export function useEphemeralMessages(channelId: string): Message[] {
+  const rt = useRealtime();
+  return useStore(rt.store, (s) => s.ephemeral[channelId] ?? EMPTY);
+}
+
 export function useSyncVersion(): number {
   const rt = useRealtime();
   return useStore(rt.store, (s) => s.syncVersion);
@@ -51,4 +56,4 @@ export function useSyncVersion(): number {
 // A frozen store used when a hook is rendered outside a workspace (e.g. profile pages).
 import { createStore } from "@/lib/store";
 import type { RealtimeState } from "./RealtimeProvider";
-const FALLBACK = createStore<RealtimeState>({ status: "closed", attempt: 0, fatal: null, presence: {}, typing: {}, voice: {}, pending: {}, activeChannelId: null, syncVersion: 0 });
+const FALLBACK = createStore<RealtimeState>({ status: "closed", attempt: 0, fatal: null, presence: {}, typing: {}, voice: {}, pending: {}, ephemeral: {}, activeChannelId: null, syncVersion: 0 });

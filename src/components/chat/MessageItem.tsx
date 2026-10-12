@@ -1,5 +1,5 @@
 import { memo, useMemo, useState } from "react";
-import { AlertCircle, CornerUpLeft, Flag, Loader2, MessagesSquare, MoreHorizontal, Pencil, Pin, PinOff, Reply, SmilePlus, Trash2, Copy, Link2 } from "lucide-react";
+import { AlertCircle, CornerUpLeft, EyeOff, Flag, Loader2, MessagesSquare, MoreHorizontal, Pencil, Pin, PinOff, Reply, SmilePlus, SquareSlash, Trash2, Copy, Link2 } from "lucide-react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { useRealtime } from "@/realtime/RealtimeProvider";
@@ -20,6 +20,7 @@ import { ReactionBar } from "./ReactionBar";
 import { EmojiPicker } from "./EmojiPicker";
 import { AttachmentView } from "./AttachmentView";
 import { ReportMessageDialog } from "./ReportMessageDialog";
+import { AppBadge, Embeds, MessageButtons } from "./Embeds";
 import type { Channel, CurrentUser, Message, WorkspaceDetail } from "@shared/types";
 
 export const MessageItem = memo(function MessageItem({
@@ -111,11 +112,27 @@ export const MessageItem = memo(function MessageItem({
         "group relative px-4 py-0.5 hover:bg-accent/40",
         !compact && "mt-3",
         mentionsMe && "border-l-2 border-warning bg-warning/10 pl-[14px] hover:bg-warning/15",
+        message.ephemeral && "bg-accent/30",
         isEditing && "bg-accent/60",
       )}
       aria-label={`${name} at ${formatFull(message.createdAt)}`}
-      id={`m-${message.sequence}`}
+      id={message.ephemeral ? undefined : `m-${message.sequence}`}
     >
+      {message.interaction ? (
+        <div className="mb-0.5 ml-[52px] flex items-center gap-1.5 text-xs text-muted-foreground">
+          <SquareSlash className="size-3.5 shrink-0" aria-hidden />
+          {message.interaction.user ? (
+            <>
+              <UserAvatar user={message.interaction.user} size="xs" />
+              <span className="font-medium text-foreground/80">{message.interaction.user.displayName}</span>
+            </>
+          ) : (
+            <span>Someone</span>
+          )}
+          <span>used</span>
+          <span className="font-medium text-foreground/80">/{message.interaction.name}</span>
+        </div>
+      ) : null}
       {message.replyTo ? (
         <div className="mb-0.5 ml-[52px] flex items-center gap-1.5 text-xs text-muted-foreground">
           <CornerUpLeft className="size-3.5 shrink-0" aria-hidden />
@@ -149,6 +166,7 @@ export const MessageItem = memo(function MessageItem({
               <span className="text-[0.95rem] font-semibold" style={message.author.roleColour ? { color: message.author.roleColour } : undefined}>
                 {name}
               </span>
+              {message.author.bot ? <AppBadge /> : null}
               <Tooltip>
                 <TooltipTrigger asChild>
                   <time dateTime={message.createdAt} className="text-[11px] text-muted-foreground">
@@ -184,6 +202,17 @@ export const MessageItem = memo(function MessageItem({
               ))}
             </div>
           ) : null}
+          <Embeds embeds={message.embeds} emojis={emojis} />
+          <MessageButtons message={message} rows={message.components} />
+          {message.ephemeral ? (
+            <p className="mt-1 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+              <EyeOff className="size-3.5" aria-hidden />
+              Only you can see this ·
+              <button type="button" className="link" onClick={() => rt.dismissEphemeral(message.channelId, message.id)}>
+                Dismiss
+              </button>
+            </p>
+          ) : null}
           {message.thread && !inThread ? (
             <button type="button" onClick={openThread} className="mt-1 flex items-center gap-1.5 rounded px-1 py-0.5 text-xs font-medium text-primary hover:bg-accent">
               <MessagesSquare className="size-3.5" aria-hidden />
@@ -195,7 +224,8 @@ export const MessageItem = memo(function MessageItem({
         </div>
       </div>
 
-      {/* Hover toolbar */}
+      {/* Hover toolbar (a private reply isn't stored, so there's nothing to act on) */}
+      {message.ephemeral ? null : (
       <div
         className={cn(
           "absolute -top-3 right-4 hidden items-center rounded-md border bg-popover shadow-sm group-hover:flex group-focus-within:flex",
@@ -280,8 +310,9 @@ export const MessageItem = memo(function MessageItem({
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+      )}
 
-      {isMine ? null : <ReportMessageDialog message={message} channelId={channel.id} open={reportOpen} onOpenChange={setReportOpen} />}
+      {isMine || message.ephemeral ? null : <ReportMessageDialog message={message} channelId={channel.id} open={reportOpen} onOpenChange={setReportOpen} />}
       <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>

@@ -4,13 +4,15 @@ import SwiftUI
 struct RemoteImage<Placeholder: View>: View {
     let path: String?
     let api: APIClient?
+    /// Shows the whole image at its own shape, instead of filling the frame.
+    var fit = false
     @ViewBuilder let placeholder: () -> Placeholder
     @State private var image: UIImage?
 
     var body: some View {
         Group {
             if let image {
-                Image(uiImage: image).resizable().scaledToFill()
+                Image(uiImage: image).resizable().aspectRatio(contentMode: fit ? .fit : .fill)
             } else {
                 placeholder()
             }

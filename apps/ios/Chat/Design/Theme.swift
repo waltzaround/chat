@@ -16,6 +16,8 @@ enum Theme {
     static let muted = Color(hex: "949BA4")!
     static let faint = Color(hex: "80848E")!
     static let danger = Color(hex: "F23F43")!
+    /// Green "success" buttons on apps' messages.
+    static let success = Color(hex: "23A55A")!
     static let link = Color(hex: "00A8FC")!
 }
 

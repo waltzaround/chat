@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// One message, laid out like Discord: avatar, coloured name and time, then the body,
-/// attachments, reactions and thread link.
+/// attachments, apps' cards and buttons, reactions and thread link.
 struct MessageRow: View {
     let message: Message
     let grouped: Bool
@@ -10,10 +10,17 @@ struct MessageRow: View {
     let react: (String) -> Void
     /// Opens this message's thread; nil inside a thread.
     var openThread: (() -> Void)? = nil
+    /// Sends a button press to the bot; nil where buttons can't be pressed.
+    var press: ((ButtonComponent) -> Void)? = nil
+    /// Whether a button is waiting on its bot.
+    var pressing: (ButtonComponent) -> Bool = { _ in false }
+    /// Hides a message only you can see.
+    var dismiss: (() -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             if let reply = message.replyTo { replyLine(reply) }
+            if let interaction = message.interaction { interactionLine(interaction) }
             HStack(alignment: .top, spacing: 10) {
                 if grouped {
                     Color.clear.frame(width: 34, height: 1)
@@ -23,24 +30,15 @@ struct MessageRow: View {
                 VStack(alignment: .leading, spacing: 4) {
                     if !grouped {
                         HStack(alignment: .firstTextBaseline, spacing: 8) {
-                            Text(message.author.name).font(.app(.callout, weight: .semibold)).foregroundStyle(colour).lineLimit(1)
+                            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                                Text(message.author.name).font(.app(.callout, weight: .semibold)).foregroundStyle(colour).lineLimit(1)
+                                if message.author.bot { AppBadge() }
+                            }
                             Text(ChatDate.label(message.createdAt)).font(.app(.caption)).foregroundStyle(Theme.faint)
                         }
                     }
                     if !message.content.isEmpty {
-                        let blocks = Self.blocks(message.content)
-                        ForEach(Array(blocks.enumerated()), id: \.offset) { index, block in
-                            let text = rendered(block.text) + (index == blocks.count - 1 ? edited : "")
-                            if block.quote {
-                                HStack(spacing: 10) {
-                                    RoundedRectangle(cornerRadius: 2).fill(Theme.faint).frame(width: 4)
-                                    Text(text).messageText()
-                                }
-                                .fixedSize(horizontal: false, vertical: true)
-                            } else {
-                                Text(text).messageText()
-                            }
-                        }
+                        MarkdownText(content: message.content, suffix: edited)
                     }
                     ForEach(message.attachments.filter(\.isImage)) { attachment in
                         RemoteImage(path: attachment.url, api: api) { Theme.panel }
@@ -58,6 +56,13 @@ struct MessageRow: View {
                         .frame(maxWidth: 280, alignment: .leading)
                         .background(RoundedRectangle(cornerRadius: 8).fill(Theme.panel))
                         .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.rail, lineWidth: 1))
+                    }
+                    ForEach(Array(message.embeds.enumerated()), id: \.offset) { _, embed in
+                        EmbedCard(embed: embed, api: api).padding(.top, 2)
+                    }
+                    if !message.components.isEmpty {
+                        MessageButtons(rows: message.components, pressing: pressing, press: message.isEphemeral ? nil : press)
+                            .padding(.top, 2)
                     }
                     if !message.reactions.isEmpty {
                         FlowLayout(spacing: 6) {
@@ -81,12 +86,13 @@ struct MessageRow: View {
                         .disabled(openThread == nil)
                         .accessibilityHint("Opens the thread")
                     }
+                    if message.isEphemeral { ephemeralLine }
                 }
                 Spacer(minLength: 0)
             }
         }
         .padding(.horizontal, 16)
-        .padding(.top, grouped ? 2 : (message.replyTo == nil ? 14 : 4))
+        .padding(.top, grouped ? 2 : (message.replyTo == nil && message.interaction == nil ? 14 : 4))
         .padding(.bottom, 2)
         .background(mentionsMe ? Color(hex: "F0B232")!.opacity(0.08) : .clear)
         .overlay(alignment: .leading) {
@@ -113,6 +119,40 @@ struct MessageRow: View {
         .padding(.bottom, 2)
     }
 
+    /// "↱ walt used /deploy" above an app's answer to a slash command.
+    private func interactionLine(_ interaction: MessageInteraction) -> some View {
+        HStack(spacing: 6) {
+            ReplySpine().stroke(Theme.faint, lineWidth: 2).frame(width: 28, height: 10).padding(.leading, 17).padding(.top, 6)
+            if let user = interaction.user { Avatar(user: user, size: 16) }
+            Image(systemName: "slash.circle.fill").font(.system(size: 12)).foregroundStyle(Theme.faint)
+            Text(interaction.user?.displayName ?? "Someone").font(.app(.footnote, weight: .semibold)).foregroundStyle(Theme.text).lineLimit(1)
+            Text("used").layoutPriority(1)
+            Text("/\(interaction.name)").font(.app(.footnote, weight: .medium)).foregroundStyle(Theme.text).lineLimit(1)
+        }
+        .font(.app(.footnote))
+        .foregroundStyle(Theme.muted)
+        .padding(.top, 10)
+        .padding(.bottom, 2)
+        .accessibilityElement(children: .combine)
+    }
+
+    /// Under a message only you can see.
+    private var ephemeralLine: some View {
+        HStack(spacing: 5) {
+            Image(systemName: "eye.fill").font(.system(size: 11))
+            Text("Only you can see this")
+            Text("·")
+            Button("Dismiss") { dismiss?() }
+                .font(.app(.caption, weight: .semibold))
+                .foregroundStyle(Theme.link)
+                .buttonStyle(.plain)
+                .accessibilityHint("Hides this message")
+        }
+        .font(.app(.caption))
+        .foregroundStyle(Theme.muted)
+        .padding(.top, 2)
+    }
+
     private var mentionsMe: Bool {
         if message.replyTo?.author?.id == me?.id && me != nil && message.author.id != me?.id { return true }
         let text = message.content
@@ -133,6 +173,33 @@ struct MessageRow: View {
         text.foregroundColor = Theme.faint
         return text
     }
+}
+
+/// Message Markdown: inline styles (bold, italics, code, links), @mentions as chips, and
+/// "> " quotes with Discord's side bar. Used for messages and for apps' cards.
+struct MarkdownText: View {
+    let content: String
+    /// Added after the last line, e.g. " (edited)".
+    var suffix: AttributedString = ""
+    var style: Font.TextStyle = .callout
+
+    var body: some View {
+        let blocks = Self.blocks(content)
+        VStack(alignment: .leading, spacing: 4) {
+            ForEach(Array(blocks.enumerated()), id: \.offset) { index, block in
+                let text = rendered(block.text) + (index == blocks.count - 1 ? suffix : "")
+                if block.quote {
+                    HStack(spacing: 10) {
+                        RoundedRectangle(cornerRadius: 2).fill(Theme.faint).frame(width: 4)
+                        Text(text).messageText(style)
+                    }
+                    .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    Text(text).messageText(style)
+                }
+            }
+        }
+    }
 
     /// Splits "> quoted" lines from the rest, so quotes can get Discord's side bar.
     static func blocks(_ content: String) -> [(quote: Bool, text: String)] {
@@ -149,12 +216,12 @@ struct MessageRow: View {
         return out
     }
 
-    /// Inline Markdown (bold, italics, code, links) with @mentions@mentions as chips.
+    /// Inline Markdown (bold, italics, code, links) with @mentions as chips.
     private func rendered(_ text: String) -> AttributedString {
         var result = (try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(text)
         for run in result.runs where run.inlinePresentationIntent?.contains(.code) == true {
             result[run.range].backgroundColor = Theme.rail
-            result[run.range].font = .system(.subheadline, design: .monospaced)
+            result[run.range].font = .system(style == .callout ? .subheadline : .footnote, design: .monospaced)
         }
         let plain = String(result.characters)
         for match in plain.matches(of: /@[A-Za-z0-9_.]+/) {
@@ -164,15 +231,15 @@ struct MessageRow: View {
             let upper = result.characters.index(lower, offsetBy: length)
             result[lower ..< upper].foregroundColor = Theme.heading
             result[lower ..< upper].backgroundColor = Theme.accent.opacity(0.3)
-            result[lower ..< upper].font = .app(.callout, weight: .medium)
+            result[lower ..< upper].font = .app(style, weight: .medium)
         }
         return result
     }
 }
 
 private extension Text {
-    func messageText() -> some View {
-        font(.callout)
+    func messageText(_ style: Font.TextStyle = .callout) -> some View {
+        font(.system(style))
             .foregroundStyle(Theme.text)
             .tint(Theme.link)
             .fixedSize(horizontal: false, vertical: true)
@@ -275,6 +342,11 @@ struct FlowLayout: Layout {
 }
 
 extension Color {
+    /// From a number like 0x5865F2, as apps send embed colours.
+    init(rgb: Int) {
+        self.init(red: Double((rgb >> 16) & 0xFF) / 255, green: Double((rgb >> 8) & 0xFF) / 255, blue: Double(rgb & 0xFF) / 255)
+    }
+
     init?(hex: String) {
         var value: UInt64 = 0
         let digits = hex.trimmingCharacters(in: CharacterSet(charactersIn: "#"))

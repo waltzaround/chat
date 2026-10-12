@@ -2,7 +2,7 @@ import { useState, type FormEvent } from "react";
 import { useNavigate, useParams } from "react-router";
 import {
   Settings, Users, Shield, Hash, Link2, FileText, Trash2, Loader2,
-  ChevronRight, Edit2, Plus, Folder, Smile, Flag,
+  ChevronRight, Edit2, Plus, Folder, Smile, Flag, Blocks,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Textarea } from "@/components/ui/textarea";
@@ -15,6 +15,7 @@ import { InvitesPanel } from "./InvitesPanel";
 import { AuditLogPanel } from "./AuditLogPanel";
 import { ReportsPanel } from "./ReportsPanel";
 import { EmojisPanel } from "./EmojisPanel";
+import { IntegrationsPanel } from "./IntegrationsPanel";
 import { ImagePicker } from "@/components/common/ImagePicker";
 import { UserAvatar } from "@/components/common/UserAvatar";
 import { Button } from "@/components/ui/button";
@@ -79,6 +80,7 @@ const ALL_TABS: TabDef[] = [
   { id: "channels", label: "Channels", icon: <Hash className="size-3.5" />, permissionBits: Permission.MANAGE_CHANNELS },
   { id: "invites", label: "Invites", icon: <Link2 className="size-3.5" />, permissionBits: Permission.CREATE_INVITES },
   { id: "emojis", label: "Emojis", icon: <Smile className="size-3.5" />, permissionBits: Permission.MANAGE_EMOJIS },
+  { id: "integrations", label: "Integrations", icon: <Blocks className="size-3.5" />, permissionBits: Permission.MANAGE_INTEGRATIONS },
   { id: "reports", label: "Reports", icon: <Flag className="size-3.5" />, permissionBits: Permission.MANAGE_MESSAGES },
   { id: "audit", label: "Audit Log", icon: <FileText className="size-3.5" />, permissionBits: Permission.MANAGE_WORKSPACE },
 ];
@@ -129,6 +131,7 @@ export function WorkspaceSettingsPage() {
           {activeTab === "channels" && <ChannelsTab ws={ws} />}
           {activeTab === "invites" && <InvitesTab ws={ws} />}
           {activeTab === "emojis" && <EmojisPanel ws={ws} />}
+          {activeTab === "integrations" && <IntegrationsPanel ws={ws} />}
           {activeTab === "reports" && (
             <div className="grid gap-4">
               <h2 className="text-base font-semibold">Reports</h2>

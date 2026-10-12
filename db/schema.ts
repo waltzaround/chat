@@ -1,5 +1,6 @@
 import { sqliteTable, text, integer, primaryKey, uniqueIndex, index } from "drizzle-orm/sqlite-core";
 import { sql } from "drizzle-orm";
+import type { ActionRow, Embed } from "../shared/types";
 
 const timestamp = (name: string) => integer(name, { mode: "timestamp_ms" });
 
@@ -26,6 +27,8 @@ export const users = sqliteTable(
     suspendedAt: timestamp("suspended_at"),
     /** The account was deleted: its profile is scrubbed and it can no longer sign in. */
     deletedAt: timestamp("deleted_at"),
+    /** human | bot | webhook. Bots and webhooks have no password and can never sign in. */
+    kind: text("kind").notNull().default("human"),
     createdAt: timestamp("created_at").notNull(),
     updatedAt: timestamp("updated_at").notNull(),
   },
@@ -214,6 +217,19 @@ export const messages = sqliteTable(
     /** On a thread's root: how many replies, and when the latest was sent. */
     threadReplyCount: integer("thread_reply_count").notNull().default(0),
     threadLastReplyAt: timestamp("thread_last_reply_at"),
+    /** Set on messages a webhook posted. */
+    webhookId: text("webhook_id"),
+    /** A webhook may pick a name and avatar per message. */
+    authorName: text("author_name"),
+    authorAvatarUrl: text("author_avatar_url"),
+    /** JSON Embed[]: rich cards from the author (webhooks and bots). */
+    embeds: text("embeds", { mode: "json" }).$type<Embed[]>(),
+    /** JSON Embed[]: previews made from links in the content. */
+    linkEmbeds: text("link_embeds", { mode: "json" }).$type<Embed[]>(),
+    /** JSON ActionRow[]: buttons (bots only). */
+    components: text("components", { mode: "json" }).$type<ActionRow[]>(),
+    /** JSON: the slash command this message answers. */
+    interaction: text("interaction", { mode: "json" }).$type<{ name: string; userId: string }>(),
     createdAt: timestamp("created_at").notNull(),
   },
   (t) => [
@@ -415,6 +431,112 @@ export const rateLimits = sqliteTable("rate_limits", {
   resetAt: integer("reset_at").notNull(),
 });
 
+
+// ---------------------------------------------------------------------------
+// Integrations: webhooks, bots, slash commands and GitHub (see 0017_integrations.sql)
+// ---------------------------------------------------------------------------
+
+/** An incoming webhook posts into one channel. Only a hash of its token is kept. */
+export const webhooks = sqliteTable(
+  "webhooks",
+  {
+    id: text("id").primaryKey(),
+    workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+    channelId: text("channel_id").notNull().references(() => channels.id, { onDelete: "cascade" }),
+    /** The users row (kind "webhook") its messages are posted as. */
+    userId: text("user_id").notNull().references(() => users.id),
+    tokenHash: text("token_hash").notNull(),
+    /** Encrypted. GitHub signs its deliveries with it. */
+    secret: text("secret").notNull(),
+    allowEveryone: integer("allow_everyone", { mode: "boolean" }).notNull().default(false),
+    createdBy: text("created_by").notNull().references(() => users.id),
+    createdAt: timestamp("created_at").notNull(),
+    lastUsedAt: timestamp("last_used_at"),
+  },
+  (t) => [index("webhooks_workspace_idx").on(t.workspaceId)],
+);
+
+/** A bot account. The server owner creates it; workspace admins add it to workspaces. */
+export const bots = sqliteTable("bots", {
+  userId: text("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+  ownerUserId: text("owner_user_id").notNull().references(() => users.id),
+  description: text("description"),
+  tokenHash: text("token_hash").notNull(),
+  tokenHint: text("token_hint").notNull(),
+  eventsUrl: text("events_url"),
+  /** Encrypted. Signs every delivery. */
+  signingSecret: text("signing_secret").notNull(),
+  eventsFailures: integer("events_failures").notNull().default(0),
+  eventsPausedAt: timestamp("events_paused_at"),
+  lastUsedAt: timestamp("last_used_at"),
+  createdAt: timestamp("created_at").notNull(),
+});
+
+export const botCommands = sqliteTable(
+  "bot_commands",
+  {
+    botUserId: text("bot_user_id").notNull().references(() => bots.userId, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    description: text("description").notNull(),
+    usage: text("usage"),
+  },
+  (t) => [primaryKey({ columns: [t.botUserId, t.name] })],
+);
+
+/** A slash command or a button click, waiting for its bot to answer. */
+export const interactions = sqliteTable(
+  "interactions",
+  {
+    id: text("id").primaryKey(),
+    tokenHash: text("token_hash").notNull(),
+    botUserId: text("bot_user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+    channelId: text("channel_id").notNull().references(() => channels.id, { onDelete: "cascade" }),
+    userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    /** command | button */
+    kind: text("kind").notNull(),
+    name: text("name").notNull(),
+    messageId: text("message_id"),
+    createdAt: timestamp("created_at").notNull(),
+  },
+  (t) => [index("interactions_created_idx").on(t.createdAt)],
+);
+
+export const githubInstallations = sqliteTable("github_installations", {
+  id: integer("id").primaryKey(),
+  accountLogin: text("account_login").notNull(),
+  accountType: text("account_type").notNull(),
+  createdAt: timestamp("created_at").notNull(),
+});
+
+/** A repository whose activity posts into a channel. */
+export const githubSubscriptions = sqliteTable(
+  "github_subscriptions",
+  {
+    id: text("id").primaryKey(),
+    workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+    channelId: text("channel_id").notNull().references(() => channels.id, { onDelete: "cascade" }),
+    /** owner/name, lower case. */
+    repo: text("repo").notNull(),
+    /** Comma-separated features, e.g. "issues,pulls,commits,releases". */
+    events: text("events").notNull(),
+    createdBy: text("created_by").notNull().references(() => users.id),
+    createdAt: timestamp("created_at").notNull(),
+  },
+  (t) => [uniqueIndex("github_subscriptions_channel_repo_idx").on(t.channelId, t.repo), index("github_subscriptions_repo_idx").on(t.repo)],
+);
+
+/** A person's GitHub account, linked so buttons like "Close issue" act as them. */
+export const githubAccounts = sqliteTable("github_accounts", {
+  userId: text("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+  githubLogin: text("github_login").notNull(),
+  /** Encrypted. */
+  accessToken: text("access_token").notNull(),
+  refreshToken: text("refresh_token"),
+  expiresAt: timestamp("expires_at"),
+  createdAt: timestamp("created_at").notNull(),
+});
+
 export const schema = {
   users,
   sessions,
@@ -442,6 +564,13 @@ export const schema = {
   dmHidden,
   auditLog,
   rateLimits,
+  webhooks,
+  bots,
+  botCommands,
+  interactions,
+  githubInstallations,
+  githubSubscriptions,
+  githubAccounts,
 };
 
 export const now = sql`(unixepoch('subsec') * 1000)`;

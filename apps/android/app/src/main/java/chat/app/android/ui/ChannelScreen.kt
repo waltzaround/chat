@@ -96,17 +96,22 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import chat.app.android.data.AppState
 import chat.app.android.data.ChannelStore
 import chat.app.android.net.ApiClient
+import chat.app.android.net.AvailableCommand
+import chat.app.android.net.ButtonComponent
 import chat.app.android.net.ChatDate
 import chat.app.android.net.CurrentUser
 import chat.app.android.net.Message
@@ -125,7 +130,9 @@ fun ChannelScreen(state: AppState, route: ChannelRoute, open: (ChannelRoute) -> 
     DisposableEffect(store) { onDispose { store.close() } }
     store.onSignedOut = { state.handleSignedOut(route.server) }
     val ui by store.ui.collectAsState()
-    var draft by remember { mutableStateOf("") }
+    var draft by remember { mutableStateOf(TextFieldValue("")) }
+    /** The suggestion last tapped, so "/name" runs that bot's command when two share a name. */
+    var pickedCommand by remember { mutableStateOf<AvailableCommand?>(null) }
     var replyingTo by remember { mutableStateOf<Message?>(null) }
     var actionsFor by remember { mutableStateOf<Message?>(null) }
     var editing by remember { mutableStateOf<Message?>(null) }
@@ -139,8 +146,8 @@ fun ChannelScreen(state: AppState, route: ChannelRoute, open: (ChannelRoute) -> 
         if (uri != null) scope.launch {
             val photo = withContext(Dispatchers.IO) { readPhoto(context, uri) }
             if (photo == null) return@launch
-            store.sendImage(photo.bytes, "image/jpeg", photo.width, photo.height, draft, replyingTo?.id)
-            draft = ""
+            store.sendImage(photo.bytes, "image/jpeg", photo.width, photo.height, draft.text, replyingTo?.id)
+            draft = TextFieldValue("")
             replyingTo = null
         }
     }
@@ -148,13 +155,20 @@ fun ChannelScreen(state: AppState, route: ChannelRoute, open: (ChannelRoute) -> 
     val list = rememberLazyListState()
 
     // Newest at the bottom: the list is reversed so it opens there and stays there.
-    val rows = remember(ui.messages, ui.pending) { buildRows(ui.messages, ui.pending, me) }
-    LaunchedEffect(ui.messages.lastOrNull()?.id, ui.pending.size) {
+    val rows = remember(ui.messages, ui.pending, ui.ephemeral) { buildRows(ui.messages, ui.pending, ui.ephemeral, me) }
+    LaunchedEffect(ui.messages.lastOrNull()?.id, ui.pending.size, ui.ephemeral.size) {
         if (list.firstVisibleItemIndex <= 2) list.animateScrollToItem(0)
         store.markRead()
     }
     val nearTop by remember { derivedStateOf { list.layoutInfo.visibleItemsInfo.lastOrNull()?.index?.let { it >= list.layoutInfo.totalItemsCount - 3 } ?: false } }
     LaunchedEffect(nearTop, ui.hasMore) { if (nearTop && ui.hasMore) store.loadOlder() }
+
+    // "/dep" (no space yet) lists the workspace's commands that start with "dep".
+    val commandQuery = draft.text.takeIf { editing == null && store.commandsEnabled && it.startsWith("/") && it.none(Char::isWhitespace) }?.drop(1)
+    LaunchedEffect(commandQuery != null) { if (commandQuery != null) store.loadCommands() }
+    val suggestions = remember(commandQuery, ui.commands) {
+        if (commandQuery == null) emptyList() else ui.commands.orEmpty().filter { it.name.startsWith(commandQuery, ignoreCase = true) }
+    }
 
     Column(Modifier.fillMaxSize().background(Palette.chat).statusBarsPadding().navigationBarsPadding().imePadding()) {
         // Header
@@ -186,19 +200,29 @@ fun ChannelScreen(state: AppState, route: ChannelRoute, open: (ChannelRoute) -> 
                                     onLongPress = { actionsFor = row.message },
                                     react = { store.toggleReaction(it, row.message.id) },
                                     openThread = if (route.threadRoot == null) { { openThread(row.message) } } else null,
+                                    pressing = ui.pressing,
+                                    press = { store.press(row.message, it) },
                                 )
                             }
                             is Row_.Pending -> PendingRow(row.pending, me, api, row.grouped) { store.retry(row.pending.id) }
+                            is Row_.Ephemeral -> MessageRow(row.message, false, me, api, onLongPress = {}, react = {}, dismiss = { store.dismissEphemeral(row.message.id) })
                         }
                     }
                     item(key = "top") {
                         if (ui.hasMore) Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Palette.muted, modifier = Modifier.size(24.dp)) }
                         else if (route.threadRoot != null) Column {
-                            MessageRow(route.threadRoot, false, me, api, onLongPress = {}, react = {})
+                            MessageRow(route.threadRoot, false, me, api, onLongPress = {}, react = {}, pressing = ui.pressing, press = { store.press(route.threadRoot, it) })
                             DaySeparator("${ui.messages.size} ${if (ui.messages.size == 1) "reply" else "replies"}")
                         }
                         else Welcome(route, api)
                     }
+                }
+            }
+            if (suggestions.isNotEmpty()) {
+                CommandSuggestions(suggestions, api, Modifier.align(Alignment.BottomCenter)) { command ->
+                    val text = "/${command.name} "
+                    draft = TextFieldValue(text, TextRange(text.length))
+                    pickedCommand = command
                 }
             }
         }
@@ -214,7 +238,7 @@ fun ChannelScreen(state: AppState, route: ChannelRoute, open: (ChannelRoute) -> 
             replyingTo = replyingTo,
             editing = editing != null,
             onCancelReply = { replyingTo = null },
-            onCancelEdit = { editing = null; draft = "" },
+            onCancelEdit = { editing = null; draft = TextFieldValue("") },
             canAttach = ui.canAttach && editing == null,
             uploading = ui.uploading,
             onAttach = { pickPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
@@ -222,12 +246,13 @@ fun ChannelScreen(state: AppState, route: ChannelRoute, open: (ChannelRoute) -> 
             onSend = {
                 val e = editing
                 if (e != null) {
-                    store.edit(e.id, draft)
+                    store.edit(e.id, draft.text)
                     editing = null
                 } else {
-                    store.send(draft, replyingTo?.id)
+                    store.submit(draft.text, replyingTo?.id, pickedCommand)
                 }
-                draft = ""
+                draft = TextFieldValue("")
+                pickedCommand = null
                 replyingTo = null
             },
         )
@@ -244,7 +269,7 @@ fun ChannelScreen(state: AppState, route: ChannelRoute, open: (ChannelRoute) -> 
             onDismiss = { actionsFor = null },
             react = { store.toggleReaction(it, message.id) },
             reply = { replyingTo = message; editing = null; runCatching { composer.requestFocus() } },
-            edit = { editing = message; replyingTo = null; draft = message.content; runCatching { composer.requestFocus() } },
+            edit = { editing = message; replyingTo = null; draft = TextFieldValue(message.content, TextRange(message.content.length)); runCatching { composer.requestFocus() } },
             thread = { openThread(message) },
             report = { reporting = message },
             block = { store.setBlocked(message.author.id, message.author.id !in ui.blocked) },
@@ -303,16 +328,21 @@ private sealed interface Row_ {
     data class Pending(val pending: PendingMessage, val grouped: Boolean) : Row_ {
         override val key get() = "pending-${pending.id}"
     }
+
+    /** A bot's private reply to you, after everything else until dismissed. */
+    data class Ephemeral(val message: Message) : Row_ {
+        override val key get() = "ephemeral-${message.id}"
+    }
 }
 
-private fun buildRows(messages: List<Message>, pending: List<PendingMessage>, me: CurrentUser?): List<Row_> {
+private fun buildRows(messages: List<Message>, pending: List<PendingMessage>, ephemeral: List<Message>, me: CurrentUser?): List<Row_> {
     val out = mutableListOf<Row_>()
     messages.forEachIndexed { i, m ->
         val prev = messages.getOrNull(i - 1)
         val day = ChatDate.localDate(m.createdAt)
         val prevDay = prev?.let { ChatDate.localDate(it.createdAt) }
         if (day != null && day != prevDay) out += Row_.Day(ChatDate.day(day))
-        val grouped = prev != null && day == prevDay && m.replyTo == null && prev.author.id == m.author.id &&
+        val grouped = prev != null && day == prevDay && m.replyTo == null && m.interaction == null && prev.author.id == m.author.id &&
             (ChatDate.parse(prev.createdAt)?.let { a -> ChatDate.parse(m.createdAt)?.let { b -> Duration.between(a, b).seconds < 300 } } ?: false)
         out += Row_.Msg(m, grouped)
     }
@@ -320,6 +350,7 @@ private fun buildRows(messages: List<Message>, pending: List<PendingMessage>, me
         val grouped = i > 0 || messages.lastOrNull()?.author?.id == me?.id
         out += Row_.Pending(p, grouped)
     }
+    ephemeral.forEach { out += Row_.Ephemeral(it) }
     return out.asReversed()
 }
 
@@ -355,17 +386,36 @@ private fun Welcome(route: ChannelRoute, api: ApiClient) {
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
 @Composable
-private fun MessageRow(message: Message, grouped: Boolean, me: CurrentUser?, api: ApiClient, onLongPress: () -> Unit, react: (String) -> Unit, openThread: (() -> Unit)? = null) {
+private fun MessageRow(
+    message: Message,
+    grouped: Boolean,
+    me: CurrentUser?,
+    api: ApiClient,
+    onLongPress: () -> Unit,
+    react: (String) -> Unit,
+    openThread: (() -> Unit)? = null,
+    /** Buttons waiting on their bot, as "messageId|customId". */
+    pressing: Set<String> = emptySet(),
+    press: (ButtonComponent) -> Unit = {},
+    /** Set for a private reply: shows "Only you can see this · Dismiss". */
+    dismiss: (() -> Unit)? = null,
+) {
     val haptics = LocalHapticFeedback.current
     val mentionsMe = remember(message.id, message.content, me?.id) { mentions(message, me) }
     Column(
         Modifier.fillMaxWidth()
-            .background(if (mentionsMe) Palette.mention.copy(alpha = 0.08f) else Color.Transparent)
+            .background(
+                when {
+                    mentionsMe -> Palette.mention.copy(alpha = 0.08f)
+                    message.ephemeral -> Palette.link.copy(alpha = 0.06f)
+                    else -> Color.Transparent
+                },
+            )
             .combinedClickable(onClick = {}, onLongClickLabel = "Message actions", onLongClick = {
                 haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                 onLongPress()
             })
-            .padding(start = 16.dp, end = 16.dp, top = if (grouped) 2.dp else if (message.replyTo != null) 4.dp else 14.dp, bottom = 2.dp),
+            .padding(start = 16.dp, end = 16.dp, top = if (grouped) 2.dp else if (message.replyTo != null || message.interaction != null) 4.dp else 14.dp, bottom = if (dismiss != null) 6.dp else 2.dp),
     ) {
         message.replyTo?.let { reply ->
             Row(Modifier.padding(start = 17.dp, bottom = 2.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -379,12 +429,14 @@ private fun MessageRow(message: Message, grouped: Boolean, me: CurrentUser?, api
                 }
             }
         }
+        message.interaction?.let { InteractionHeader(it, api) }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             if (grouped) Spacer(Modifier.width(34.dp)) else Avatar(message.author.summary, 34.dp, api)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 if (!grouped) {
                     Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(message.author.name, color = parseHex(message.author.roleColour) ?: Palette.heading, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                        if (message.author.bot) AppBadge(Modifier.align(Alignment.CenterVertically))
                         Text(ChatDate.label(message.createdAt), color = Palette.faint, fontSize = 12.sp)
                     }
                 }
@@ -402,6 +454,8 @@ private fun MessageRow(message: Message, grouped: Boolean, me: CurrentUser?, api
                         Text(a.filename, color = Palette.link, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
+                message.embeds.forEach { EmbedCard(it, api) }
+                if (message.components.isNotEmpty()) MessageComponents(message.components, api, message.id, message.ephemeral, pressing, press)
                 if (message.reactions.isNotEmpty()) {
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         message.reactions.forEach { r -> ReactionPill(r) { react(r.emoji) } }
@@ -417,14 +471,15 @@ private fun MessageRow(message: Message, grouped: Boolean, me: CurrentUser?, api
                         Text("${t.replyCount} ${if (t.replyCount == 1) "reply" else "replies"}", color = Palette.link, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                     }
                 }
+                dismiss?.let { EphemeralNote(it) }
             }
         }
     }
 }
 
-/** The text, with "> quote" lines drawn with Discord's side bar. */
+/** The text, with "> quote" lines drawn with Discord's side bar. Cards use it smaller. */
 @Composable
-private fun MessageBody(content: String, edited: Boolean) {
+fun MessageBody(content: String, edited: Boolean, fontSize: TextUnit = 16.sp, lineHeight: TextUnit = 22.sp) {
     val blocks = remember(content) {
         val out = mutableListOf<Pair<Boolean, String>>()
         for (line in content.split("\n")) {
@@ -442,10 +497,10 @@ private fun MessageBody(content: String, edited: Boolean) {
         if (quote) {
             Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Box(Modifier.width(4.dp).fillMaxHeight().background(Palette.faint, RoundedCornerShape(2.dp)))
-                Text(rendered, color = Palette.text, fontSize = 16.sp, lineHeight = 22.sp)
+                Text(rendered, color = Palette.text, fontSize = fontSize, lineHeight = lineHeight)
             }
         } else {
-            Text(rendered, color = Palette.text, fontSize = 16.sp, lineHeight = 22.sp)
+            Text(rendered, color = Palette.text, fontSize = fontSize, lineHeight = lineHeight)
         }
     }
 }
@@ -487,8 +542,8 @@ private fun PendingRow(pending: PendingMessage, me: CurrentUser?, api: ApiClient
 
 @Composable
 private fun Composer(
-    draft: String,
-    onDraft: (String) -> Unit,
+    draft: TextFieldValue,
+    onDraft: (TextFieldValue) -> Unit,
     placeholder: String,
     replyingTo: Message?,
     editing: Boolean,
@@ -500,7 +555,7 @@ private fun Composer(
     focus: FocusRequester,
     onSend: () -> Unit,
 ) {
-    val empty = draft.isBlank()
+    val empty = draft.text.isBlank()
     Column {
         if (editing) {
             Row(Modifier.fillMaxWidth().background(Palette.panel).padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -532,7 +587,7 @@ private fun Composer(
                 modifier = Modifier.weight(1f).focusRequester(focus),
                 decorationBox = { inner ->
                     Box(Modifier.fillMaxWidth().heightIn(min = 44.dp).background(Palette.raised, RoundedCornerShape(22.dp)).padding(horizontal = 16.dp, vertical = 10.dp), contentAlignment = Alignment.CenterStart) {
-                        if (draft.isEmpty()) Text(placeholder, color = Palette.faint, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        if (draft.text.isEmpty()) Text(placeholder, color = Palette.faint, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         inner()
                     }
                 },

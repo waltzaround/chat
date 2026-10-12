@@ -4,7 +4,7 @@ import { useSearchParams } from "react-router";
 import { ArrowDown, Hash, Loader2, MessageCircle } from "lucide-react";
 import { useMe, useMessageHistory } from "@/lib/queries";
 import { useRealtime } from "@/realtime/RealtimeProvider";
-import { usePendingMessages, useSyncVersion } from "@/realtime/hooks";
+import { useEphemeralMessages, usePendingMessages, useSyncVersion } from "@/realtime/hooks";
 import type { PendingMessage } from "@/realtime/RealtimeProvider";
 import { formatDayDivider, formatTime, isSameDay } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -17,6 +17,7 @@ type Row =
   | { kind: "divider"; key: string; label: string }
   | { kind: "message"; key: string; message: Message; compact: boolean }
   | { kind: "pending"; key: string; pending: PendingMessage; compact: boolean }
+  | { kind: "ephemeral"; key: string; message: Message }
   | { kind: "top"; key: string }
   | { kind: "unread"; key: string };
 
@@ -40,6 +41,7 @@ export function MessageList({
   // Replies being sent into a thread show in the thread panel, not here.
   const allPending = usePendingMessages(channel.id);
   const pending = useMemo(() => allPending.filter((p) => !p.threadRootId), [allPending]);
+  const ephemeral = useEphemeralMessages(channel.id);
   const syncVersion = useSyncVersion();
   const me = useMe();
   const rt = useRealtime();
@@ -77,7 +79,7 @@ export function MessageList({
         rows.push({ kind: "unread", key: "unread" });
         unreadPlaced = true;
       }
-      const compact = !!prev && isSameDay(prev.createdAt, m.createdAt) && prev.author.id === m.author.id && !m.replyTo && new Date(m.createdAt).getTime() - new Date(prev.createdAt).getTime() < GROUP_WINDOW_MS;
+      const compact = !!prev && isSameDay(prev.createdAt, m.createdAt) && prev.author.id === m.author.id && !m.replyTo && !m.interaction && !m.webhookId && new Date(m.createdAt).getTime() - new Date(prev.createdAt).getTime() < GROUP_WINDOW_MS;
       rows.push({ kind: "message", key: m.id, message: m, compact });
       prev = m;
     }
@@ -85,8 +87,9 @@ export function MessageList({
       const compact = !!prev && prev.author.id === me.data?.id && !p.replyTo && Date.now() - new Date(prev.createdAt).getTime() < GROUP_WINDOW_MS;
       rows.push({ kind: "pending", key: p.clientMessageId, pending: p, compact });
     }
+    for (const m of ephemeral) rows.push({ kind: "ephemeral", key: m.id, message: m });
     return rows;
-  }, [messages, pending, history.hasNextPage, me.data?.id, unread]);
+  }, [messages, pending, ephemeral, history.hasNextPage, me.data?.id, unread]);
 
   const rowsRef = useRef(rows);
   rowsRef.current = rows;
@@ -307,6 +310,8 @@ export function MessageList({
                       isEditing={editingId === row.message.id}
                     />
                     </div>
+                  ) : row.kind === "ephemeral" ? (
+                    <MessageItem message={row.message} compact={false} channel={channel} workspace={workspace} isMine={false} onReply={onReply} onEdit={onEdit} isEditing={false} />
                   ) : (
                     <PendingMessageItem pending={row.pending} compact={row.compact} me={me.data!} />
                   )}

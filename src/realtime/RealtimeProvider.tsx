@@ -1,9 +1,10 @@
 import { createContext, useContext, useEffect, useMemo, useRef, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { ClientEvent, ServerEvent, VoiceParticipantState } from "@shared/events";
-import type { Attachment, PreferredStatus, PresenceStatus, ReplyContext, WorkspaceDetail } from "@shared/types";
+import type { Attachment, Message, PreferredStatus, PresenceStatus, ReplyContext, WorkspaceDetail } from "@shared/types";
 import { createStore, type Store } from "@/lib/store";
 import { keys, messageCache, workspaceCache } from "@/lib/queries";
+import { integrationKeys } from "@/lib/integrations";
 import { WorkspaceSocket, type SocketStatus } from "./socket";
 
 export interface PendingMessage {
@@ -27,6 +28,8 @@ export interface RealtimeState {
   typing: Record<string, string[]>;
   voice: Record<string, VoiceParticipantState[]>;
   pending: Record<string, PendingMessage[]>;
+  /** Bots' private answers to your commands and button presses, per channel. Gone on reload. */
+  ephemeral: Record<string, Message[]>;
   activeChannelId: string | null;
   /** Bumped whenever a sync completes so views can react (e.g. scroll). */
   syncVersion: number;
@@ -49,6 +52,9 @@ export interface RealtimeApi {
   sendMessage: (input: SendMessageInput) => string;
   retryMessage: (clientMessageId: string) => void;
   discardMessage: (clientMessageId: string) => void;
+  /** Shows a message only you can see (also arrives over the socket; duplicates are ignored). */
+  addEphemeral: (message: Message) => void;
+  dismissEphemeral: (channelId: string, messageId: string) => void;
   startTyping: (channelId: string) => void;
   stopTyping: (channelId: string) => void;
   markRead: (channelId: string, sequence: number) => void;
@@ -70,6 +76,14 @@ export function useRealtimeOptional(): RealtimeApi | null {
 }
 
 const TYPING_THROTTLE_MS = 4_000;
+
+function addEphemeralTo(store: Store<RealtimeState>, message: Message) {
+  store.set((s) => {
+    const list = s.ephemeral[message.channelId] ?? [];
+    if (list.some((m) => m.id === message.id)) return s;
+    return { ...s, ephemeral: { ...s.ephemeral, [message.channelId]: [...list, message] } };
+  });
+}
 const READ_DEBOUNCE_MS = 600;
 
 export function RealtimeProvider({ workspaceId, userId, children }: { workspaceId: string; userId: string; children: ReactNode }) {
@@ -84,6 +98,7 @@ export function RealtimeProvider({ workspaceId, userId, children }: { workspaceI
         typing: {},
         voice: {},
         pending: {},
+        ephemeral: {},
         activeChannelId: null,
         syncVersion: 0,
       }),
@@ -134,6 +149,9 @@ export function RealtimeProvider({ workspaceId, userId, children }: { workspaceI
         case "message.updated":
           messageCache.update(qc, { ...event.message, reactions: event.message.reactions.map((r) => ({ ...r, me: r.userIds.includes(userId) })) });
           break;
+        case "message.ephemeral":
+          addEphemeral(event.message);
+          break;
         case "message.deleted":
           messageCache.remove(qc, event.channelId, event.messageId);
           break;
@@ -168,6 +186,7 @@ export function RealtimeProvider({ workspaceId, userId, children }: { workspaceI
           if (event.reason === "workspace") void qc.invalidateQueries({ queryKey: keys.workspaces });
           if (event.reason === "emojis") void qc.invalidateQueries({ queryKey: keys.emojis(workspaceId) });
           if (event.reason === "reports") void qc.invalidateQueries({ queryKey: keys.reports(workspaceId) });
+          if (event.reason === "members" || event.reason === "integrations") void qc.invalidateQueries({ queryKey: integrationKeys.commands(workspaceId) });
           break;
         case "member.removed":
           if (event.userId === userId) {
@@ -214,6 +233,8 @@ export function RealtimeProvider({ workspaceId, userId, children }: { workspaceI
         return { ...s, pending: { ...s.pending, [channelId]: list.filter((p) => p.clientMessageId !== clientMessageId) } };
       });
     };
+
+    const addEphemeral = (message: Message) => addEphemeralTo(store, message);
 
     const socket = new WorkspaceSocket(`/ws/workspaces/${workspaceId}`, {
       onEvent: handleEvent,
@@ -287,6 +308,10 @@ export function RealtimeProvider({ workspaceId, userId, children }: { workspaceI
       },
       discardMessage: (clientMessageId) => {
         store.set((s) => ({ ...s, pending: Object.fromEntries(Object.entries(s.pending).map(([k, list]) => [k, list.filter((m) => m.clientMessageId !== clientMessageId)])) }));
+      },
+      addEphemeral: (message) => addEphemeralTo(store, message),
+      dismissEphemeral: (channelId, messageId) => {
+        store.set((s) => ({ ...s, ephemeral: { ...s.ephemeral, [channelId]: (s.ephemeral[channelId] ?? []).filter((m) => m.id !== messageId) } }));
       },
       startTyping: (channelId) => {
         const last = typingSentAt.current.get(channelId) ?? 0;

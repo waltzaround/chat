@@ -3,7 +3,7 @@ import Observation
 
 /// One open channel (or one thread in it): its messages, older pages, live updates over
 /// the workspace socket, sending (text and images), editing, deleting, reporting,
-/// blocking, and read tracking.
+/// blocking, read tracking, and apps: slash commands, buttons and ephemeral messages.
 @MainActor
 @Observable
 final class ChannelStore {
@@ -18,7 +18,10 @@ final class ChannelStore {
     /// People you've blocked: their messages are collapsed.
     private(set) var blocked: Set<String> = []
     private(set) var uploading = false
+    /// Buttons waiting on their bot, as "messageId|customId".
+    private(set) var pressing: Set<String> = []
 
+    let workspaceId: String
     let channelId: String
     /// Set when this store shows one thread's replies.
     let threadRootId: String?
@@ -29,6 +32,7 @@ final class ChannelStore {
 
     init(api: APIClient, workspaceId: String, channelId: String, threadRootId: String? = nil) {
         self.api = api
+        self.workspaceId = workspaceId
         self.channelId = channelId
         self.threadRootId = threadRootId
         socket = RealtimeSocket(api: api, workspaceId: workspaceId)
@@ -125,6 +129,7 @@ final class ChannelStore {
     private struct Synced: Decodable { let channelId: String; let messages: [Message] }
     private struct Reacted: Decodable { let channelId: String; let messageId: String; let reactions: [Reaction] }
     private struct Failed: Decodable { let message: String; let clientMessageId: String? }
+    private struct WorkspaceUpdated: Decodable { let reason: String }
 
     private func handle(_ type: String, _ data: Data) {
         let decoder = JSONDecoder()
@@ -144,6 +149,14 @@ final class ChannelStore {
         case "reaction.updated":
             guard let e = try? decoder.decode(Reacted.self, from: data), e.channelId == channelId else { return }
             setReactions(e.messageId, e.reactions)
+        case "message.ephemeral":
+            // Any channel's: kept app-wide, so it's there when that channel is opened.
+            guard let e = try? decoder.decode(Updated.self, from: data) else { return }
+            Integrations.shared.addEphemeral(e.message, server: api.server)
+        case "workspace.updated":
+            // Apps were added or removed: their commands may have changed.
+            guard let e = try? decoder.decode(WorkspaceUpdated.self, from: data), ["members", "integrations"].contains(e.reason), commands != nil else { return }
+            Task { _ = try? await Integrations.shared.commands(api: api, workspaceId: workspaceId, force: true) }
         case "error":
             guard let e = try? decoder.decode(Failed.self, from: data), let clientId = e.clientMessageId else { return }
             fail(clientId, e.message)
@@ -251,6 +264,93 @@ final class ChannelStore {
             guard ((response as? HTTPURLResponse)?.statusCode ?? 500) < 300 else { throw APIError.server(status: 0, message: "The image didn't upload. Try again.") }
             try await self.api.raw(self.api.request("/api/uploads/complete", method: "POST", body: Complete(attachmentId: auth.attachmentId, width: width, height: height)))
             self.send(text, replyTo: replyTo, attachmentIds: [auth.attachmentId])
+        }
+    }
+
+    // MARK: - Apps: slash commands, buttons, ephemeral messages
+
+    /// This channel's messages only you can see, shown after the others.
+    var ephemeral: [Message] { Integrations.shared.ephemeral(api.server, channelId: channelId) }
+
+    func dismissEphemeral(_ messageId: String) {
+        Integrations.shared.dismissEphemeral(messageId, server: api.server, channelId: channelId)
+    }
+
+    /// The workspace's slash commands; nil until `loadCommands()` has fetched them.
+    var commands: [AvailableCommand]? { Integrations.shared.cachedCommands(api.server, workspaceId: workspaceId) }
+
+    /// Fetches the commands once per workspace, when the composer first sees a "/".
+    func loadCommands() {
+        guard commands == nil else { return }
+        Task { _ = try? await Integrations.shared.commands(api: api, workspaceId: workspaceId) }
+    }
+
+    /// "/name rest of the text" split into the name and the text.
+    static func parseCommand(_ text: String) -> (name: String, text: String)? {
+        guard let match = text.wholeMatch(of: #/\/(\S+)(?:\s+([\s\S]*))?/#) else { return nil }
+        return (String(match.output.1), String(match.output.2 ?? ""))
+    }
+
+    /// Sends the composer's text: runs it when it's a known slash command, and otherwise
+    /// posts it as a message. `preferring` is the command picked from the suggestions,
+    /// which tells two bots' commands with the same name apart.
+    func submit(_ text: String, replyTo: String?, preferring: AvailableCommand? = nil) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let parsed = Self.parseCommand(trimmed) else {
+            send(text, replyTo: replyTo)
+            return
+        }
+        Task {
+            let name = parsed.name.lowercased()
+            let known = (try? await Integrations.shared.commands(api: api, workspaceId: workspaceId)) ?? []
+            if let command = preferring?.name == name ? preferring : known.first(where: { $0.name == name }) {
+                await run(command, text: parsed.text, typed: trimmed)
+            } else {
+                send(text, replyTo: replyTo)
+            }
+        }
+    }
+
+    private func run(_ command: AvailableCommand, text: String, typed: String) async {
+        struct Body: Encodable { let name: String; let text: String; let botId: String? }
+        // Shown like a message on its way until the bot answers.
+        let pendingId = "command-\(UUID().uuidString.lowercased())"
+        pending.append(PendingMessage(id: pendingId, content: typed, createdAt: .now))
+        defer { pending.removeAll { $0.id == pendingId } }
+        do {
+            let request = api.request("/api/channels/\(channelId)/commands", method: "POST", body: Body(name: command.name, text: text, botId: command.bot?.id))
+            apply(try await api.send(request, as: InteractionResult.self))
+        } catch APIError.signedOut {
+            onSignedOut?()
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    func isPressing(_ button: ButtonComponent, on message: Message) -> Bool {
+        pressing.contains("\(message.id)|\(button.customId ?? "")")
+    }
+
+    /// Sends a button press to the bot that posted the message.
+    func press(_ button: ButtonComponent, on message: Message) {
+        guard let customId = button.customId, !button.isLink, !button.isDisabled, !message.isEphemeral else { return }
+        let key = "\(message.id)|\(customId)"
+        guard !pressing.contains(key) else { return }
+        pressing.insert(key)
+        perform {
+            defer { self.pressing.remove(key) }
+            let request = self.api.request("/api/channels/\(self.channelId)/messages/\(message.id)/buttons", method: "POST", body: ["customId": customId])
+            self.apply(try await self.api.send(request, as: InteractionResult.self))
+        }
+    }
+
+    /// Shows what a command or button answered with. A deferred answer comes later, over the socket.
+    private func apply(_ result: InteractionResult) {
+        guard let message = result.message else { return }
+        if message.isEphemeral {
+            Integrations.shared.addEphemeral(message, server: api.server)
+        } else if message.channelId == channelId {
+            merge(message)
         }
     }
 

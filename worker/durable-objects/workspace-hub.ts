@@ -10,17 +10,19 @@
  * restored after hibernation lives in its serialized attachment.
  */
 import { DurableObject } from "cloudflare:workers";
-import { and, desc, eq, isNull, max, sql } from "drizzle-orm";
+import { and, desc, eq, isNotNull, isNull, max, sql } from "drizzle-orm";
 import { findFilteredTerm } from "@shared/moderation";
 import type { ClientEvent, PresenceEntry, ServerEvent, VoiceParticipantState } from "@shared/events";
 import { parseClientEvent, WS_CLOSE } from "@shared/events";
 import { Permission, hasPermission } from "@shared/permissions";
-import type { Message, PreferredStatus, PresenceStatus } from "@shared/types";
+import type { ActionRow, Embed, Message, PreferredStatus, PresenceStatus } from "@shared/types";
 import { newId } from "@shared/id";
 import { MESSAGE_MAX_LENGTH } from "@shared/schemas";
 import type { Env } from "../env";
 import { batchAll, createDb, schema, type Db } from "../db";
-import { loadChannelAccess, type ChannelAccess } from "../permissions/resolve";
+import { loadChannelAccess, type ChannelAccess, type MemberContext } from "../permissions/resolve";
+import { botEventFor, type BotEvent } from "../integrations/bot-events";
+import { hasPreviewableLinks } from "../integrations/link-previews";
 import { hydrateMessages, loadMessage, loadMessagePage, reactionSummary, softDeleteMessage } from "../lib/messages";
 import { track } from "../analytics/track";
 import { recordMentions } from "../lib/mentions";
@@ -48,6 +50,21 @@ export interface CreateMessageInput {
   threadRootId?: string | null;
   /** Set when the request originated from a socket so the ack can be routed. */
   originSessionId?: string;
+  /**
+   * Posts from an integration that isn't a workspace member (a webhook, GitHub). It gets
+   * exactly these permissions in the channel, and skips the word filter and slow mode,
+   * which its admin-only setup stands in for. It is rate limited instead.
+   */
+  integration?: { permissions: number; webhookId?: string | null };
+  /** A webhook's name and avatar for this one message. */
+  authorName?: string | null;
+  authorAvatarUrl?: string | null;
+  embeds?: Embed[];
+  components?: ActionRow[];
+  /** The slash command this message answers. */
+  interaction?: { name: string; userId: string } | null;
+  /** Don't notify anyone this message mentions (a webhook's allowed_mentions). */
+  suppressMentions?: boolean;
 }
 
 export type CreateMessageResult =
@@ -57,6 +74,9 @@ export type CreateMessageResult =
 const TYPING_TTL_MS = 6_000;
 const PRESENCE_COALESCE_MS = 250;
 const ACCESS_CACHE_MS = 15_000;
+const BOT_CACHE_MS = 30_000;
+/** Integration posts per author, like Discord's webhook limit. */
+const INTEGRATION_POST_LIMIT = { limit: 30, windowMs: 60_000 };
 const EVENT_LIMITS: Partial<Record<ClientEvent["type"], { limit: number; windowMs: number }>> = {
   "message.create": { limit: 20, windowMs: 10_000 },
   "message.edit": { limit: 20, windowMs: 10_000 },
@@ -77,6 +97,10 @@ export class WorkspaceHub extends DurableObject<Env> {
   private accessCache = new Map<string, { access: ChannelAccess; expiresAt: number }>();
   private channelLocks = new Map<string, Promise<unknown>>();
   private socketLimits = new WeakMap<WebSocket, Map<string, { count: number; resetAt: number }>>();
+  private integrationPosts = new Map<string, number[]>();
+  /** Bots in this workspace that take events, refreshed every BOT_CACHE_MS. */
+  private botCache: { expiresAt: number; botIds: string[] } | null = null;
+  private channelWorkspace = new Map<string, string>();
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -227,8 +251,16 @@ export class WorkspaceHub extends DurableObject<Env> {
         if (!access) return this.send(ws, { type: "error", code: "not_found", message: "Channel not found" });
         const blocked = await this.checkModeration(access, att.userId, event.content, false);
         if (blocked) return this.send(ws, { type: "error", code: blocked.code, message: blocked.message });
-        await this.db.update(schema.messages).set({ content: event.content, editedAt: new Date() }).where(eq(schema.messages.id, row.id));
+        const contentChanged = event.content !== row.content;
+        await this.db
+          .update(schema.messages)
+          .set({ content: event.content, editedAt: new Date(), ...(contentChanged ? { linkEmbeds: null } : {}) })
+          .where(eq(schema.messages.id, row.id));
         await recordMentions(this.db, { ...row, content: event.content }, access.permissions, () => this.onlineUserIds());
+        // Edited links get fresh previews.
+        if (contentChanged && !row.embeds?.length && hasPreviewableLinks(event.content)) {
+          this.ctx.waitUntil(this.env.BACKGROUND_QUEUE.send({ type: "links.preview", messageId: row.id }).catch(() => undefined));
+        }
         const message = await loadMessage(this.db, row.id, att.userId);
         if (message) this.broadcastToChannel(row.channelId, { type: "message.updated", message });
         return;
@@ -355,13 +387,15 @@ export class WorkspaceHub extends DurableObject<Env> {
   }
 
   private async createMessageLocked(input: CreateMessageInput): Promise<CreateMessageResult> {
-    const access = await this.access(input.userId, input.channelId, true);
+    const access = input.integration ? await this.integrationAccess(input.channelId, input.integration.permissions) : await this.access(input.userId, input.channelId, true);
     if (!access) return { ok: false, status: 404, code: "not_found", message: "Channel not found" };
     if (!hasPermission(access.permissions, Permission.SEND_MESSAGES)) return { ok: false, status: 403, code: "forbidden", message: "You cannot send messages here" };
 
     const content = input.content.trim();
+    const embeds = input.embeds ?? [];
+    const components = input.components ?? [];
     if (content.length > MESSAGE_MAX_LENGTH) return { ok: false, status: 400, code: "validation_failed", message: `Messages are limited to ${MESSAGE_MAX_LENGTH} characters` };
-    if (content.length === 0 && input.attachmentIds.length === 0) return { ok: false, status: 400, code: "validation_failed", message: "Message is empty" };
+    if (content.length === 0 && input.attachmentIds.length === 0 && embeds.length === 0) return { ok: false, status: 400, code: "validation_failed", message: "Message is empty" };
 
     // Idempotency: an identical clientMessageId from this author returns the original.
     const existing = await this.db.query.messages.findFirst({
@@ -373,8 +407,12 @@ export class WorkspaceHub extends DurableObject<Env> {
     }
 
     // Moderation rules. Checked after the idempotency lookup so a retry is never blocked.
-    const moderationError = await this.checkModeration(access, input.userId, content, true);
-    if (moderationError) return moderationError;
+    if (input.integration) {
+      if (!this.allowIntegrationPost(input.userId)) return { ok: false, status: 429, code: "rate_limited", message: "Too many messages from this integration. Try again in a minute." };
+    } else {
+      const moderationError = await this.checkModeration(access, input.userId, content, true);
+      if (moderationError) return moderationError;
+    }
 
     // A thread reply goes under a live, top-level message in the same channel.
     const threadRootId = input.threadRootId ?? null;
@@ -412,6 +450,12 @@ export class WorkspaceHub extends DurableObject<Env> {
         replyToMessageId: input.replyTo,
         clientMessageId: input.clientMessageId,
         threadRootId,
+        webhookId: input.integration?.webhookId ?? null,
+        authorName: input.authorName ?? null,
+        authorAvatarUrl: input.authorAvatarUrl ?? null,
+        embeds: embeds.length ? embeds : null,
+        components: components.length ? components : null,
+        interaction: input.interaction ?? null,
         createdAt: now,
       }),
       this.db.update(schema.channels).set({ lastSequence: sequence, lastMessageAt: now }).where(eq(schema.channels.id, input.channelId)),
@@ -443,7 +487,31 @@ export class WorkspaceHub extends DurableObject<Env> {
 
     // Keep the cached channel row's lastSequence fresh for subsequent syncs.
     access.channel.lastSequence = sequence;
-    const row = { id, workspaceId: access.channel.workspaceId, channelId: input.channelId, channelSequence: sequence, authorUserId: input.userId, content, replyToMessageId: input.replyTo, clientMessageId: input.clientMessageId, editedAt: null, deletedAt: null, pinnedAt: null, pinnedBy: null, threadRootId, threadReplyCount: 0, threadLastReplyAt: null, createdAt: now };
+    const row = {
+      id,
+      workspaceId: access.channel.workspaceId,
+      channelId: input.channelId,
+      channelSequence: sequence,
+      authorUserId: input.userId,
+      content,
+      replyToMessageId: input.replyTo,
+      clientMessageId: input.clientMessageId,
+      editedAt: null,
+      deletedAt: null,
+      pinnedAt: null,
+      pinnedBy: null,
+      threadRootId,
+      threadReplyCount: 0,
+      threadLastReplyAt: null,
+      webhookId: input.integration?.webhookId ?? null,
+      authorName: input.authorName ?? null,
+      authorAvatarUrl: input.authorAvatarUrl ?? null,
+      embeds: embeds.length ? embeds : null,
+      linkEmbeds: null,
+      components: components.length ? components : null,
+      interaction: input.interaction ?? null,
+      createdAt: now,
+    };
     const [message] = await hydrateMessages(this.db, [row], input.userId);
     if (!message) throw new Error("Failed to hydrate message");
 
@@ -457,11 +525,17 @@ export class WorkspaceHub extends DurableObject<Env> {
     this.broadcastActivity(input.channelId, sequence, input.userId);
     // A direct message notifies the other person; in a community, whoever is mentioned.
     const isDm = access.ctx.workspace.kind === "dm";
-    const mentioned = isDm
-      ? (await this.db.select({ userId: schema.workspaceMembers.userId }).from(schema.workspaceMembers).where(eq(schema.workspaceMembers.workspaceId, access.channel.workspaceId)))
-          .map((m) => m.userId)
-          .filter((id) => id !== input.userId)
-      : await recordMentions(this.db, row, access.permissions, () => this.onlineUserIds());
+    const mentioned = input.suppressMentions
+      ? []
+      : isDm
+        ? (await this.db.select({ userId: schema.workspaceMembers.userId }).from(schema.workspaceMembers).where(eq(schema.workspaceMembers.workspaceId, access.channel.workspaceId)))
+            .map((m) => m.userId)
+            .filter((id) => id !== input.userId)
+        : await recordMentions(this.db, row, access.permissions, () => this.onlineUserIds());
+    // Links get preview cards, unless the author sent cards of its own.
+    if (!embeds.length && !isDm && hasPreviewableLinks(content)) {
+      this.ctx.waitUntil(this.env.BACKGROUND_QUEUE.send({ type: "links.preview", messageId: id }).catch((err) => console.error("link preview enqueue failed", err)));
+    }
     if (mentioned.length) {
       this.ctx.waitUntil(
         notifyUsers(this.env, mentioned, {
@@ -511,9 +585,13 @@ export class WorkspaceHub extends DurableObject<Env> {
 
   /** Broadcast an event to everyone (channelId null) or to a channel's subscribers. */
   async broadcast(event: ServerEvent, channelId: string | null): Promise<void> {
-    if (event.type === "workspace.updated") this.accessCache.clear();
+    if (event.type === "workspace.updated") {
+      this.accessCache.clear();
+      this.botCache = null;
+    }
     if (event.type === "member.removed") {
       this.accessCache.clear();
+      this.botCache = null;
       for (const ws of this.socketsFor(event.userId)) {
         this.send(ws, event);
         ws.close(WS_CLOSE.FORBIDDEN, event.reason);
@@ -522,6 +600,11 @@ export class WorkspaceHub extends DurableObject<Env> {
     }
     if (channelId) this.broadcastToChannel(channelId, event);
     else this.broadcastAll(event);
+  }
+
+  /** A message only this person sees, on each of their connections to this workspace. */
+  async sendEphemeral(userId: string, message: Message): Promise<void> {
+    for (const ws of this.socketsFor(userId)) this.send(ws, { type: "message.ephemeral", message });
   }
 
   /** Online user ids, used by REST handlers that need a presence snapshot. */
@@ -696,6 +779,75 @@ export class WorkspaceHub extends DurableObject<Env> {
         /* closing */
       }
     }
+    this.ctx.waitUntil(this.forwardToBots(channelId, event).catch((err) => console.error("bot event forward failed", err)));
+  }
+
+  // -------------------------------------------------------------------------
+  // Integrations
+  // -------------------------------------------------------------------------
+
+  /** A webhook or GitHub posting: no membership, just the permissions its setup grants. */
+  private async integrationAccess(channelId: string, permissions: number): Promise<ChannelAccess | null> {
+    const channel = await this.db.query.channels.findFirst({ where: eq(schema.channels.id, channelId) });
+    if (!channel || channel.kind !== "text") return null;
+    const workspace = await this.db.query.workspaces.findFirst({ where: eq(schema.workspaces.id, channel.workspaceId) });
+    if (!workspace) return null;
+    // Only the workspace is read from the context on this path.
+    const ctx = { workspace, workspaceId: workspace.id } as MemberContext;
+    return { channel, ctx, permissions: permissions | Permission.VIEW_CHANNEL };
+  }
+
+  private allowIntegrationPost(authorId: string): boolean {
+    const now = Date.now();
+    const recent = (this.integrationPosts.get(authorId) ?? []).filter((t) => t > now - INTEGRATION_POST_LIMIT.windowMs);
+    if (recent.length >= INTEGRATION_POST_LIMIT.limit) {
+      this.integrationPosts.set(authorId, recent);
+      return false;
+    }
+    recent.push(now);
+    this.integrationPosts.set(authorId, recent);
+    return true;
+  }
+
+  private async workspaceOf(channelId: string): Promise<string | null> {
+    const known = this.channelWorkspace.get(channelId);
+    if (known) return known;
+    const channel = await this.db.query.channels.findFirst({ columns: { workspaceId: true }, where: eq(schema.channels.id, channelId) });
+    if (channel) this.channelWorkspace.set(channelId, channel.workspaceId);
+    return channel?.workspaceId ?? null;
+  }
+
+  /** Bots in this workspace with an events URL that isn't paused. */
+  private async eventBots(workspaceId: string): Promise<string[]> {
+    if (this.botCache && this.botCache.expiresAt > Date.now()) return this.botCache.botIds;
+    const rows = await this.db
+      .select({ userId: schema.bots.userId })
+      .from(schema.bots)
+      .innerJoin(schema.workspaceMembers, and(eq(schema.workspaceMembers.userId, schema.bots.userId), eq(schema.workspaceMembers.workspaceId, workspaceId)))
+      .where(and(isNotNull(schema.bots.eventsUrl), isNull(schema.bots.eventsPausedAt), eq(schema.workspaceMembers.status, "active")));
+    this.botCache = { expiresAt: Date.now() + BOT_CACHE_MS, botIds: rows.map((r) => r.userId) };
+    return this.botCache.botIds;
+  }
+
+  /**
+   * Sends message and reaction events to bots that can see the channel, through the
+   * queue so a slow bot never holds up the conversation. A bot never hears itself.
+   */
+  private async forwardToBots(channelId: string, event: ServerEvent): Promise<void> {
+    if (event.type !== "message.created" && event.type !== "message.updated" && event.type !== "message.deleted" && event.type !== "reaction.updated") return;
+    const workspaceId = await this.workspaceOf(channelId);
+    if (!workspaceId) return;
+    const botIds = await this.eventBots(workspaceId);
+    if (botIds.length === 0) return;
+    const authorId = event.type === "message.created" || event.type === "message.updated" ? event.message.author.id : null;
+    const jobs: { body: { type: "bot.event"; botUserId: string; event: BotEvent } }[] = [];
+    for (const botUserId of botIds) {
+      if (botUserId === authorId) continue;
+      const access = await this.access(botUserId, channelId);
+      if (!access) continue;
+      jobs.push({ body: { type: "bot.event", botUserId, event: botEventFor(workspaceId, channelId, event) } });
+    }
+    if (jobs.length) await this.env.BACKGROUND_QUEUE.sendBatch(jobs);
   }
 
   private broadcastActivity(channelId: string, lastSequence: number, authorUserId: string): void {

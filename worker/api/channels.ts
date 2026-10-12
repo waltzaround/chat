@@ -17,6 +17,23 @@ import { createMessageSchema, editMessageSchema, messagesQuerySchema, overwriteS
 import { CHANNEL_PERMISSIONS } from "@shared/permissions";
 import type { MessagePage, PermissionOverwrite } from "@shared/types";
 import { z } from "zod";
+import { normalizeComponents, normalizeEmbeds } from "../integrations/embeds";
+import { MESSAGE_MAX_LENGTH } from "@shared/schemas";
+import { hasPreviewableLinks } from "../integrations/link-previews";
+
+/** People send text; bots may also send cards and buttons, and needn't send an idempotency key. */
+const restMessageSchema = createMessageSchema.extend({
+  clientMessageId: z.string().min(1).max(64).optional(),
+  embeds: z.array(z.unknown()).max(10).optional(),
+  components: z.array(z.unknown()).max(5).optional(),
+});
+const restEditSchema = z
+  .object({
+    content: z.string().max(MESSAGE_MAX_LENGTH).optional(),
+    embeds: z.array(z.unknown()).max(10).optional(),
+    components: z.array(z.unknown()).max(5).optional(),
+  })
+  .refine((v) => v.content !== undefined || v.embeds !== undefined || v.components !== undefined, "Nothing to change");
 
 export const channelRoutes = new Hono<AppEnv>();
 channelRoutes.use("*", requireUser);
@@ -140,15 +157,20 @@ channelRoutes.post("/:channelId/messages", async (c) => {
   const user = c.get("user");
   const { channel } = await requireChannelAccess(db, c.req.param("channelId"), user.id, Permission.SEND_MESSAGES);
   checkRateLimit(`msg:${user.id}`, 30, 10_000);
-  const input = await parseBody(c, createMessageSchema);
+  const input = await parseBody(c, restMessageSchema);
+  const isBot = user.kind === "bot";
+  if (!isBot && (input.embeds?.length || input.components?.length)) throw ApiError.forbidden("Only apps can send cards and buttons");
+  if (!isBot && !input.clientMessageId) throw ApiError.validation(undefined, "clientMessageId is required");
   const result = await hubFor(c.env, channel.workspaceId).createMessage({
     userId: user.id,
     channelId: channel.id,
     content: input.content,
-    clientMessageId: input.clientMessageId,
+    clientMessageId: input.clientMessageId ?? `bot:${crypto.randomUUID()}`,
     attachmentIds: input.attachmentIds ?? [],
     replyTo: input.replyTo ?? null,
     threadRootId: input.threadRootId ?? null,
+    embeds: isBot ? await normalizeEmbeds(c.env, input.embeds ?? []) : undefined,
+    components: isBot ? normalizeComponents(input.components ?? []) : undefined,
   });
   if (!result.ok) throw new ApiError(result.status, result.code, result.message);
   return c.json(result.message, 201);
@@ -158,17 +180,39 @@ channelRoutes.patch("/:channelId/messages/:messageId", async (c) => {
   const db = c.get("db");
   const user = c.get("user");
   const { channel, permissions, ctx } = await requireChannelAccess(db, c.req.param("channelId"), user.id);
-  const input = await parseBody(c, editMessageSchema);
+  const isBot = user.kind === "bot";
+  const input = isBot ? await parseBody(c, restEditSchema) : await parseBody(c, editMessageSchema);
+  if (!isBot && ("embeds" in input || "components" in input)) throw ApiError.forbidden("Only apps can send cards and buttons");
   const exempt = hasPermission(permissions, Permission.MANAGE_MESSAGES) || hasPermission(permissions, Permission.MANAGE_CHANNELS);
-  if (!exempt && findFilteredTerm(input.content, ctx.workspace.wordFilter)) {
+  if (!exempt && input.content !== undefined && findFilteredTerm(input.content, ctx.workspace.wordFilter)) {
     throw ApiError.validation(undefined, "Your message contains a word or phrase this workspace doesn't allow.");
   }
   const row = await db.query.messages.findFirst({ where: and(eq(schema.messages.id, c.req.param("messageId")), eq(schema.messages.channelId, channel.id)) });
   if (!row || row.deletedAt) throw ApiError.notFound("Message");
   if (row.authorUserId !== user.id) throw ApiError.forbidden("You can only edit your own messages");
   checkRateLimit(`edit:${user.id}`, 20, 10_000);
-  await db.update(schema.messages).set({ content: input.content, editedAt: new Date() }).where(eq(schema.messages.id, row.id));
-  await recordMentions(db, { ...row, content: input.content }, permissions, () => []);
+  const changes: Partial<typeof schema.messages.$inferInsert> = { editedAt: new Date() };
+  if (input.content !== undefined) changes.content = input.content.trim();
+  if ("embeds" in input && input.embeds !== undefined) {
+    const embeds = await normalizeEmbeds(c.env, input.embeds);
+    changes.embeds = embeds.length ? embeds : null;
+  }
+  if ("components" in input && input.components !== undefined) {
+    const components = normalizeComponents(input.components);
+    changes.components = components.length ? components : null;
+  }
+  const nextContent = changes.content ?? row.content;
+  const nextEmbeds = changes.embeds !== undefined ? changes.embeds : row.embeds;
+  if (!nextContent && !nextEmbeds?.length && !(await db.query.messageAttachments.findFirst({ columns: { id: true }, where: eq(schema.messageAttachments.messageId, row.id) }))) {
+    throw ApiError.validation(undefined, "Message is empty");
+  }
+  // Edited links get fresh previews.
+  if (changes.content !== undefined && changes.content !== row.content) changes.linkEmbeds = null;
+  await db.update(schema.messages).set(changes).where(eq(schema.messages.id, row.id));
+  await recordMentions(db, { ...row, content: nextContent }, permissions, () => []);
+  if (changes.content !== undefined && !nextEmbeds?.length && hasPreviewableLinks(nextContent)) {
+    c.executionCtx.waitUntil(c.env.BACKGROUND_QUEUE.send({ type: "links.preview", messageId: row.id }).catch(() => undefined));
+  }
   const message = (await loadMessage(db, row.id, user.id))!;
   await notifyWorkspace(c.env, channel.workspaceId, { type: "message.updated", message }, channel.id);
   return c.json(message);

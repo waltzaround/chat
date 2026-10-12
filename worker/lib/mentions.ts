@@ -71,6 +71,8 @@ export async function mentionRecipients(db: Db, input: MentionInput): Promise<st
           eq(schema.workspaceMembers.status, "active"),
           isNull(schema.users.suspendedAt),
           isNull(schema.users.deletedAt),
+          // Apps hear about mentions through their events, not notifications.
+          eq(schema.users.kind, "human"),
           userIds ? inArray(schema.workspaceMembers.userId, userIds) : undefined,
         ),
       )

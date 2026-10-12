@@ -75,6 +75,8 @@ data class MessageAuthor(
     val avatarUrl: String? = null,
     val nickname: String? = null,
     val roleColour: String? = null,
+    /** An app: a bot, a webhook or an integration like GitHub. Shown with an "APP" badge. */
+    val bot: Boolean = false,
 ) {
     val name get() = nickname ?: displayName
     val summary get() = UserSummary(id, username, name, avatarUrl)
@@ -108,7 +110,96 @@ data class Message(
     val createdAt: String,
     val threadRootId: String? = null,
     val thread: ThreadSummary? = null,
+    /** Rich cards, then link previews. */
+    val embeds: List<Embed> = emptyList(),
+    /** Rows of buttons from a bot. */
+    val components: List<ComponentRow> = emptyList(),
+    /** The slash command this message answers: "walt used /deploy". */
+    val interaction: MessageInteraction? = null,
+    /** Posted by this incoming webhook. */
+    val webhookId: String? = null,
+    /** Only you see it (a bot's private reply); the server never stores it. */
+    val ephemeral: Boolean = false,
 )
+
+@Serializable
+data class MessageInteraction(val name: String, val user: UserSummary? = null)
+
+/**
+ * A rich card from a webhook or bot ("rich"), or a preview of a link in the text ("link").
+ * Image URLs are server paths (/api/media?…, /api/files/…) like avatars.
+ */
+@Serializable
+data class Embed(
+    val type: String = "rich",
+    val title: String? = null,
+    val url: String? = null,
+    /** Markdown. */
+    val description: String? = null,
+    /** 0xRRGGBB, drawn as the card's left edge. */
+    val color: Long? = null,
+    /** ISO-8601, shown in the footer. */
+    val timestamp: String? = null,
+    val author: EmbedAuthor? = null,
+    val footer: EmbedFooter? = null,
+    val fields: List<EmbedField> = emptyList(),
+    val image: EmbedImage? = null,
+    val thumbnail: EmbedThumbnail? = null,
+    /** The site a link preview came from. */
+    val provider: EmbedProvider? = null,
+)
+
+@Serializable
+data class EmbedAuthor(val name: String, val url: String? = null, val iconUrl: String? = null)
+
+@Serializable
+data class EmbedFooter(val text: String, val iconUrl: String? = null)
+
+/** [value] is Markdown. Inline fields sit side by side, up to three per row. */
+@Serializable
+data class EmbedField(val name: String, val value: String, val inline: Boolean = false)
+
+@Serializable
+data class EmbedImage(val url: String, val width: Double? = null, val height: Double? = null)
+
+@Serializable
+data class EmbedThumbnail(val url: String)
+
+@Serializable
+data class EmbedProvider(val name: String, val url: String? = null)
+
+/** Up to five buttons side by side (an ActionRow on the server). */
+@Serializable
+data class ComponentRow(val type: String = "row", val components: List<ButtonComponent> = emptyList())
+
+/** A bot's button. A "link" button opens [url]; the others send [customId] to the bot. */
+@Serializable
+data class ButtonComponent(
+    val type: String = "button",
+    /** primary, secondary, success, danger or link. */
+    val style: String = "secondary",
+    val label: String = "",
+    val customId: String? = null,
+    val url: String? = null,
+    val disabled: Boolean = false,
+) {
+    val isLink get() = style == "link"
+}
+
+/** A command the composer offers after "/". */
+@Serializable
+data class AvailableCommand(
+    val name: String,
+    val description: String = "",
+    /** Hint shown after the name, e.g. "<environment>". */
+    val usage: String? = null,
+    /** The bot that answers it, or null for a built-in command. */
+    val bot: UserSummary? = null,
+)
+
+/** What running a command or pressing a button produced. */
+@Serializable
+data class InteractionResult(val message: Message? = null, val deferred: Boolean = false)
 
 @Serializable
 data class MessagePage(val messages: List<Message>, val hasMore: Boolean)

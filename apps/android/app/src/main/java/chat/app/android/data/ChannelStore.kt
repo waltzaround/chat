@@ -6,6 +6,9 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import chat.app.android.net.ApiClient
 import chat.app.android.net.ApiException
+import chat.app.android.net.AvailableCommand
+import chat.app.android.net.ButtonComponent
+import chat.app.android.net.InteractionResult
 import chat.app.android.net.Message
 import chat.app.android.net.MessagePage
 import chat.app.android.net.PendingMessage
@@ -16,6 +19,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.JsonObject
@@ -53,17 +57,26 @@ data class ChannelUi(
     val uploading: Boolean = false,
     /** A one-off confirmation, e.g. after reporting. */
     val notice: String? = null,
+    /** Bots' private replies to you here, shown after the messages until dismissed. */
+    val ephemeral: List<Message> = emptyList(),
+    /** Buttons waiting on their bot, as "messageId|customId". */
+    val pressing: Set<String> = emptySet(),
+    /** This workspace's slash commands, once fetched. */
+    val commands: List<AvailableCommand>? = null,
 ) {
     val canManage get() = permissions and (1 shl 4) != 0 || permissions and 1 != 0
     val canAttach get() = permissions and (1 shl 11) != 0 || permissions and 1 != 0
 }
 
+/** "/deploy production": a command's name and the text after it. */
+private val COMMAND = Regex("""^/(\S+)(?:\s+([\s\S]*))?$""")
+
 /**
  * One open channel (or one thread in it): its messages, older pages, live updates over
  * the workspace socket, sending (text and images), editing, deleting, reporting,
- * blocking, reactions, and read tracking.
+ * blocking, reactions, read tracking, and bots' slash commands and buttons.
  */
-class ChannelStore(private val api: ApiClient, workspaceId: String, private val channelId: String, private val threadRootId: String? = null) {
+class ChannelStore(private val api: ApiClient, private val workspaceId: String, private val channelId: String, private val threadRootId: String? = null) {
     private val threadQuery get() = threadRootId?.let { "&thread=$it" } ?: ""
     /** Lives while the channel is on screen; [close] ends it and the socket. */
     private val viewModelScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -74,11 +87,17 @@ class ChannelStore(private val api: ApiClient, workspaceId: String, private val 
     private val socket = RealtimeSocket(api, workspaceId, viewModelScope)
     private var lastReadSent = 0
     private var loadingOlder = false
+    private var commandsLoading: kotlinx.coroutines.Deferred<List<AvailableCommand>?>? = null
 
     init {
         socket.onOpen = ::subscribe
         socket.onEvent = ::handle
         socket.connect()
+        // Private replies aren't in threads: they belong to the channel.
+        if (threadRootId == null) viewModelScope.launch {
+            val key = EphemeralMessages.key(api.server, channelId)
+            EphemeralMessages.all.collect { all -> _ui.update { it.copy(ephemeral = all[key].orEmpty()) } }
+        }
         viewModelScope.launch {
             try {
                 val page = api.get<MessagePage>("/api/channels/$channelId/messages?limit=50$threadQuery")
@@ -207,6 +226,104 @@ class ChannelStore(private val api: ApiClient, workspaceId: String, private val 
 
     fun clearNotice() = _ui.update { it.copy(notice = null) }
 
+    // Slash commands and buttons
+
+    /** Commands work in the channel itself; a thread's composer only sends messages. */
+    val commandsEnabled get() = threadRootId == null
+
+    /** Fetches this workspace's commands the first time the composer needs them. */
+    fun loadCommands() {
+        if (!commandsEnabled || _ui.value.commands != null) return
+        viewModelScope.launch { commands() }
+    }
+
+    /** From the cache, or fetched once; null when they couldn't be loaded. */
+    private suspend fun commands(): List<AvailableCommand>? {
+        _ui.value.commands?.let { return it }
+        CommandCache[api.server, workspaceId]?.let { cached ->
+            _ui.update { it.copy(commands = cached) }
+            return cached
+        }
+        val loading = commandsLoading ?: viewModelScope.async {
+            try {
+                api.get<List<AvailableCommand>>("/api/workspaces/$workspaceId/commands")
+            } catch (e: ApiException.Server) {
+                // An older server without integrations has no commands.
+                if (e.status == 404) emptyList() else null
+            } catch (e: ApiException.SignedOut) {
+                onSignedOut()
+                null
+            } catch (e: Exception) {
+                null
+            }
+        }.also { commandsLoading = it }
+        val list = loading.await()
+        commandsLoading = null
+        if (list != null) {
+            CommandCache[api.server, workspaceId] = list
+            _ui.update { it.copy(commands = list) }
+        }
+        return list
+    }
+
+    /**
+     * Sends the composer's text. "/name text" runs the command called name when this
+     * workspace has one (preferring [picked], the suggestion tapped, when two bots share
+     * a name); anything else is sent as a message.
+     */
+    fun submit(text: String, replyTo: String?, picked: AvailableCommand? = null) {
+        val match = COMMAND.matchEntire(text.trim())
+        if (match == null || !commandsEnabled) return send(text, replyTo)
+        val name = match.groupValues[1]
+        viewModelScope.launch {
+            val known = commands().orEmpty().filter { it.name.equals(name, ignoreCase = true) }
+            val command = known.firstOrNull { it == picked } ?: known.firstOrNull()
+            if (command == null) send(text, replyTo) else runCommand(command, match.groupValues[2].trim(), text.trim())
+        }
+    }
+
+    /** Runs a command, showing what was typed as pending until the bot answers (up to a few seconds). */
+    private fun runCommand(command: AvailableCommand, text: String, typed: String) {
+        val pendingId = UUID.randomUUID().toString()
+        _ui.update { it.copy(pending = it.pending + PendingMessage(pendingId, typed, null)) }
+        perform {
+            try {
+                deliver(api.send<InteractionResult>("/api/channels/$channelId/commands", "POST", buildJsonObject {
+                    put("name", command.name)
+                    put("text", text)
+                    command.bot?.let { put("botId", it.id) }
+                }))
+            } finally {
+                _ui.update { s -> s.copy(pending = s.pending.filterNot { it.id == pendingId }) }
+            }
+        }
+    }
+
+    /** Link buttons open in the browser; the others go to the bot that posted the message. */
+    fun press(message: Message, button: ButtonComponent) {
+        val customId = button.customId ?: return
+        if (button.isLink || button.disabled || message.ephemeral) return
+        val key = "${message.id}|$customId"
+        if (key in _ui.value.pressing) return
+        _ui.update { it.copy(pressing = it.pressing + key) }
+        perform {
+            try {
+                deliver(api.send<InteractionResult>("/api/channels/${message.channelId}/messages/${message.id}/buttons", "POST", buildJsonObject { put("customId", customId) }))
+            } finally {
+                _ui.update { it.copy(pressing = it.pressing - key) }
+            }
+        }
+    }
+
+    fun dismissEphemeral(messageId: String) = EphemeralMessages.dismiss(api.server, channelId, messageId)
+
+    /** Shows what a command or button produced now, rather than waiting for the socket. */
+    private fun deliver(result: InteractionResult) {
+        val message = result.message ?: return
+        if (message.ephemeral) EphemeralMessages.add(api.server, message)
+        else if (message.channelId == channelId) merge(message)
+    }
+
     private fun perform(work: suspend () -> Unit) {
         viewModelScope.launch {
             try {
@@ -288,6 +405,10 @@ class ChannelStore(private val api: ApiClient, workspaceId: String, private val 
             "channel.sync" -> if (str("channelId") == channelId) {
                 val list = json.decodeFromJsonElement(ListSerializer(Message.serializer()), data["messages"] ?: return)
                 list.forEach(::merge)
+            }
+            "message.ephemeral" -> {
+                val m = runCatching { json.decodeFromJsonElement(Message.serializer(), data["message"] ?: return) }.getOrNull() ?: return
+                EphemeralMessages.add(api.server, m.copy(ephemeral = true))
             }
             "reaction.updated" -> if (str("channelId") == channelId) {
                 val reactions = json.decodeFromJsonElement(ListSerializer(Reaction.serializer()), data["reactions"]?.jsonArray ?: return)

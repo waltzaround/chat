@@ -47,6 +47,7 @@ import {
 } from "@shared/schemas";
 import type { AuditEntry, Ban, Channel, Invite, Member, Role, SearchResponse, WorkspaceDetail } from "@shared/types";
 import { chunked } from "../lib/chunks";
+import { dispatchMemberEvent } from "../integrations/dispatch";
 
 export const workspaceRoutes = new Hono<AppEnv>();
 workspaceRoutes.use("*", requireUser);
@@ -127,6 +128,7 @@ async function listMembers(db: AppEnv["Variables"]["db"], workspaceId: string, o
   return rows.map(({ member, user }) => ({
     ...toUserSummary(user),
     userId: user.id,
+    bot: user.kind === "bot",
     nickname: member.nickname,
     bio: user.bio,
     roleIds: rolesByUser.get(user.id) ?? [],
@@ -264,6 +266,7 @@ workspaceRoutes.post("/:workspaceId/leave", async (c) => {
     db.delete(schema.workspaceMembers).where(and(eq(schema.workspaceMembers.workspaceId, ctx.workspaceId), eq(schema.workspaceMembers.userId, ctx.userId))),
   ]);
   await notifyWorkspace(c.env, ctx.workspaceId, { type: "member.removed", userId: ctx.userId, reason: "left" });
+  c.executionCtx.waitUntil(dispatchMemberEvent(c.env, db, ctx.workspaceId, ctx.userId, "left"));
   return c.body(null, 204);
 });
 
@@ -439,6 +442,7 @@ workspaceRoutes.delete("/:workspaceId/members/:userId", async (c) => {
   ]);
   await audit(db, { workspaceId: ctx.workspaceId, actorUserId: ctx.userId, action: "member.kicked", targetType: "user", targetId });
   await notifyWorkspace(c.env, ctx.workspaceId, { type: "member.removed", userId: targetId, reason: "kicked" });
+  c.executionCtx.waitUntil(dispatchMemberEvent(c.env, db, ctx.workspaceId, targetId, "kicked"));
   return c.body(null, 204);
 });
 
@@ -488,6 +492,7 @@ workspaceRoutes.put("/:workspaceId/bans/:userId", async (c) => {
   await batchAll(db, statements);
   await audit(db, { workspaceId: ctx.workspaceId, actorUserId: ctx.userId, action: "member.banned", targetType: "user", targetId, details: { reason: input.reason ?? null } });
   await notifyWorkspace(c.env, ctx.workspaceId, { type: "member.removed", userId: targetId, reason: "banned" });
+  c.executionCtx.waitUntil(dispatchMemberEvent(c.env, db, ctx.workspaceId, targetId, "banned"));
   return c.json({ ok: true });
 });
 
